@@ -1,5 +1,15 @@
 # Hearthkin
 
+> ## This repository is published without development history, on purpose.
+>
+> It starts at a single commit, and that is deliberate rather than an
+> accident of tooling. **Do not import or graft history onto this
+> repository.**
+>
+> The reasoning that history would have carried is preserved as prose in
+> `CHANGELOG.md`, `docs/`, and `docs/history/` — every development commit
+> message, grouped by release series.
+
 Python + wxPython desktop app for multi-kin local-LLM chat. Talks to Ollama by default (models run locally; no remote API calls) and can route through OpenRouter when a kin's model is prefixed `openrouter/...`. A "kin" is a configured persona with a soul prompt, distilled memory, and a model. Two interaction modes: 1-on-1 chat, and "rooms" where several kin take turns with the user.
 
 ## Who you're working with
