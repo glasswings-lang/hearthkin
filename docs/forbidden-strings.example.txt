@@ -1,0 +1,37 @@
+# EXAMPLE / TEMPLATE — this file is safe to commit; the real list is not.
+#
+# WHAT THIS IS
+# tests/test_no_private_strings.py fails the whole test suite if any string
+# listed here reappears in a tracked (git-committed) file. It's how a one-time
+# privacy scrub STAYS true: add a real name, handle, email, or machine
+# identifier to the list and the suite goes red before it can be committed or
+# pushed again.
+#
+# WHY THIS IS ONLY A TEMPLATE
+# The real list lives at  docs/private/forbidden-strings.txt , which is
+# gitignored on purpose — a list of exactly what must never be published is
+# itself the most dangerous thing to publish. So the real list never leaves
+# your machine. This template just shows the format and is safe to track.
+#
+# HOW TO TURN IT ON (no coding needed)
+#   1. Copy this file to:   docs/private/forbidden-strings.txt
+#   2. Open that copy in any text editor (Notepad is fine).
+#   3. Put one string to forbid per line. Save.
+#   4. Re-run  python tests/run_all.py  — it now checks for those strings.
+# Adding a new name later is just: open that file, add a line, save. No code,
+# no rebuild. If the file doesn't exist, the check simply skips (a fork that
+# doesn't have one isn't blocked).
+#
+# FORMAT
+#   - One string per line. Blank lines and lines starting with # are ignored.
+#   - Matching is case-insensitive and substring-based:
+#       Lastname     matches "lastname", "LastnameTheKin", "lastnames"
+#   - Prefix a line with =  for a whole-WORD match, when a bare fragment would
+#     collide with ordinary English:
+#       =ash         matches the name "ash" but NOT "crash" or "hashed"
+#
+# The entries below are fictional placeholders — delete them and add your own.
+
+Jane Doe
+janedoe
+=ash

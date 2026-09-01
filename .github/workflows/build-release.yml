@@ -1,0 +1,247 @@
+# SPDX-License-Identifier: CC0-1.0
+
+name: Build Hearthkin
+
+# Runs on:
+#   - every push to master (build verification only — no release)
+#   - every PR targeting master (build verification only)
+#   - tags matching v* (creates a GitHub Release with the installer
+#     and the portable .exe attached)
+#   - manual dispatch from the Actions tab (build verification +
+#     uploaded artifacts you can download for testing without cutting
+#     a release)
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read   # default for non-release runs; the release job overrides to write
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 25
+    # Build never needs write — it only uploads workflow artifacts.
+    # Release creation lives in the separate `release` job below, which
+    # is the only place contents:write is granted. (GitHub Actions does
+    # not allow expressions in `permissions:`, so the split into two
+    # jobs is the supported way to scope the write grant to tag pushes.)
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out source
+        # actions/checkout v5 — pinned to full commit SHA for supply-chain safety.
+        # SHA resolves to the v5 tag as of 2026-06-11; re-verify on major bumps.
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Check out the Time for Family game (bundled into the release)
+        # The `tff` tool's game lives in its own repo; Hearthkin.spec bundles
+        # the headless subset from .bundle_game/time-for-family so the tool
+        # works out of the box. Public repo, no token needed.
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: glasswings-lang/time-for-family
+          path: .bundle_game/time-for-family
+
+      - name: Set up Python
+        # actions/setup-python v6 — pinned to full commit SHA for supply-chain safety.
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Pin build-time-only tools to exact versions for reproducible releases.
+          # requirements.txt keeps >= floors; the pins here are the release lockdown.
+          # Update these when a new version is vetted (re-pin after testing).
+          python -m pip install "pyinstaller==6.20.0" "pillow==12.2.0"
+          python -m pip install -r requirements.txt
+          # discord.py is now a hard dependency in requirements.txt (>= floor),
+          # so the line above already installs it. This exact-version install is
+          # the release lockdown (same pattern as the pyinstaller/pillow pins) so
+          # the shipped bundle is reproducible; the spec's
+          # collect_submodules("discord") pulls in its dynamically-loaded
+          # submodules that PyInstaller's static analysis would otherwise miss.
+          python -m pip install "discord.py==2.7.1"
+        shell: pwsh
+
+      # Inno Setup 6 ships on the windows-latest image as a Chocolatey
+      # package. We install it explicitly rather than assuming it's
+      # pre-installed, in case the image baseline changes.
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+        shell: pwsh
+
+      # The icon IS committed to the repo so PIL isn't strictly
+      # required to build, but if a build ever needs to regen it
+      # this step shows how. Disabled by default; uncomment to
+      # rebuild from source.
+      #
+      # - name: Regenerate Hearthkin.ico
+      #   run: python scripts/generate_icon.py
+
+      # Stamp app_version.py BEFORE PyInstaller so the bundled
+      # Hearthkin.exe self-reports the version it was built from.
+      # Source on master has "0.0.0-dev" as a placeholder; this step
+      # overwrites it in the ephemeral CI checkout only. Same script
+      # local builds use via build.bat.
+      - name: Stamp version into app_version.py
+        env:
+          HEARTHKIN_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && format('{0}', github.ref_name) || '0.0.0-dev' }}
+        run: python scripts/stamp_version.py
+        shell: pwsh
+
+      - name: Build Hearthkin.exe with PyInstaller
+        run: python -m PyInstaller --noconfirm Hearthkin.spec
+        shell: pwsh
+
+      - name: Bundle third-party licenses
+        run: python scripts/bundle_licenses.py
+        shell: pwsh
+
+      - name: Build installer with Inno Setup
+        # The .iss reads HEARTHKIN_VERSION via GetEnv(); same env var
+        # the stamp step used. Strip the leading 'v' (so v0.1.1 →
+        # 0.1.1). For non-tag builds (master push, PR), a clearly-
+        # marked dev string keeps the artifact recognizable.
+        env:
+          HEARTHKIN_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && format('{0}', github.ref_name) || '0.0.0-dev' }}
+        run: |
+          $version = $env:HEARTHKIN_VERSION
+          if ($version.StartsWith('v')) { $version = $version.Substring(1) }
+          $env:HEARTHKIN_VERSION = $version
+          Write-Host "Building installer for version: $version"
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "${env:ProgramFiles}\Inno Setup 6\iscc.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            Write-Error "iscc.exe not found"
+            exit 1
+          }
+          & $iscc installer\Hearthkin.iss
+        shell: pwsh
+
+      # Stage extra files into dist\Hearthkin\ before zipping.
+      # The installer [Files] section ships these separately; the portable
+      # zip must include them too so both delivery methods are equivalent.
+      #
+      # Files staged:
+      #   - NVDA DLL + vendor README/license (LGPL compliance; the spec
+      #     deliberately keeps the DLL OUTSIDE _internal\ so end-users can
+      #     replace it — see the Hearthkin.iss NVDA comment for why)
+      #   - licenses\ directory (bundle_licenses.py output)
+      #   - LICENSE, README.md (top-level attributions)
+      #   - Hearthkin.ico (tray.py falls back to "no icon" when missing)
+      - name: Stage extra files into portable tree
+        run: |
+          # NVDA Controller Client DLL + vendor notice/license
+          Copy-Item "vendor\nvda\nvdaControllerClient64.dll" "dist\Hearthkin\"
+          # License files — mirror the installer's [Files] section for NVDA vendor
+          New-Item -ItemType Directory -Force "dist\Hearthkin\licenses" | Out-Null
+          Copy-Item "vendor\nvda\license.txt"  "dist\Hearthkin\licenses\NVDA-ControllerClient-LGPL-2.1.txt"
+          Copy-Item "vendor\nvda\README.md"    "dist\Hearthkin\licenses\NVDA-ControllerClient-NOTICE.md"
+          # bundle_licenses.py output (third-party license texts)
+          if (Test-Path "licenses") {
+            Copy-Item "licenses\*" "dist\Hearthkin\licenses\" -Recurse -Force
+          } else {
+            Write-Warning "licenses\ directory not found — bundle_licenses.py may not have run"
+          }
+          # Top-level attribution files
+          Copy-Item "LICENSE"      "dist\Hearthkin\"
+          Copy-Item "README.md"    "dist\Hearthkin\"
+          # Application icon (tray.py looks for this next to Hearthkin.exe)
+          Copy-Item "Hearthkin.ico" "dist\Hearthkin\"
+        shell: pwsh
+
+      # Portable distribution. Onedir means there's no single-file .exe
+      # to publish; the portable form is the dist\Hearthkin\ directory
+      # (Hearthkin.exe + _internal\ + supporting files). Zip it so a
+      # GitHub Release asset still works for users who want "download
+      # and double-click, no install."
+      - name: Package portable zip
+        env:
+          HEARTHKIN_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && format('{0}', github.ref_name) || '0.0.0-dev' }}
+        run: |
+          $version = $env:HEARTHKIN_VERSION
+          if ($version.StartsWith('v')) { $version = $version.Substring(1) }
+          $zipPath = "dist\Hearthkin-Portable-$version.zip"
+          Write-Host "Packaging portable zip: $zipPath"
+          if (-not (Test-Path "dist\Hearthkin\Hearthkin.exe")) {
+            Write-Error "dist\Hearthkin\Hearthkin.exe missing -- PyInstaller onedir build did not produce expected output"
+            exit 1
+          }
+          Compress-Archive -Path "dist\Hearthkin\*" -DestinationPath $zipPath -Force
+        shell: pwsh
+
+      - name: Upload portable zip artifact
+        # actions/upload-artifact v6 — pinned to full commit SHA for supply-chain safety.
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Hearthkin-portable
+          path: dist/Hearthkin-Portable-*.zip
+          if-no-files-found: error
+          # Handoff to the release job only; the real download is the Release asset.
+          # Short retention keeps these out of the 0.5 GB Actions-storage cap.
+          retention-days: 1
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Hearthkin-installer
+          path: dist/Hearthkin-Setup-*.exe
+          if-no-files-found: error
+          # Handoff to the release job only; the real download is the Release asset.
+          # Short retention keeps these out of the 0.5 GB Actions-storage cap.
+          retention-days: 1
+
+  # Create a GitHub Release on tag pushes (vX.Y.Z). Attaches both
+  # the portable zip and the .exe installer. Notes are auto-generated
+  # from commits since the last release. This is its own job so that
+  # contents:write is granted ONLY here, only on tag refs — the build
+  # job runs read-only on every trigger.
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out source
+        # Needed only for the LICENSE file attached to the release.
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Download portable zip
+        # actions/download-artifact v8 — pinned to full commit SHA for supply-chain safety.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: Hearthkin-portable
+          path: dist
+
+      - name: Download installer
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: Hearthkin-installer
+          path: dist
+
+      - name: Create GitHub Release
+        # softprops/action-gh-release v3 — pinned to full commit SHA for supply-chain safety.
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
+        with:
+          files: |
+            dist/Hearthkin-Portable-*.zip
+            dist/Hearthkin-Setup-*.exe
+            LICENSE
+          generate_release_notes: true
+          fail_on_unmatched_files: true

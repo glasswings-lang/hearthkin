@@ -1,0 +1,64 @@
+# These are floor versions for development installs. Release builds
+# pin to exact versions via the CI workflow (build-release.yml) to keep
+# release artifacts reproducible; update the workflow pins alongside any
+# version bumps here.
+wxPython>=4.2.0
+ollama>=0.4.0
+# Voice subsystem (TTS + STT via ElevenLabs). sounddevice handles
+# real-time PCM playback and mic capture; numpy is its dependency
+# for buffer handling. ~12-15 MB combined bundle impact.
+sounddevice>=0.4.6
+numpy>=1.24
+# Webcam capture for the `use_webcam` tool and the desktop "Take
+# photo" button. ~80 MB bundled (compiled C + numpy dep). Bundled
+# rather than optional because the Take photo button is a primary
+# affordance in the chat tab — having it dim "install opencv-python"
+# on a fresh install would be a usability cliff. Cross-platform
+# (Windows + macOS + Linux); there's no lighter answer that hits
+# all three without per-OS hacks.
+opencv-python>=4.8
+# Audio-facts ear (tools/analyze_sound.py + audio_spectrum.py): reads an
+# audio file and reports objective acoustic facts (tonal centre, tuning in
+# cents, detuning/beating, brightness, movement, stereo width) via numpy's
+# FFT. soundfile (libsndfile) does the decoding, FLAC included; ~1-2 MB.
+# numpy is already a hard dep above, so this is the only add for audio.
+soundfile>=0.12
+# Discord surface (discord_bot.py). Discord needs a persistent Gateway
+# WebSocket to receive messages, which the stdlib can't do. Now a hard
+# dependency: the shipped .exe already bundles it, and keeping it out of
+# requirements.txt meant source installs silently no-op'd the Discord
+# surface with no obvious reason. MIT-licensed; pulls in aiohttp. ~5-8 MB
+# bundle impact. discord_bot.py still lazy-imports it and degrades
+# gracefully (logged reason) if it is somehow missing at runtime.
+discord.py>=2.3
+
+# Dictation — speaking a message instead of typing it. sounddevice
+# (above) captures the microphone; faster-whisper turns it into text on
+# this machine, for free, with nothing leaving it.
+#
+# NOT a hard dependency, deliberately. It pulls in CTranslate2 (compiled
+# C, plus CUDA libraries where a graphics card is present) and downloads
+# a model on first use, which together are far heavier than everything
+# else here. Hearthkin degrades honestly without it: the Talk button
+# does not appear, and Preferences → Dictation says why. The other two
+# backends — a Whisper server on another machine, or ElevenLabs Scribe —
+# need nothing installed here at all, which is also the answer for
+# anyone who would rather keep the models on one box than on every one.
+#     pip install faster-whisper
+#
+# --- Optional improvements (NOT required to run hearthkin) ---
+# - trafilatura: better web-content extraction in tools/fetch_url.py.
+#   Without it, fetch_url uses a stdlib html.parser extractor that
+#   handles common cases (nav/footer/script stripping, entity decoding,
+#   block-tag selection) plus markdown formatting (headings, code
+#   fences, lists, tables, links). The stdlib extractor's lower
+#   extraction quality on chrome-heavy pages is the remaining gap.
+#   Install only if shipping size isn't a concern — trafilatura pulls
+#   in lxml (compiled C, ~10MB) plus 6 other transitive deps.
+#       pip install trafilatura
+#
+# BM25 ranking in tools/memory_search.py is implemented inline (see
+# the _BM25Okapi class) rather than via the `rank_bm25` PyPI package.
+# (numpy is already a hard dependency above via sounddevice, so bundle
+# size is no longer the reason — it's that rank_bm25 adds a PyPI dep
+# for ~40 lines of arithmetic we already inline.)

@@ -1,0 +1,111 @@
+# Known-safe capitalised words — the PERMITTED set.
+#
+# scripts/unknown_names.py reports capitalised words that appear nowhere else
+# in the project's vocabulary, as candidates for being somebody's name. Words
+# listed here are silenced.
+#
+# THIS FILE IS SAFE TO COMMIT, and that is the whole point of its existence.
+# It is the opposite of docs/private/forbidden-strings.txt: that one lists
+# exactly what must never be published, so publishing it would be the leak.
+# This one lists what is fine in public, so publishing it costs nothing.
+#
+# Adding a line is a deliberate "yes, this word is fine for a stranger to
+# read". If you are not sure, leave it out — an extra candidate in a report is
+# cheap; a name in the history is not.
+#
+# One word per line, case-insensitive. Blank lines and # comments ignored.
+
+# --- languages, scripts, encodings ---
+Arabic
+Cyrillic
+Devanagari
+English
+Latin
+Monospace
+Unicode
+
+# --- platforms, vendors, tools, libraries ---
+Apache
+Bedrock
+Chocolatey
+Gemini
+Google
+Inno
+Jinja
+Kindroid
+Linux
+Mistral
+Node
+Popen
+Qwen
+Tailscale
+Wikipedia
+
+# --- model and product names ---
+Deckard
+Fable
+Modelfile
+Scribe
+Unigram
+
+# --- keys and UI vocabulary ---
+Alt
+Ctrl
+Iconize
+Notify
+Shift
+Subscribe
+Subscription
+Thumbs
+Tilde
+Uninstaller
+
+# --- the placeholder cast used in tests, docs and fixtures ---
+# These stand in for real companions. They are fictional and safe to publish;
+# the names they replace are not, and live only in the private list.
+Bracken
+Hollis
+Lark
+Moss
+Quill
+Sable
+Tarn
+Vesper
+
+# --- test fixtures and security examples ---
+# Mallory is the standard adversary in security literature, used here in a
+# prompt-injection test string.
+Mallory
+Trojan
+Unauthorized
+
+# --- ordinary English that happens never to appear lowercase here ---
+Assist
+Autocomplete
+Behaviourally
+Biases
+Bugsweep
+Centralised
+Cloned
+Decodes
+Distinctiveness
+Eliminates
+Gateway
+Indoor
+Lambdas
+Mon
+Muting
+Payoff
+Publisher
+Recurse
+Repurposed
+Responses
+Restructure
+Retrying
+Selecting
+Splicing
+Stopgap
+Street
+This
+Transcribing
+Untrue
