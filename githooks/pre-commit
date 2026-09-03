@@ -1,0 +1,35 @@
+#!/bin/sh
+# Refuse a commit that would carry a private string.
+#
+# Runs tests/test_no_private_strings.py before every commit in this clone.
+# The guard passes loudly-disarmed in a checkout with no docs/private/, so a
+# fork is never blocked; it only bites where there is something to protect.
+#
+# This file IS the live hook. Git is pointed at this tracked folder via
+# core.hooksPath, so there is no copy in .git/hooks to keep in sync -- edit
+# this file and the change is live on the next commit.
+#
+# core.hooksPath is per-clone local config and cannot be committed (git will
+# not let a repo arm its own hooks on clone -- that would run a stranger's
+# code). So a FRESH CLONE needs this one line once, in PowerShell, from the
+# repo root:
+#
+#     git config core.hooksPath githooks
+#
+# Check it took with:  git config core.hooksPath      (should print: githooks)
+# No chmod: Windows has no executable bit and Git for Windows does not want one.
+# PowerShell has no "&&" -- run one command per line.
+#
+repo="$(git rev-parse --show-toplevel)" || exit 1
+
+python "$repo/tests/test_no_private_strings.py"
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "=============================================================="
+    echo "COMMIT BLOCKED - the private-string guard did not pass."
+    echo "Nothing has been committed. The files named above need"
+    echo "fixing first, or the guard itself needs re-arming."
+    echo "=============================================================="
+    exit 1
+fi
+exit 0

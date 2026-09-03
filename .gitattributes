@@ -1,0 +1,4 @@
+# Git hooks are run by sh. A hook with CRLF line endings fails with a
+# "bad interpreter" error, so these must stay LF no matter what
+# core.autocrlf is set to on the machine that clones this.
+githooks/* text eol=lf
