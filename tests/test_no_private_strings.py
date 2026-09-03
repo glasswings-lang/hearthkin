@@ -20,9 +20,18 @@ published is itself the most dangerous file you could publish. Same reasoning
 that moved the private docs into a directory-level ignore rather than naming
 each one in `.gitignore`.
 
-If that file is absent this test SKIPS and passes. A contributor who doesn't
-have it isn't blocked, and CI doesn't fail on a file it can't see. The check
-only binds where the list exists — which is the machine that can actually leak.
+The check binds where `docs/private/` exists — the machine that keeps private
+docs is the machine that can leak. On such a machine a missing or empty list is
+a FAILURE, not a skip. A guard that quietly passes while disarmed is worse than
+no guard, because it produces confidence.
+
+That is not hypothetical. This check sat green and unarmed in the public working
+copy while the list existed only in the private archive — so every commit made
+there would have been waved through by a test reporting ALL PASS.
+
+A checkout with no `docs/private/` at all is a fork or CI. There the check prints
+a loud DISARMED banner and passes, so a contributor who doesn't have the list
+isn't blocked and CI doesn't fail on a file it can't see.
 
 A committed, safe-to-publish template lives at `docs/forbidden-strings.example.txt`
 — it explains the format and how to turn the check on. Copy it to
@@ -56,7 +65,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LIST_PATH = os.path.join(REPO, "docs", "private", "forbidden-strings.txt")
+PRIVATE_DIR = os.path.join(REPO, "docs", "private")
+LIST_PATH = os.path.join(PRIVATE_DIR, "forbidden-strings.txt")
 
 # Reading every tracked file is the point, but a few can't hold prose and are
 # large enough to slow the suite noticeably.
@@ -113,20 +123,86 @@ def word_hit(haystack, term):
         start = i + 1
 
 
-def main():
+def check_message_file(path):
+    """Check a proposed COMMIT MESSAGE, for the commit-msg hook.
+
+    Commit messages were the reason the old history could not be published,
+    and `git ls-files` cannot see them - they are not files in the tree. So
+    the same list, the same matching, applied to the message git is about to
+    record. One implementation, so the two checks can never drift apart.
+
+    Prints no part of the message on failure, for the same reason the file
+    check prints no matched text.
+    """
+    armed = os.path.isdir(PRIVATE_DIR)
     if not os.path.exists(LIST_PATH):
-        print("SKIP no docs/private/forbidden-strings.txt on this machine")
-        print("     (the check binds only where the list exists)")
-        print("     To enable: copy docs/forbidden-strings.example.txt to")
-        print("     docs/private/forbidden-strings.txt and add your terms.")
-        print("\nALL PASS")
+        if armed:
+            print("GUARD DISARMED on a private checkout - list is missing.")
+            return 1
         return 0
 
     subs, words = load_terms()
     if not subs and not words:
-        print("SKIP forbidden-strings.txt is present but empty")
-        print("\nALL PASS")
+        print("GUARD DISARMED - forbidden-strings.txt is empty.")
+        return 1
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+            # Comment lines are stripped by git before recording, so a name
+            # in the "# Please enter the commit message" preamble is not a
+            # leak and must not block the commit.
+            kept = [l for l in fh.read().splitlines()
+                    if not l.lstrip().startswith("#")]
+            body = chr(10).join(kept).lower()
+    except OSError:
+        print("could not read the commit message file; refusing to guess")
+        return 1
+
+    if any(sub in body for sub in subs) or any(word_hit(body, w) for w in words):
+        print("Your commit message contains a forbidden string.")
+        print("The message is not shown here on purpose - printing it would")
+        print("republish exactly what the list exists to keep out.")
+        print("Reword the message and commit again.")
+        return 1
+    return 0
+
+
+def main():
+    # "Armed" means this checkout keeps private docs, so it is a checkout that
+    # can leak. Presence of the LIST is not the signal - that was the old rule,
+    # and it made a missing list indistinguishable from an innocent fork.
+    armed = os.path.isdir(PRIVATE_DIR)
+
+    if not os.path.exists(LIST_PATH):
+        if armed:
+            check("forbidden-strings.txt present (docs/private/ exists here, so "
+                  "this checkout keeps private docs)", False)
+            print("")
+            print("docs/private/ exists but the list is gone, so nothing is being")
+            print("checked. Restore it, or delete docs/private/ entirely if this")
+            print("checkout genuinely holds nothing private.")
+            print("")
+            print("FAILED 1: guard disarmed on a private checkout")
+            return 1
+        print("=" * 68)
+        print("GUARD DISARMED - no docs/private/ in this checkout.")
+        print("Nothing is checking for private strings in this run.")
+        print("To arm it: copy docs/forbidden-strings.example.txt to")
+        print("docs/private/forbidden-strings.txt and add your terms.")
+        print("=" * 68)
+        print("")
+        print("ALL PASS (nothing checked)")
         return 0
+
+    subs, words = load_terms()
+    if not subs and not words:
+        check("forbidden-strings.txt has at least one term", False)
+        print("")
+        print("The list is present but empty, so nothing would ever match.")
+        print("")
+        print("FAILED 1: guard disarmed by an empty list")
+        return 1
+
 
     print("checking %d term(s) against tracked files" % (len(subs) + len(words)))
 
@@ -159,4 +235,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # `--check-message <path>` is the commit-msg hook's entry point.
+    if len(sys.argv) > 2 and sys.argv[1] == "--check-message":
+        sys.exit(check_message_file(sys.argv[2]))
     sys.exit(main())
