@@ -352,25 +352,57 @@ class ApiProvidersDialog(wx.Dialog):
         finally:
             dlg.Destroy()
 
+    def _kin_using(self, name):
+        """Kin whose model starts with this provider's prefix.
+
+        Asked at removal time rather than guessed at, because the answer is
+        almost always "none" and a warning that fires when nothing is wrong
+        is how people learn to dismiss warnings without reading them.
+        """
+        prefix = name + "/"
+        out = []
+        try:
+            from kin_persistence import list_agents, load_agent_config
+        except Exception:
+            return out
+        try:
+            for kin in list_agents():
+                try:
+                    model = (load_agent_config(kin) or {}).get("model") or ""
+                except Exception:
+                    continue
+                if str(model).lower().startswith(prefix):
+                    out.append(kin)
+        except Exception:
+            pass
+        return out
+
     def _on_remove(self, _event):
         idx = self.providers_list.GetSelection()
         if idx < 0 or idx >= len(self._entries):
             return
         name = self._entries[idx][0]
-        # Unlike removing an Ollama machine, this DOES break kin that use it.
-        # The provider name is part of the model name, so "featherless/x"
-        # stops being recognised as remote and gets asked of the local
-        # Ollama, which has never heard of it. Say that plainly rather than
-        # letting it be discovered as a mysterious failure at send time.
-        if wx.MessageBox(
-                "Remove \"%s\"?\n\n"
-                "Any kin whose model starts with \"%s/\" will stop working "
-                "until you give it a different model — Hearthkin will look "
-                "for that model on your own machine and not find it.\n\n"
-                "The saved key is left alone." % (name, name),
-                "Remove provider",
-                wx.YES_NO | wx.CANCEL | wx.ICON_WARNING, self) != wx.YES:
-            return
+        affected = self._kin_using(name)
+        if affected:
+            # Only ask when it is actually true. Unlike an Ollama machine --
+            # where falling back keeps the SAME model, just on another box --
+            # there is no harmless fallback here: the provider name is part
+            # of the model name, so dropping it leaves a model that no longer
+            # names anything. Say which kin, so the answer is actionable
+            # rather than ominous.
+            who = ", ".join(sorted(affected))
+            gap = chr(10) + chr(10)
+            if wx.MessageBox(
+                    ("Remove \"%s\"?" + gap
+                     + "%s %s using it, and will need a different model "
+                       "chosen before %s can answer again." + gap
+                     + "The saved key is left alone, so putting the provider "
+                       "back restores everything.")
+                    % (name, who, "is" if len(affected) == 1 else "are",
+                       "it" if len(affected) == 1 else "they"),
+                    "Remove provider",
+                    wx.YES_NO | wx.CANCEL | wx.ICON_WARNING, self) != wx.YES:
+                return
         del self._entries[idx]
         self._refresh(saved_index=idx)
 
