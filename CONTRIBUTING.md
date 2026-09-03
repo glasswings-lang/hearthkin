@@ -55,6 +55,11 @@ Two are worth knowing about specifically:
 - **`test_mnemonics.py`** — fails if a control claims an `Alt+<letter>` shortcut
   the menu bar already owns. On Windows the menu always wins, so the control's
   shortcut isn't merely conflicting, it's dead.
+- **`test_no_private_strings.py`** — fails if a name from a private list
+  reappears in any tracked file. The list is gitignored and is not in this
+  repo, so in your clone this test prints a `GUARD DISARMED` banner and
+  passes. That is correct: you have nothing of anyone's to protect. It only
+  binds on a checkout that has a `docs/private/` directory.
 
 ## The one thing to understand before changing UI code
 
@@ -126,6 +131,46 @@ A running app loads the registry at import, so a new tool needs a restart.
 - **Sparse-looking model templates.** Recent Ollama versions build prompts in
   compiled code, so a model's stored template can be a near-empty placeholder.
   This is normal and not evidence of a broken configuration.
+
+## Git hooks
+
+This repo keeps its hooks in a tracked `githooks/` directory. Git will not use
+them until you point it there, once per clone:
+
+```
+git config core.hooksPath githooks
+```
+
+Check it took — it should print `githooks`:
+
+```
+git config core.hooksPath
+```
+
+Two hooks, both about not publishing private strings:
+
+- **`pre-commit`** runs `tests/test_no_private_strings.py` over every tracked
+  file and refuses the commit if it fails.
+- **`commit-msg`** runs the same check over the message you just wrote. Commit
+  messages are not files, so `git ls-files` cannot see them — and message text
+  is the reason this project's development history had to be left behind rather
+  than published. It gets its own gate for that reason.
+
+Neither does anything in a clone without a `docs/private/` directory, so you can
+arm them harmlessly and forget about them.
+
+**Why this isn't automatic.** Git deliberately refuses to let a repository turn
+on its own hooks when you clone it — otherwise cloning a stranger's project
+would run their code on your machine. The one config line is that boundary, not
+an oversight.
+
+**If a hook is wrong**, `git commit --no-verify` skips both. Use it knowing what
+you're skipping.
+
+**On Windows**: no `chmod` is needed; there's no executable bit and Git for
+Windows doesn't look for one. `.gitattributes` pins `githooks/` to LF, because a
+shell script checked out with CRLF fails with a bad-interpreter error and takes
+the guard down silently.
 
 ## Pull requests
 

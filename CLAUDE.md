@@ -330,7 +330,7 @@ Denylist in `tools/_exec_denylist.py`. **Specific destructive shapes, not anythi
 
 The test: **does this sentence disclose anything about the person or their life?** A kin's remark about markdown formatting in its own config file discloses nothing. A line lifted from a kin's memory about someone's evening discloses a great deal, however well it illustrates the point. Describe the register — *"third-person event-log phrasing"* — instead of pasting an example of it.
 
-`tests/test_no_private_strings.py` guards *known* strings from a gitignored list. It cannot catch private material that has never appeared before, which is most of what you'd be tempted to write. **The judgement is yours, and it has already gone wrong twice.** → `docs/lessons.md`
+`tests/test_no_private_strings.py` guards *known* strings from a gitignored list. In a fresh clone, arm the hooks first with `git config core.hooksPath githooks` — without it, nothing runs the guard and it will not tell you so. It cannot catch private material that has never appeared before, which is most of what you'd be tempted to write. **The judgement is yours, and it has already gone wrong twice.** → `docs/lessons.md`
 
 ## A soul.md is not a document to be improved
 
