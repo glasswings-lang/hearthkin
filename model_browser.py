@@ -685,6 +685,15 @@ class ModelBrowserDialog(wx.Dialog):
                            flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=4)
         provider_sizer.Add(self.provider_openrouter_rb,
                            flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=8)
+        # Lives in the Provider box rather than the machine row below,
+        # because the machine row is hidden for anything but Ollama and this
+        # has to stay reachable from either side.
+        self.manage_providers_btn = wx.Button(
+            provider_box, label="Manage pro&viders…")
+        self.manage_providers_btn.Bind(
+            wx.EVT_BUTTON, self._on_manage_providers)
+        provider_sizer.Add(self.manage_providers_btn,
+                           flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=8)
         outer.Add(provider_sizer, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
 
         # 1.6 Ollama machine — which daemon serves the model. Only shown
@@ -903,6 +912,18 @@ class ModelBrowserDialog(wx.Dialog):
             return
         self._ollama_host = self._machine_values[idx]
         self._load_models_async()
+
+    def _on_manage_providers(self, _event):
+        """Open the API-provider registry. Providers added here become usable
+        model prefixes immediately -- llm_backend re-reads providers.md when
+        its modified time changes, so nothing needs restarting."""
+        from dialogs.api_providers import ApiProvidersDialog
+        dlg = ApiProvidersDialog(self)
+        try:
+            if dlg.ShowModal() == wx.ID_OK:
+                dlg.commit()
+        finally:
+            dlg.Destroy()
 
     def _on_manage_machines(self, _event):
         from dialogs.ollama_machines import OllamaMachinesDialog

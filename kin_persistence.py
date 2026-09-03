@@ -244,6 +244,30 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 # "This machine" (localhost) is always available implicitly and is not
 # listed. Editable in Preferences or directly in this Markdown file.
 OLLAMA_HOSTS_FILE = CONFIG_DIR / "ollama_hosts.md"
+API_PROVIDERS_FILE = CONFIG_DIR / "providers.md"
+# A provider name becomes three things: the prefix in a model name
+# ("featherless/..."), the key filename (~/.ai_programs/featherless_key.json)
+# and the environment variable (FEATHERLESS_API_KEY). So it has to survive
+# being all three -- lowercase, no spaces, no punctuation beyond - and _.
+API_PROVIDER_NAME_RE = re.compile(r"^[a-z0-9_-]+$")
+DEFAULT_API_PROVIDERS = """# API providers
+#
+# Services Hearthkin can reach over the internet, one per line, as:
+#     name = https://host/v1
+#
+# The name is also the prefix you'll see on a model ("featherless/...") and
+# decides where the key is read from, so keep it lowercase with no spaces.
+# Lines starting with # are comments; a leading "- " is allowed so this
+# reads as Markdown.
+#
+# OpenRouter is built in and does not need a line here. Add one only to
+# point it somewhere else.
+#
+# Keys do NOT go in this file. Use the Providers dialog, or put the key in
+# ~/.ai_programs/<name>_key.json as {"key": "..."}.
+#
+# - featherless = https://api.featherless.ai/v1
+"""
 THIS_MACHINE_NAME = "This machine"
 DEFAULT_OLLAMA_HOSTS = """\
 # Ollama machines
@@ -2150,6 +2174,93 @@ def save_ollama_hosts(entries):
     body = "\n".join(lines).rstrip() + "\n"
     try:
         atomic_write_text(OLLAMA_HOSTS_FILE, body)
+        return True
+    except Exception:
+        return False
+
+
+def load_api_providers():
+    """Parse API_PROVIDERS_FILE into an ordered list of (name, base_url).
+
+    Same shape and same forgiveness as load_ollama_hosts: a hand-edited file
+    with a bad line loses that line, not the list. Seeds a commented template
+    on first access so the file explains itself to whoever opens it.
+
+    Names that could not work as a model prefix, a key filename and an
+    environment variable are dropped rather than half-accepted -- a provider
+    called "My Service" would produce a model named "My Service/x" that no
+    dispatch could match, and failing quietly at load is kinder than failing
+    mysteriously at send.
+    """
+    try:
+        if not API_PROVIDERS_FILE.exists():
+            atomic_write_text(API_PROVIDERS_FILE, DEFAULT_API_PROVIDERS)
+    except Exception:
+        pass
+    out = []
+    try:
+        text = _read_text_tolerant(API_PROVIDERS_FILE)
+    except Exception:
+        return out
+    seen = set()
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("- "):
+            s = s[2:].strip()
+        if "=" not in s:
+            continue
+        name, url = s.split("=", 1)
+        name = name.strip().lower()
+        url = url.strip().rstrip("/")
+        if not name or not url or name in seen:
+            continue
+        if not API_PROVIDER_NAME_RE.match(name):
+            continue
+        if not (url.startswith("http://") or url.startswith("https://")):
+            continue
+        seen.add(name)
+        out.append((name, url))
+    return out
+
+
+def save_api_providers(entries):
+    """Write the provider registry back to API_PROVIDERS_FILE.
+
+    `entries` is an iterable of (name, base_url). Re-emits the explanatory
+    header so the file stays self-documenting, then one "- name = url" line
+    each. Invalid names, non-http URLs and duplicates are skipped. Keys are
+    never written here. True on success, False on write failure."""
+    lines = [
+        "# API providers",
+        "#",
+        "# Services Hearthkin can reach over the internet, one per line, as:",
+        "#     name = https://host/v1",
+        "#",
+        "# The name is also the prefix you'll see on a model, and decides",
+        "# where the key is read from, so keep it lowercase with no spaces.",
+        "# Lines starting with # are comments; a leading \"- \" is allowed.",
+        "#",
+        "# Keys do NOT go in this file. Use the Providers dialog, or put the",
+        "# key in ~/.ai_programs/<name>_key.json as {\"key\": \"...\"}.",
+        "",
+    ]
+    seen = set()
+    for name, url in entries or []:
+        name = (name or "").strip().lower()
+        url = (url or "").strip().rstrip("/")
+        if not name or not url or name in seen:
+            continue
+        if not API_PROVIDER_NAME_RE.match(name):
+            continue
+        if not (url.startswith("http://") or url.startswith("https://")):
+            continue
+        seen.add(name)
+        lines.append(f"- {name} = {url}")
+    body = chr(10).join(lines).rstrip() + chr(10)
+    try:
+        atomic_write_text(API_PROVIDERS_FILE, body)
         return True
     except Exception:
         return False

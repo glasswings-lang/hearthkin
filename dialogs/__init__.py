@@ -47,6 +47,7 @@ from .recall_settings import RecallSettingsDialog
 from .exec_approval import ExecApprovalDialog
 from .import_history import ImportHistoryDialog
 from .restore_history import RestoreHistoryDialog
+from .api_providers import ApiProvidersDialog
 from .ollama_machines import OllamaMachinesDialog
 from .park_play import ParkPlayDialog
 from .park_vocab import ParkVocabDialog
@@ -78,6 +79,7 @@ __all__ = [
     "ExecApprovalDialog",
     "ImportHistoryDialog",
     "RestoreHistoryDialog",
+    "ApiProvidersDialog",
     "OllamaMachinesDialog",
     "ParkPlayDialog",
     "ParkVocabDialog",

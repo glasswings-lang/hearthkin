@@ -95,10 +95,71 @@ _BUILTIN_API_PROVIDERS = {
 }
 
 
+_user_providers_cache = {"mtime": None, "value": {}}
+_user_providers_lock = threading.Lock()
+
+
+def _user_api_providers():
+    """Providers the person added themselves, from ~/.hearthkin/providers.md.
+
+    Lazily imported and cached on the file's mtime. Lazy because llm_backend
+    is deliberately importable without the persistence layer -- tools and
+    tests import it bare -- so a missing or broken kin_persistence degrades
+    to "no user providers" instead of an ImportError at module load.
+
+    Any failure here means the built-in providers still work. Someone who
+    mangles that file loses the providers they added, not the ability to
+    talk to anything.
+    """
+    try:
+        from kin_persistence import API_PROVIDERS_FILE, load_api_providers
+    except Exception:
+        return {}
+    try:
+        mtime = API_PROVIDERS_FILE.stat().st_mtime
+    except Exception:
+        mtime = None
+    if mtime is not None:
+        with _user_providers_lock:
+            if _user_providers_cache["mtime"] == mtime:
+                return _user_providers_cache["value"]
+    try:
+        entries = load_api_providers()
+    except Exception:
+        entries = []
+    out = {}
+    for name, url in entries:
+        out[name] = {
+            "label": name,
+            "base": url,
+            "headers": {},
+            "key_hint": "...",
+            "user_defined": True,
+        }
+    with _user_providers_lock:
+        _user_providers_cache["mtime"] = mtime
+        _user_providers_cache["value"] = out
+    return out
+
+
 def api_providers():
-    """Every known API provider, as {name: spec}. Copy, so a caller poking at
-    the result can never corrupt the registry."""
-    return {k: dict(v) for k, v in _BUILTIN_API_PROVIDERS.items()}
+    """Every known API provider, as {name: spec} -- built-ins plus whatever
+    is in ~/.hearthkin/providers.md.
+
+    A user entry naming a built-in re-points its base URL and keeps the rest
+    of the built-in's spec: that way "OpenRouter moved their endpoint" is a
+    one-line fix in a text file, without accidentally dropping the headers
+    OpenRouter wants. Returns a copy, so a caller poking at the result can
+    never corrupt the registry.
+    """
+    out = {k: dict(v) for k, v in _BUILTIN_API_PROVIDERS.items()}
+    for name, spec in _user_api_providers().items():
+        if name in out:
+            out[name] = dict(out[name])
+            out[name]["base"] = spec["base"]
+        else:
+            out[name] = dict(spec)
+    return out
 
 
 def api_provider_spec(name):
@@ -119,7 +180,7 @@ def split_provider_model(model):
         return None, model
     head, rest = model.split("/", 1)
     head = head.lower()
-    if rest and head in _BUILTIN_API_PROVIDERS:
+    if rest and head in api_providers():
         return head, rest
     return None, model
 
@@ -3862,7 +3923,7 @@ def _provider_call_setup(provider):
     provider actually failed.
     """
     name = (provider or "openrouter").lower()
-    spec = api_provider_spec(name) or _BUILTIN_API_PROVIDERS["openrouter"]
+    spec = api_provider_spec(name) or dict(_BUILTIN_API_PROVIDERS["openrouter"])
     key_val = resolve_provider_key(name)
     if not key_val:
         env_var = name.upper().replace("-", "_") + "_API_KEY"
