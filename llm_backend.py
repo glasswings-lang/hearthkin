@@ -61,6 +61,74 @@ OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 OPENROUTER_MODELS_CACHE = Path.home() / ".ai_programs" / "openrouter_models_cache.json"
 OPENROUTER_KEY_FILE = Path.home() / ".ai_programs" / "openrouter_key.json"
 
+# --- API providers -------------------------------------------------------
+#
+# Every hosted service Hearthkin talks to speaks the same OpenAI
+# chat-completions shape: POST <base>/chat/completions, Bearer auth, the same
+# messages array, the same SSE frames. So a provider is a name, a base URL and
+# a key -- not a code path. OpenRouter was simply the first one wired up, and
+# for a long time the only one, which is why its name is still on several
+# helpers below.
+#
+# A NOTE ON THE WORD "PROVIDER", because this file uses it for two things.
+# Here it means the SERVICE YOU CONNECT TO (openrouter.ai, api.featherless.ai).
+# In _CACHE_SUPPORTED_PROVIDERS and _provider_honors_explicit_ttl it means the
+# UPSTREAM MODEL FAMILY inside an OpenRouter model id -- the "anthropic" in
+# "anthropic/claude-...". Both senses are entrenched; neither is going to win.
+#
+# Keys are not stored here. resolve_provider_key(<name>) already reads
+# <NAME>_API_KEY from the environment or ~/.ai_programs/<name>_key.json.
+
+_BUILTIN_API_PROVIDERS = {
+    "openrouter": {
+        "label": "OpenRouter",
+        "base": "https://openrouter.ai/api/v1",
+        # OpenRouter asks for these so the app is identifiable in their
+        # dashboard. Sent only to providers that ask; harmless but pointless
+        # anywhere else.
+        "headers": {
+            "HTTP-Referer": "https://github.com/glasswings-lang/hearthkin",
+            "X-Title": "Hearthkin",
+        },
+        "key_hint": "sk-or-...",
+    },
+}
+
+
+def api_providers():
+    """Every known API provider, as {name: spec}. Copy, so a caller poking at
+    the result can never corrupt the registry."""
+    return {k: dict(v) for k, v in _BUILTIN_API_PROVIDERS.items()}
+
+
+def api_provider_spec(name):
+    """The spec for one provider, or None if it isn't registered."""
+    return api_providers().get((name or "").lower().strip())
+
+
+def split_provider_model(model):
+    """('openrouter', 'anthropic/claude-x') for a hosted model; (None, model)
+    for anything else.
+
+    Matched against the REGISTRY, never by "whatever precedes the first
+    slash". Local Ollama models are routinely named
+    `hf.co/TheDrummer/Cydonia-24B-v4.3-GGUF:Q4_K_M`, and a general rule would
+    cheerfully try to dispatch those to a provider called "hf.co".
+    """
+    if not isinstance(model, str) or "/" not in model:
+        return None, model
+    head, rest = model.split("/", 1)
+    head = head.lower()
+    if rest and head in _BUILTIN_API_PROVIDERS:
+        return head, rest
+    return None, model
+
+
+def provider_for_model(model):
+    """The provider NAME for a hosted model, or None when it's an Ollama one."""
+    return split_provider_model(model)[0]
+
+
 # Providers known to support prompt caching (per OpenRouter docs, verified 2026-05).
 # Some are automatic, some need explicit cache_control. Top-level cache_control
 # works for both modes — the server applies it where it can.
@@ -3061,12 +3129,24 @@ def _coerce_tool_call_assistant_content(messages):
 
 
 def _is_openrouter_model(model):
-    return isinstance(model, str) and model.startswith("openrouter/")
+    """True when `model` is served by a registered API provider over HTTP,
+    rather than by local Ollama.
+
+    The name is historical -- OpenRouter was the only such provider for a
+    long time -- and is kept deliberately: every caller means "is this the
+    hosted, OpenAI-shaped path?", which is exactly what this still answers,
+    and tests/test_system_note_placement.py pins this call by its source
+    text. To ask specifically about openrouter.ai, compare
+    provider_for_model(model) == "openrouter".
+    """
+    return split_provider_model(model)[0] is not None
 
 
 def _openrouter_model_id(model):
-    """Strip the `openrouter/` prefix to get the OpenRouter-native model ID."""
-    return model[len("openrouter/"):] if _is_openrouter_model(model) else model
+    """Strip the provider prefix to get the id the provider itself expects
+    (`openrouter/anthropic/x` -> `anthropic/x`). Unregistered names, which is
+    to say every Ollama model, come back untouched."""
+    return split_provider_model(model)[1]
 
 
 def _supports_caching(model):
@@ -3769,7 +3849,39 @@ class _HostConnectionCache:
 _OR_BLOCKING_CONN_CACHE = _HostConnectionCache()
 
 
-def _openrouter_blocking_request(payload):
+def _provider_call_setup(provider):
+    """(spec, url, headers) for a chat call to `provider`.
+
+    One place builds the URL, the auth header and any per-provider extras, so
+    the streaming and blocking paths cannot drift apart -- they did not used
+    to share this, and the blocking path quietly grew a Connection header the
+    streaming one never had.
+
+    Raises OpenRouterAuthError when no key is configured. The exception name
+    predates there being more than one provider; the message names whichever
+    provider actually failed.
+    """
+    name = (provider or "openrouter").lower()
+    spec = api_provider_spec(name) or _BUILTIN_API_PROVIDERS["openrouter"]
+    key_val = resolve_provider_key(name)
+    if not key_val:
+        env_var = name.upper().replace("-", "_") + "_API_KEY"
+        key_file = PROVIDER_KEY_DIR / (name + "_key.json")
+        raise OpenRouterAuthError(
+            "No " + spec.get("label", name) + " API key. Set the " + env_var
+            + " environment variable, or write "
+            + json.dumps({"key": spec.get("key_hint", "...")})
+            + " to " + str(key_file) + "."
+        )
+    headers = {
+        "Authorization": "Bearer " + key_val,
+        "Content-Type": "application/json",
+    }
+    headers.update(spec.get("headers") or {})
+    return spec, spec["base"].rstrip("/") + "/chat/completions", headers
+
+
+def _openrouter_blocking_request(payload, provider="openrouter"):
     """POST to OpenRouter /chat/completions (non-streaming) via the
     persistent-connection cache. Returns the parsed JSON dict.
 
@@ -3778,24 +3890,11 @@ def _openrouter_blocking_request(payload):
     the urllib-based path. Streaming calls still go through the
     older _openrouter_request() because their connection lifetime is
     too long to pool cleanly."""
-    key_val = _resolve_openrouter_key()
-    if not key_val:
-        raise OpenRouterAuthError(
-            "No OpenRouter API key. Set OPENROUTER_API_KEY env var or write "
-            f"{{\"key\": \"sk-or-...\"}} to {OPENROUTER_KEY_FILE}."
-        )
-    url = f"{OPENROUTER_BASE}/chat/completions"
+    _spec, url, headers = _provider_call_setup(provider)
     body = json.dumps(payload).encode("utf-8")
-    headers = {
-        "Authorization": f"Bearer {key_val}",
-        "Content-Type": "application/json",
-        # OpenRouter asks for these to identify your app in their dashboard.
-        "HTTP-Referer": "https://github.com/glasswings-lang/hearthkin",
-        "X-Title": "Hearthkin",
-        # Explicit keep-alive — without it some intermediate proxies
-        # may downgrade to Connection: close, which kills our pooling.
-        "Connection": "keep-alive",
-    }
+    # Explicit keep-alive — without it some intermediate proxies may
+    # downgrade to Connection: close, which kills our pooling.
+    headers["Connection"] = "keep-alive"
     status, raw, resp_headers = _OR_BLOCKING_CONN_CACHE.request_json(
         url, headers=headers, body=body, timeout=60,
     )
@@ -3895,26 +3994,17 @@ def _raise_openrouter_error_from_status(status, body, headers):
     raise LLMBackendError(f"OpenRouter error {status}: {detail}")
 
 
-def _openrouter_request(payload, *, stream):
+def _openrouter_request(payload, *, stream, provider="openrouter"):
     """POST to OpenRouter /chat/completions. Returns the urllib response object.
 
     Caller is responsible for reading the response (line-by-line for SSE,
     .read() for blocking).
     """
-    key = _resolve_openrouter_key()
-    if not key:
-        raise OpenRouterAuthError(
-            "No OpenRouter API key. Set OPENROUTER_API_KEY env var or write "
-            f"{{\"key\": \"sk-or-...\"}} to {OPENROUTER_KEY_FILE}."
-        )
-    url = f"{OPENROUTER_BASE}/chat/completions"
+    _spec, url, headers = _provider_call_setup(provider)
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST")
-    req.add_header("Authorization", f"Bearer {key}")
-    req.add_header("Content-Type", "application/json")
-    # OpenRouter asks for these to identify your app in their dashboard.
-    req.add_header("HTTP-Referer", "https://github.com/glasswings-lang/hearthkin")
-    req.add_header("X-Title", "Hearthkin")
+    for _h, _v in headers.items():
+        req.add_header(_h, _v)
     try:
         return urllib.request.urlopen(req, timeout=120 if stream else 60)
     except urllib.error.HTTPError as e:
@@ -3961,7 +4051,8 @@ _SSE_STALL_DEADLINE_SECS = 300
 
 def _chat_openrouter_stream(model, messages, options, think_effort, tools, cache, show_thinking=True, cache_ttl="auto", provider_routing=None) -> Iterator[Chunk]:
     payload = _build_openrouter_payload(model, messages, options, think_effort, tools, cache, stream=True, show_thinking=show_thinking, cache_ttl=cache_ttl, provider_routing=provider_routing)
-    resp = _openrouter_request(payload, stream=True)
+    resp = _openrouter_request(
+        payload, stream=True, provider=provider_for_model(model))
     # SSE: lines starting with "data: ", terminated by "data: [DONE]".
     final_usage = None
     last_progress = time.monotonic()
@@ -4044,7 +4135,8 @@ def _chat_openrouter_blocking(model, messages, options, think_effort, tools, cac
     # and we should surface the empty result so the user knows.
     last_data = None
     for attempt in range(2):
-        data = _openrouter_blocking_request(payload)
+        data = _openrouter_blocking_request(
+            payload, provider=provider_for_model(model))
         last_data = data
         choices = data.get("choices") or []
         if not choices:
