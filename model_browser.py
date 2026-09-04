@@ -815,6 +815,28 @@ class ModelBrowserDialog(wx.Dialog):
 
     # ─── Model loading ───────────────────────────────────────────────────────
 
+    @staticmethod
+    def _accelerator_for(label, taken):
+        """Put an `&` before the first letter of `label` not already claimed,
+        and record it in `taken`.
+
+        The hand-written radios had Alt+O and Alt+P. Generating the labels
+        from a registry is an easy place to drop that, and losing an
+        accelerator is losing a way in for someone who navigates by keyboard.
+        Falls back to appending a digit when every letter in the name is
+        spoken for, because a working odd accelerator beats no accelerator.
+        """
+        for i, ch in enumerate(label):
+            low = ch.lower()
+            if ch.isalnum() and low not in taken:
+                taken.add(low)
+                return label[:i] + "&" + label[i:]
+        for digit in "123456789":
+            if digit not in taken:
+                taken.add(digit)
+                return label + " (&" + digit + ")"
+        return label
+
     def _build_provider_radios(self):
         """(Re)build the provider radio buttons from the registry.
 
@@ -843,8 +865,9 @@ class ModelBrowserDialog(wx.Dialog):
             names = ["openrouter"]
 
         entries = [("ollama", "&Ollama (local)")]
+        taken = {"o"}
         for name in names:
-            entries.append((name, "%s (remote)" % name))
+            entries.append((name, self._accelerator_for(name + " (remote)", taken)))
 
         first = True
         for name, label in entries:
@@ -857,6 +880,18 @@ class ModelBrowserDialog(wx.Dialog):
                 flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=4 if first else 8)
             self._provider_rbs[name] = rb
             first = False
+
+        # A control created later is a control LATER IN THE TAB ORDER, so a
+        # rebuild silently moved every radio to after the "Manage providers"
+        # button sitting beside them. Tab order is how this dialog is read --
+        # the room must not rearrange itself between visits (the defect
+        # tests/test_stable_tab_order.py exists for). Walk them back in front
+        # of the button, in order; each lands immediately before it, so doing
+        # this in sequence reproduces the order they were built in.
+        btn = getattr(self, "manage_providers_btn", None)
+        if btn is not None:
+            for rb in self._provider_rbs.values():
+                rb.MoveBeforeInTabOrder(btn)
 
         # The provider a kin was pointed at can vanish -- someone removes it
         # in the dialog one control to the right. Fall back to Ollama rather
