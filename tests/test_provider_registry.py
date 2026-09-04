@@ -84,12 +84,77 @@ def test_degenerate_input():
           not lb._is_openrouter_model("openrouter/"))
 
 
+def _fake_urlopen(payload_text):
+    """Stand in for urllib.request.urlopen with a canned body."""
+    import contextlib
+
+    class _Resp:
+        def read(self):
+            return payload_text.encode("utf-8")
+
+    @contextlib.contextmanager
+    def opener(*_a, **_k):
+        yield _Resp()
+
+    return opener
+
+
+def test_model_list_shapes():
+    """Providers disagree about how to wrap a model list. Accept all three
+    rather than making whoever adds a provider find out which kind it is."""
+    import json
+    import urllib.request
+    real = urllib.request.urlopen
+    os.environ["OPENROUTER_API_KEY"] = "test-key"
+    try:
+        for label, body, want in (
+            ("OpenAI-style {data: [...]}",
+             json.dumps({"data": [{"id": "a"}, {"id": "b"}]}), ["a", "b"]),
+            ("bare list of objects",
+             json.dumps([{"id": "a"}]), ["a"]),
+            ("bare list of strings",
+             json.dumps(["a", "b", "c"]), ["a", "b", "c"]),
+            ("{models: [...]}",
+             json.dumps({"models": [{"id": "z"}]}), ["z"]),
+        ):
+            urllib.request.urlopen = _fake_urlopen(body)
+            lb.clear_provider_model_cache()
+            got = [m["id"] for m in lb.list_provider_models("openrouter")]
+            check("%s -> %r" % (label, want), got == want)
+
+        # Entries with no id at all are dropped, not passed on as blanks.
+        urllib.request.urlopen = _fake_urlopen(
+            json.dumps({"data": [{"id": "a"}, {"name": "no id here"}, {}]}))
+        lb.clear_provider_model_cache()
+        check("entries without an id are dropped",
+              [m["id"] for m in lb.list_provider_models("openrouter")] == ["a"])
+    finally:
+        urllib.request.urlopen = real
+        lb.clear_provider_model_cache()
+
+
+def test_unknown_provider_refuses_rather_than_defaulting():
+    """The dangerous one. An unregistered provider name used to resolve to
+    OpenRouter, so a removed or mistyped provider did not fail -- it quietly
+    sent the conversation to a different company than the model named."""
+    raised = None
+    try:
+        lb._provider_call_setup("no-such-provider-anywhere")
+    except Exception as e:
+        raised = e
+    check("unknown provider raises", raised is not None)
+    check("...and does not silently become OpenRouter",
+          raised is not None and "no-such-provider-anywhere" in str(raised))
+
+
 def main():
     test_registry_shape()
     test_splitting()
     test_hf_co_is_not_a_provider()
     test_unregistered_prefix_is_not_hosted()
     test_degenerate_input()
+    test_model_list_shapes()
+    test_unknown_provider_refuses_rather_than_defaulting()
     if _failures:
         print("\nFAILED %d: %s" % (len(_failures), ", ".join(_failures)))
         return 1

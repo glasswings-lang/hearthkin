@@ -3923,7 +3923,16 @@ def _provider_call_setup(provider):
     provider actually failed.
     """
     name = (provider or "openrouter").lower()
-    spec = api_provider_spec(name) or dict(_BUILTIN_API_PROVIDERS["openrouter"])
+    spec = api_provider_spec(name)
+    if spec is None:
+        # Never fall back to a default provider here. This used to resolve to
+        # OpenRouter, which meant an unknown or removed provider name did not
+        # fail -- it quietly sent the conversation to a different company's
+        # servers than the one named on the model. Refuse instead.
+        raise LLMBackendError(
+            "No API provider called \"" + name + "\" is configured. Add it "
+            "under Manage providers, or point the kin at a different model."
+        )
     key_val = resolve_provider_key(name)
     if not key_val:
         env_var = name.upper().replace("-", "_") + "_API_KEY"
@@ -4524,6 +4533,75 @@ def list_openrouter_models(*, force_refresh=False, cache_max_age_hours=24,
         except Exception:
             pass
     return []
+
+
+# provider name -> (fetched_at, models). In memory only, unlike the OpenRouter
+# catalogue's on-disk cache: a user-added provider's list is small, and a
+# stale list on disk is worse than one refetch per session.
+_provider_model_cache = {}
+_PROVIDER_MODEL_TTL = 600.0
+
+
+def list_provider_models(provider, *, force_refresh=False):
+    """The model list for any registered API provider, as a list of dicts
+    each carrying at least an "id".
+
+    OpenRouter keeps its own richer path (list_openrouter_models) because its
+    catalogue carries pricing, capability flags and moderation state that the
+    filter dialog reads. Everyone else answers the plain OpenAI-shaped
+    `GET <base>/models`, which is a list of ids and very little else — so a
+    list of ids is all this promises. Callers must not assume capability
+    fields exist: for most providers nothing knows a model's context window
+    or whether it accepts images short of asking the model itself.
+
+    Raises OpenRouterAuthError when the provider has no key configured. That
+    exception name predates there being more than one provider; the message
+    names whichever provider actually failed.
+    """
+    name = (provider or "").lower().strip()
+    now = time.time()
+    if not force_refresh:
+        hit = _provider_model_cache.get(name)
+        if hit and (now - hit[0]) < _PROVIDER_MODEL_TTL:
+            return hit[1]
+
+    spec, _chat_url, headers = _provider_call_setup(name)
+    headers.pop("Content-Type", None)
+    url = spec["base"].rstrip("/") + "/models"
+    req = urllib.request.Request(url)
+    for header, value in headers.items():
+        req.add_header(header, value)
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+    parsed = json.loads(raw)
+
+    # Two shapes in the wild: {"data": [...]} (OpenAI's own, and most of the
+    # imitators) and a bare [...]. Accept both, rather than making the person
+    # who just added a provider work out which kind it is.
+    if isinstance(parsed, dict):
+        models = parsed.get("data") or parsed.get("models") or []
+    elif isinstance(parsed, list):
+        models = parsed
+    else:
+        models = []
+
+    out = []
+    for m in models:
+        if isinstance(m, str):
+            out.append({"id": m})
+        elif isinstance(m, dict) and m.get("id"):
+            out.append(m)
+    _provider_model_cache[name] = (now, out)
+    return out
+
+
+def clear_provider_model_cache(provider=None):
+    """Drop the cached list for one provider, or for all of them. Wired into
+    the model browser's Refresh button."""
+    if provider is None:
+        _provider_model_cache.clear()
+    else:
+        _provider_model_cache.pop((provider or "").lower().strip(), None)
 
 
 # ─── Tool-call helpers (for callers that want to run a tools loop) ──────────

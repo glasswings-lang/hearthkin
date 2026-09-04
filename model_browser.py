@@ -579,9 +579,14 @@ class ModelBrowserDialog(wx.Dialog):
         # Default provider inferred from current_model: openrouter/... → remote,
         # anything else (including blank) → local Ollama. The user can flip
         # the radio to switch.
-        if current_model and current_model.startswith("openrouter/"):
-            self._provider = "openrouter"
-            current_model = current_model[len("openrouter/"):]
+        try:
+            import llm_backend
+            prov, bare = llm_backend.split_provider_model(current_model or "")
+        except Exception:
+            prov, bare = None, current_model
+        if prov:
+            self._provider = prov
+            current_model = bare
         else:
             self._provider = "ollama"
         self._initial_selection = current_model
@@ -667,24 +672,10 @@ class ModelBrowserDialog(wx.Dialog):
         # label gives NVDA group context as focus enters.
         provider_box = wx.StaticBox(panel, label="Provider")
         provider_sizer = wx.StaticBoxSizer(provider_box, wx.HORIZONTAL)
-        self.provider_ollama_rb = wx.RadioButton(
-            provider_box, label="&Ollama (local)", style=wx.RB_GROUP,
-        )
-        self.provider_openrouter_rb = wx.RadioButton(
-            provider_box, label="O&penRouter (remote)",
-        )
-        if self._provider == "ollama":
-            self.provider_ollama_rb.SetValue(True)
-        else:
-            self.provider_openrouter_rb.SetValue(True)
-        self.provider_ollama_rb.Bind(
-            wx.EVT_RADIOBUTTON, self._on_provider_changed)
-        self.provider_openrouter_rb.Bind(
-            wx.EVT_RADIOBUTTON, self._on_provider_changed)
-        provider_sizer.Add(self.provider_ollama_rb,
-                           flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=4)
-        provider_sizer.Add(self.provider_openrouter_rb,
-                           flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=8)
+        self._provider_box = provider_box
+        self._provider_sizer = provider_sizer
+        self._provider_rbs = {}
+        self._build_provider_radios()
         # Lives in the Provider box rather than the machine row below,
         # because the machine row is hidden for anything but Ollama and this
         # has to stay reachable from either side.
@@ -824,9 +815,63 @@ class ModelBrowserDialog(wx.Dialog):
 
     # ─── Model loading ───────────────────────────────────────────────────────
 
+    def _build_provider_radios(self):
+        """(Re)build the provider radio buttons from the registry.
+
+        Independent wx.RadioButtons in a StaticBox rather than a wx.RadioBox,
+        for the same reason as before: a RadioBox announces only the selected
+        option to NVDA, which made the other provider effectively invisible
+        (M-O2). The StaticBox label supplies group context as focus enters.
+
+        Rebuildable, because the set of providers changes while this dialog is
+        open -- "Manage providers..." is right next to these buttons, and a
+        provider you just added has to appear without reopening anything.
+
+        Ollama is always first and always present; it is not in the registry
+        because it is not an HTTP API provider. The rest are alphabetical, so
+        their order does not shift under someone navigating by keyboard.
+        """
+        for rb in self._provider_rbs.values():
+            self._provider_sizer.Detach(rb)
+            rb.Destroy()
+        self._provider_rbs = {}
+
+        try:
+            import llm_backend
+            names = sorted(llm_backend.api_providers())
+        except Exception:
+            names = ["openrouter"]
+
+        entries = [("ollama", "&Ollama (local)")]
+        for name in names:
+            entries.append((name, "%s (remote)" % name))
+
+        first = True
+        for name, label in entries:
+            style = wx.RB_GROUP if first else 0
+            rb = wx.RadioButton(self._provider_box, label=label, style=style)
+            rb.SetValue(name == self._provider)
+            rb.Bind(wx.EVT_RADIOBUTTON, self._on_provider_changed)
+            self._provider_sizer.Insert(
+                len(self._provider_rbs), rb,
+                flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=4 if first else 8)
+            self._provider_rbs[name] = rb
+            first = False
+
+        # The provider a kin was pointed at can vanish -- someone removes it
+        # in the dialog one control to the right. Fall back to Ollama rather
+        # than leaving every radio unset, which reads as an empty group.
+        if self._provider not in self._provider_rbs:
+            self._provider = "ollama"
+            self._provider_rbs["ollama"].SetValue(True)
+        self._provider_sizer.Layout()
+
     def _on_provider_changed(self, event):
-        new_provider = ("ollama" if self.provider_ollama_rb.GetValue()
-                        else "openrouter")
+        new_provider = self._provider
+        for name, rb in self._provider_rbs.items():
+            if rb.GetValue():
+                new_provider = name
+                break
         if new_provider == self._provider:
             return
         self._provider = new_provider
@@ -843,8 +888,13 @@ class ModelBrowserDialog(wx.Dialog):
         disabled: a disabled control left in the Tab order is the kind
         of thing a screen-reader user trips over wondering why it's
         inert (hide-when-inactive beats grey-out)."""
-        is_remote = self._provider == "openrouter"
-        self.filters_btn.Show(is_remote)
+        # Two different questions, and they used to be the same one. The
+        # filters read OpenRouter's catalogue (pricing, warmth, moderation,
+        # capability flags), so they are meaningful for OpenRouter alone --
+        # a plain /models list from any other provider carries none of it.
+        # The machine picker, by contrast, is about local-versus-remote.
+        is_remote = self._provider != "ollama"
+        self.filters_btn.Show(self._provider == "openrouter")
         self._update_filters_button_label()
         # Machine picker is Ollama-only and only when the caller opted in
         # (chat-model case). Hidden — not greyed — when inactive, per the
@@ -924,6 +974,11 @@ class ModelBrowserDialog(wx.Dialog):
                 dlg.commit()
         finally:
             dlg.Destroy()
+        # The radio set is now stale in both directions -- a provider may have
+        # been added or removed one dialog ago.
+        self._build_provider_radios()
+        self._update_filter_relevance()
+        self._load_models_async()
 
     def _on_manage_machines(self, _event):
         from dialogs.ollama_machines import OllamaMachinesDialog
@@ -970,6 +1025,10 @@ class ModelBrowserDialog(wx.Dialog):
             try:
                 if provider_snapshot == "openrouter":
                     models = list_openrouter_models(force_refresh=force_refresh)
+                elif provider_snapshot != "ollama":
+                    import llm_backend
+                    models = llm_backend.list_provider_models(
+                        provider_snapshot, force_refresh=force_refresh)
                 else:
                     if force_refresh:
                         clear_ollama_context_cache()
@@ -993,12 +1052,12 @@ class ModelBrowserDialog(wx.Dialog):
         # Same for the Ollama machine: if the user switched machines while this
         # load was in flight, a slower earlier load could otherwise land its
         # result on top of the newer machine's. Ignore the stale one.
-        if provider_snapshot != "openrouter" and host_snapshot != self._list_host():
+        if provider_snapshot == "ollama" and host_snapshot != self._list_host():
             return
         self.refresh_btn.Enable()
         if error is not None:
             self.count_label.SetLabel(f"Models: (failed to load: {error[:80]})")
-            label = "OpenRouter" if self._provider == "openrouter" else "Ollama"
+            label = "Ollama" if self._provider == "ollama" else self._provider
             self.detail.SetValue(f"Failed to fetch {label} model list:\n\n{error}")
             return
         self._models = models or []
@@ -1449,6 +1508,6 @@ class ModelBrowserDialog(wx.Dialog):
         None if nothing is selected."""
         if self._selected_id is None:
             return None
-        if self._provider == "openrouter":
-            return f"openrouter/{self._selected_id}"
+        if self._provider != "ollama":
+            return f"{self._provider}/{self._selected_id}"
         return self._selected_id
