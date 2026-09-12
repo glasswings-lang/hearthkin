@@ -146,8 +146,20 @@ def _profile_for_model(model_id):
     if not model_id:
         return ModelProfile()
 
-    if model_id.startswith("openrouter/"):
+    try:
+        from llm_backend import provider_for_model
+        provider = provider_for_model(model_id)
+    except Exception:
+        provider = None
+    if provider == "openrouter":
         return _openrouter_profile(model_id)
+    if provider:
+        # Another API provider. Nothing here knows its catalogue, so every
+        # capability stays None, which the checks read as "unknown, skip".
+        # This must NOT fall through to _ollama_profile: that asks the local
+        # Ollama about a model it has never heard of, and a "no" from there
+        # became a false "this model can't use tools" warning on the swap.
+        return ModelProfile(family=provider)
     return _ollama_profile(model_id)
 
 

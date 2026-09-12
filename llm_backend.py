@@ -3203,6 +3203,21 @@ def _is_openrouter_model(model):
     return split_provider_model(model)[0] is not None
 
 
+def is_hosted_model(model):
+    """The public name for "is this model served over the internet by a
+    registered provider, rather than by Ollama?".
+
+    Code outside this module used to ask `model.startswith("openrouter/")`,
+    which was right while OpenRouter was the only provider and quietly wrong
+    once providers became a list: a model from any other provider was treated
+    as a local one, so the app asked the local Ollama about a model it had
+    never heard of. Ask this instead, and ask
+    provider_for_model(model) == "openrouter" only for things that genuinely
+    come from OpenRouter, such as its catalogue and its prices.
+    """
+    return _is_openrouter_model(model)
+
+
 def _openrouter_model_id(model):
     """Strip the provider prefix to get the id the provider itself expects
     (`openrouter/anthropic/x` -> `anthropic/x`). Unregistered names, which is
@@ -3660,11 +3675,20 @@ def _build_openrouter_payload(model, messages, options, think_effort, tools, cac
         "messages": messages,
         "stream": bool(stream),
     }
+    # `reasoning`, `provider` and top-level `cache_control` are OpenRouter's
+    # own extensions, not part of the shape every provider shares. They used
+    # to go to every provider, and a kin's default thinking setting of "off"
+    # meant `reasoning` went out on EVERY turn — a strict provider refuses a
+    # field it doesn't know, so a provider added in the dialog could fail on
+    # its very first message for a reason nothing on screen explained.
+    # A bare id with no registered prefix is treated as OpenRouter, since
+    # that is what this builder was for before providers were a list.
+    is_openrouter = provider_for_model(model) in (None, "openrouter")
     # Provider routing — pin to specific inference providers when the
     # caller passes a routing dict (built by build_openrouter_provider_routing).
     # Used to make NSFW-content-policy enforcement predictable on models
     # where different providers behave differently (Xiaomi MiMo etc).
-    if provider_routing:
+    if provider_routing and is_openrouter:
         payload["provider"] = provider_routing
     if options:
         # Map Ollama-style options into OpenAI/OpenRouter-style fields where they exist
@@ -3677,7 +3701,14 @@ def _build_openrouter_payload(model, messages, options, think_effort, tools, cac
         if "frequency_penalty" in options: payload["frequency_penalty"] = options["frequency_penalty"]
         if "num_predict" in options:    payload["max_tokens"] = options["num_predict"]
         if "stop" in options:           payload["stop"] = options["stop"]
-    if think_effort == "off":
+    if not is_openrouter:
+        # Other providers get the plain OpenAI field, and only when thinking
+        # was actually asked for. "off" sends nothing: it is the default, so
+        # sending it would put a field on every turn to every provider, and a
+        # model that doesn't reason is already not reasoning.
+        if think_effort in ("low", "medium", "high"):
+            payload["reasoning_effort"] = think_effort
+    elif think_effort == "off":
         payload["reasoning"] = {"enabled": False}
     elif think_effort == "low":
         payload["reasoning"] = {"effort": "low"}
@@ -3699,7 +3730,7 @@ def _build_openrouter_payload(model, messages, options, think_effort, tools, cac
         payload["reasoning"]["exclude"] = True
     if tools:
         payload["tools"] = tools
-    if cache and _supports_caching(model):
+    if cache and is_openrouter and _supports_caching(model):
         # Top-level cache_control auto-advances the breakpoint across turns.
         # In testing (2026-05-11) this writes the cache fine in streaming mode
         # but doesn't read on subsequent streamed turns. The per-content-block
@@ -4335,7 +4366,7 @@ def set_ollama_keep_alive(model, keep_alive, *, host=None, only_if_loaded=True):
     checks /api/ps and does nothing if the model isn't currently in memory
     — applying a keep_alive must never force a cold load. Best-effort:
     returns True on success, False otherwise, never raises."""
-    if not model or str(model).startswith("openrouter/"):
+    if not model or _is_openrouter_model(str(model)):
         return False
     base = (host or _resolve_ollama_host()).rstrip("/")
     try:

@@ -42,7 +42,13 @@ class MoreModelOptionsDialog(wx.Dialog):
             model = strip_model_annotation(str(cfg.get("model", "") or ""))
         except Exception:
             model = str(cfg.get("model", "") or "")
-        is_openrouter = model.startswith("openrouter/")
+        try:
+            from llm_backend import is_hosted_model
+            is_openrouter = is_hosted_model(model)  # any API provider
+        except Exception:
+            # Fail open, same as the image check below: showing an Ollama
+            # knob that does nothing beats hiding one that was needed.
+            is_openrouter = False
         is_ollama = not is_openrouter
         try:
             from llm_backend import model_supports_images
@@ -286,7 +292,13 @@ class MoreModelOptionsDialog(wx.Dialog):
         effect immediately instead of only on the next chat. Off the UI
         thread, best-effort; never raises into the dialog."""
         model = str(self.cfg.get("model", "") or "")
-        if not model or model.startswith("openrouter/"):
+        if not model:
+            return
+        try:
+            from llm_backend import is_hosted_model
+            if is_hosted_model(model):
+                return
+        except Exception:
             return
         host_name = self.cfg.get("ollama_host_name", "")
         import threading

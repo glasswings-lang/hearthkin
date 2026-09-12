@@ -244,12 +244,17 @@ class UsageMixin:
         Returns an int (tokens) or None when unknown."""
         if not model:
             return None
-        if not model.startswith("openrouter/"):
+        if not llm_backend.is_hosted_model(model):
             # Ollama local model — query /api/show via model_utils.
             try:
                 return _model_context_length(model)
             except Exception:
                 return None
+        if llm_backend.provider_for_model(model) != "openrouter":
+            # Another API provider. Its /models list carries no context
+            # length, and OpenRouter's catalogue describes OpenRouter's
+            # hosting, not this provider's. Unknown is the honest answer.
+            return None
         cache_path = Path.home() / ".ai_programs" / "openrouter_models_cache.json"
         try:
             mtime = cache_path.stat().st_mtime

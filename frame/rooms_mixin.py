@@ -174,18 +174,19 @@ class RoomsMixin:
             models.add(strip_model_annotation(cfg.get("model", "")))
         if len(models) <= 1:
             return "", ""
-        has_or = any(m.startswith("openrouter/") for m in models)
-        has_ollama = any(not m.startswith("openrouter/") and m for m in models)
+        # Any API provider counts as "over the network", not just OpenRouter.
+        has_or = any(llm_backend.is_hosted_model(m) for m in models)
+        has_ollama = any(m and not llm_backend.is_hosted_model(m) for m in models)
         if has_or and has_ollama:
             reason = (
                 "Each turn pauses briefly: Ollama swaps weights for local "
-                "kin (a few seconds per model change), and OpenRouter kin "
-                "go over the network (varies by provider load)."
+                "kin (a few seconds per model change), and kin on an online "
+                "provider go over the network (varies by provider load)."
             )
         elif has_or:
             reason = (
-                "Each turn makes a network call to OpenRouter — delays "
-                "depend on provider load and routing."
+                "Each turn makes a network call to an online provider — "
+                "delays depend on provider load and routing."
             )
         else:
             reason = (

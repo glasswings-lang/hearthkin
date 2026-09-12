@@ -256,13 +256,15 @@ def estimate_image_tokens(model):
     are rough — see the table's comment for sources."""
     if not model or not isinstance(model, str):
         return _UNKNOWN_PROVIDER_IMAGE_TOKENS
-    m = model.lower()
-    if m.startswith("openrouter/"):
-        m = m[len("openrouter/"):]
-        # `provider/name` form — provider is the first segment.
+    # Lazy: llm_backend imports this module at load time.
+    from llm_backend import split_provider_model
+    hosted_by, rest = split_provider_model(model)
+    if hosted_by:
+        m = rest.lower()
+        # `family/name` form — the model family is the first segment.
         provider = m.split("/", 1)[0] if "/" in m else m
         return _IMAGE_TOKEN_TABLE.get(provider, _UNKNOWN_PROVIDER_IMAGE_TOKENS)
-    # No `openrouter/` prefix → local Ollama. Family-level prefixes
+    # No provider prefix → local Ollama. Family-level prefixes
     # (llava-, gemma3, qwen2-vl-, moondream, bakllava-) are too
     # varied to enumerate; a single default is the practical answer.
     return _OLLAMA_IMAGE_TOKENS_DEFAULT

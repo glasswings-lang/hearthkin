@@ -1836,9 +1836,10 @@ class EditKinDialog(wx.Dialog):
                 # the model's context length, both via the global host. If
                 # the user moved the kin to another box, those must hit the
                 # new box, not the previously-active one.
-                if not chosen.startswith("openrouter/"):
+                import llm_backend as _lb
+                chosen_is_hosted = _lb.is_hosted_model(chosen)
+                if not chosen_is_hosted:
                     try:
-                        import llm_backend as _lb
                         _lb.set_ollama_host(resolve_kin_ollama_host(
                             dlg.get_selected_ollama_host()))
                     except Exception:
@@ -1857,8 +1858,8 @@ class EditKinDialog(wx.Dialog):
                 # Pin the kin to the chosen machine — only meaningful for an
                 # Ollama model, and even when the model name is unchanged
                 # (the user may have moved the kin to another box running
-                # the same model). OpenRouter models ignore the host.
-                if not chosen.startswith("openrouter/"):
+                # the same model). Models from an API provider ignore the host.
+                if not chosen_is_hosted:
                     new_host = dlg.get_selected_ollama_host()
                     if new_host != str(self.cfg.get("ollama_host_name", "") or ""):
                         self._save_param("ollama_host_name", new_host)
@@ -3887,10 +3888,11 @@ class EditKinDialog(wx.Dialog):
         if not model:
             self._apply_think_capability("", None)
             return
-        # OpenRouter: don't do a network call. Show a hint that
+        # Any API provider: don't do a network call. Show a hint that
         # explains the situation; leave radios enabled (Off works
         # explicitly for these models, so the user has real control).
-        if model.startswith("openrouter/"):
+        import llm_backend as _lb
+        if _lb.is_hosted_model(model):
             self._apply_think_capability(model, "remote")
             return
         # Ollama: query capability on a worker thread.

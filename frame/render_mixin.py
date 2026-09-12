@@ -5,7 +5,7 @@ Hearthkin(wx.Frame) class in hearthkin.pyw; every method here runs with
 the frame as `self`. Moved verbatim — no logic changed.
 """
 from frame_shared import (_model_supports_thinking, datetime, format_ts_prefix,
-                          json, load_app_prompt, os,
+                          json, llm_backend, load_app_prompt, os,
                           speaker_attribution_prefix)
 
 
@@ -54,7 +54,7 @@ class RenderMixin:
         toggle is forwarded to the provider, who picks its own default."""
         if not requested_think:
             return False
-        if isinstance(model, str) and model.startswith("openrouter/"):
+        if isinstance(model, str) and llm_backend.is_hosted_model(model):
             return requested_think
         supports = _model_supports_thinking(model)
         if supports is False:
@@ -79,7 +79,9 @@ class RenderMixin:
         are forwarded as-is and the provider decides what to honor."""
         if requested_effort == "off":
             return "off"
-        if isinstance(model, str) and model.startswith("openrouter/"):
+        # Any API provider, not just OpenRouter: asking the local Ollama about
+        # a model it doesn't have can only produce a wrong "no".
+        if isinstance(model, str) and llm_backend.is_hosted_model(model):
             return requested_effort
         supports = _model_supports_thinking(model)
         if supports is False:

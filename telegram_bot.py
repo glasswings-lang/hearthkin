@@ -3578,15 +3578,15 @@ class TelegramBot:
         )
 
     def _model_is_openrouter(self):
-        """True when the kin's active model dispatches via OpenRouter
-        (openrouter/ name prefix — same rule llm_backend.chat() keys
-        on). Used to decide whether the ollama package is actually
-        required (audit M-T6)."""
+        """True when the kin's active model is served by any registered API
+        provider rather than Ollama — the same rule llm_backend.chat() keys
+        on. Used to decide whether the ollama package is actually required
+        (audit M-T6). The name predates there being more than one provider."""
         try:
             model, _ = self.get_model_options()
         except Exception:
             return False
-        return isinstance(model, str) and model.startswith("openrouter/")
+        return isinstance(model, str) and llm_backend.is_hosted_model(model)
 
     def _user_shares_desktop(self, user_id):
         """Per-user opt-in for sharing the conversation with the

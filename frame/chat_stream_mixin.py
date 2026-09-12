@@ -7,7 +7,7 @@ the frame as `self`. Moved verbatim — no logic changed.
 from frame_shared import (
     Path, _is_cron_user_text, agent_dir, append_agent_conversation_turn,
     append_failure_log, atomic_write_text, clean_kin_reply, cron_helpers,
-    extract_inline_thinking, json,
+    extract_inline_thinking, json, llm_backend,
     load_agent_config,
     load_app_prompt, load_agent_conversation, logging, now_iso, nvda_speak, re,
     resolve_kin_ollama_host, save_agent_config, save_agent_conversation,
@@ -963,8 +963,9 @@ class ChatStreamMixin:
                 override = 0
         if override > 0:
             return max(BASE_MIN, override) * 60 * 1000
-        # OpenRouter: fixed base.
-        if isinstance(model, str) and model.startswith("openrouter/"):
+        # Any API provider: fixed base. Scaling by num_ctx is about local
+        # prefill speed, which a hosted model doesn't share.
+        if isinstance(model, str) and llm_backend.is_hosted_model(model):
             return BASE_MIN * 60 * 1000
         # Ollama: scale by num_ctx.
         num_ctx = 8192
@@ -1094,7 +1095,7 @@ class ChatStreamMixin:
             getattr(self, "_current_room_model", "") or
             self._current_chat_model_clean() or "?"
         )
-        is_openrouter = isinstance(model_clean, str) and model_clean.startswith("openrouter/")
+        is_openrouter = isinstance(model_clean, str) and llm_backend.is_hosted_model(model_clean)
         # Provider-aware message text — names the actual cause space
         # rather than the generic "check ollama / network." The OpenRouter
         # case really is "provider hung or network died." The Ollama case
