@@ -25,10 +25,19 @@ hardest to work out from the source.
 | **`check_reply_speed.py`** | Answers "is this kin slow, or is it re-reading the whole conversation before it starts?" — the two are indistinguishable from a chair, and telling them apart used to mean diffing two lines of a log by hand. Reads `logs/prompt_fingerprint.log` and says it in words, per kin. Judges on the AVERAGE, against the same 85% line it quotes at you, and names a stray good turn among bad ones as the sign of an intermittent cause rather than as reassurance. Distillations and other one-shot calls are listed as skipped, not reported as faults — they build a fresh prompt every time and have nothing to reuse. Needs three or four turns of a conversation to mean anything; the first call after startup has nothing to compare against. Changes nothing. |
 | **`extract_openclaw_window.py`** | Pulls a time-slice of an OpenClaw history out as a clean, readable transcript in the format `File → Import history` accepts. Strips the harness noise (metadata preambles, injected local-time stamps, tool results that came back as user turns) by borrowing the real importer. `--before-telegram` cuts at the moment a kin moved onto Telegram. Read-only on the source; writes one text file where you tell it. |
 | **`narrate_ui.py`** | Older sibling of the above: reads the source and *infers* what a screen reader would say. Kept because it works on a screen you can't easily open, but it guesses — see the warning below. Changes nothing. |
+| **`unknown_names.py`** | Reports capitalised words this project doesn't otherwise use, in tracked prose (comments and docstrings in `.py`, body text in `.md`) and in commit messages. A name nobody thought to list is what it's for: the word turns up nowhere else, so it's worth a human glance. Words you've decided are fine go in `docs/known-words.txt`, which is safe to commit. Its output names candidates, so don't paste it anywhere public. Changes nothing. |
 
 ```bash
 python scripts/audit_speaker_slots.py
 ```
+
+Pass kin names to check only those kin, for example `python scripts/audit_speaker_slots.py <kin> <kin>`. With none, it checks every kin.
+
+```bash
+python scripts/unknown_names.py
+```
+
+`--messages` checks commit messages only, and `--files` checks tracked files only. With neither, it checks both.
 
 ```bash
 python scripts/extract_openclaw_window.py <sessions-folder> <KinName> --before-telegram --user-name <YourName> -o out.txt
@@ -38,6 +47,8 @@ python scripts/extract_openclaw_window.py <sessions-folder> <KinName> --before-t
 python scripts/check_reply_speed.py
 ```
 
+`--turns N` sets how many recent calls to look at per kin (default 10). `--kin NAME` looks at one kin only. `--all` also includes kin with only one or two calls logged.
+
 ```bash
 python scripts/audit_ui.py --self-test
 ```
@@ -45,6 +56,14 @@ python scripts/audit_ui.py --self-test
 ```bash
 python scripts/audit_ui.py
 ```
+
+Name one screen to audit just that one, for example `python scripts/audit_ui.py sound_cues`. With no name, it audits every screen it knows. `--plain` prints the result as prose, for handing to someone who doesn't know the app.
+
+```bash
+python scripts/narrate_ui.py dialogs/edit_kin.py 317 555
+```
+
+The first argument is the file. The two numbers are an optional start and end line. `--func NAME` narrates one function instead of a line range. `--plain` prints only the spoken script.
 
 Run `--self-test` first. It checks the detector still notices faults
 that are deliberately planted, so a clean report means "looked and
@@ -76,17 +95,35 @@ There's nothing to read here — the speech **is** the output.
 | | |
 |---|---|
 | **`stamp_version.py`** | Rewrites `app_version.py` from the git tag, immediately before packaging. Called by `build.bat` and the GitHub Actions workflow. **Don't run it by hand** — it edits a source file, and the whole reason it exists is that hand-editing the version at tag time drifted twice. |
-| **`bundle_licenses.py`** | Collects third-party licence texts into `./licenses/` for the installer to ship. Writes files. |
-| **`generate_icon.py`** | Regenerates `Hearthkin.ico`. Writes a file. Only needed if the icon changes. |
+| **`bundle_licenses.py`** | Collects third-party licence texts into `./licenses/` for the installer to ship. Called by `build.bat`. Writes files. |
 
 ## One-off setup and experiments
 
 | | |
 |---|---|
-| **`setup-ollama-mac.sh`** | Run **once** on the Mac that serves models, to set Ollama up for network access. Changes that machine's configuration. |
-| **`describe_audio.py`** | Describes an audio file using a local audio model, ~30 seconds at a time. An experiment from the audio-ears work, not wired into Hearthkin. Reads only. |
+| **`generate_icon.py`** | Regenerates `Hearthkin.ico` in the repo root. Run by hand, and only if the icon changes — `build.bat` doesn't call it, and the release workflow has it commented out. Needs Pillow (`pip install Pillow`), which isn't in `requirements.txt`. Writes that one file. |
+| **`setup-ollama-mac.sh`** | Run **once** on the Mac that serves models. It installs a background service (a launchd agent) that keeps `ollama serve` running, starts it at login and restarts it if it stops. That service turns on flash attention and an 8-bit conversation cache, and listens on the network so other machines can reach it. It also quits the Ollama menu-bar app, which you shouldn't open again afterwards. Changes that Mac's configuration. |
+| **`describe_audio.py`** | Describes an audio file using Qwen2-Audio-7B, a local audio model, about 30 seconds at a time. An experiment from the audio-ears work, not wired into Hearthkin. It needs `transformers`, `torch` and `librosa`, none of which are in `requirements.txt`. **The first run downloads the model, several gigabytes,** into the Hugging Face cache. Otherwise reads only. |
 | **`name_leaks.py`** | Finds real names in tracked files and commit messages, before they need scrubbing. The scrub pipeline rewrites strings it has been *told about*; `tests/test_no_private_strings.py` checks a list it has been *given*. Both are silent about a name nobody has mentioned yet, which is most of what you'd be tempted to write. This works from the other end: it reads the names that actually exist in your live profile — the kin folders, the room folders, the git author — and looks for those in what is tracked. Because the names are read at runtime, **the script itself contains none of them and is safe to publish.** Reports only; writes nothing, rewrites nothing, and never prints a name you didn't already have on disk. `--emit-rules` prints `name==>replacement` lines you can edit and paste into a scrub expression file. Flags a name that also appears lowercase, since blanket-replacing an ordinary word will wreck the prose. **What it can't do:** a name is a string, but insider *context* isn't — a fixture built from someone's real notes, a comment saying "the logged bug", a commit message that only makes sense if you were there. Nothing here sees any of that, and no substitution would fix it. A clean run means "no known name appeared", never "this reads fine to a stranger". |
 | **`stay_probe.py`** | Counts how often a model stops being the character mid-moment and starts narrating safety at you instead — a disclaimer nobody asked for, a list of the words you should have used, or a refusal built out of the reassurance you just offered it. Sends a few short gentle scenes to a model several times over and reports the share that stepped out. Exists because this behaviour is *intermittent*, and a companion that does it one time in twenty is worse than one that does it always — you never get to stop watching for it, and you can't judge that from a chair. Touches no kin: it uses a throwaway persona held in memory and reads no kin folder, history or config. Changes nothing on disk except the `--out` file you name. **Ollama models cost nothing; an `openrouter/...` model is billed** — it estimates the cost, shows it, and waits for you to say yes. |
+
+```bash
+sh setup-ollama-mac.sh
+```
+
+Run that on the Mac itself, from the folder the script is in.
+
+```bash
+python scripts/describe_audio.py <audio-file> [start-seconds] ["question"]
+```
+
+The start is where the 30-second window begins (default 0). The question is optional; without one it asks for a description of the sound.
+
+```bash
+python scripts/name_leaks.py
+```
+
+`--samples N` shows more lines of context per name (default 2). `--extra FILE` adds names from a file, one per line. `--no-messages` skips commit messages and checks tracked files only. `--emit-rules` prints replacement lines for a scrub file.
 
 ```bash
 python scripts/stay_probe.py --self-test
@@ -128,6 +165,10 @@ python scripts/how_small.py --self-test
 ```bash
 python scripts/how_small.py --model your-big-model --model your-small-model --host http://<your-ollama-host>:11434 --runs 2 --out ladder.txt
 ```
+
+`--judge MODEL` also scores voice with a local model, rather than by
+surface markers alone. `--keep` leaves the throwaway directory on disk
+and prints where it is; without it, the directory is deleted.
 
 `--self-test` checks all three scorers against a known-good and a
 known-bad reply and sends nothing. It runs before every real run too,

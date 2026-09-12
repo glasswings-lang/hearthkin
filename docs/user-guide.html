@@ -155,7 +155,11 @@
         <li><a href="#soul-memory">Soul, memory, and how kin remember</a></li>
         <li><a href="#import">Importing existing history from elsewhere</a></li>
         <li><a href="#restore">Putting a kin's own history back together</a></li>
-        <li><a href="#models">Choosing a model</a></li>
+        <li><a href="#models">Choosing a model</a>
+          <ol>
+            <li><a href="#providers">Adding online AI services (API providers)</a></li>
+          </ol>
+        </li>
         <li><a href="#rooms">Rooms — multiple kin together</a></li>
         <li><a href="#tools">Tools</a></li>
         <li><a href="#games">The creature park (a game your kin can play)</a></li>
@@ -192,7 +196,7 @@
 
 <p>You can chat with a kin one-on-one, or set up a <strong>room</strong> where two or more kin take turns speaking with you and each other. Kin can optionally call <strong>tools</strong> — things like reading and writing files, fetching web pages, running shell commands, or scheduling themselves to wake up at a specific time. Some surfaces are remote: a kin can run a <strong>Telegram bot</strong> so you can talk to it from your phone, and <strong>scheduled cron entries</strong> can fire the kin off on its own at set times.</p>
 
-<p>The default backend is <a href="https://ollama.ai">Ollama</a>, which runs models on your own machine — no conversation data leaves your computer. You can also route a per-kin model through <a href="https://openrouter.ai">OpenRouter</a> if you want to use a hosted model (Claude, GPT-4, Gemini, Llama, etc.); when you do, that kin's conversation flows through OpenRouter to the underlying provider.</p>
+<p>The default backend is <a href="https://ollama.ai">Ollama</a>, which runs models on your own machine — no conversation data leaves your computer. You can also give a kin a hosted model instead. <a href="https://openrouter.ai">OpenRouter</a> is built in, and you can add other online services yourself (see <a href="#providers">Adding online AI services</a>). When a kin uses a hosted model, its conversation goes over the internet to that service.</p>
 
 <h2 id="install">Installing Hearthkin</h2>
 
@@ -242,38 +246,117 @@ python hearthkin.pyw</code></pre>
   <dd>Check the "Skip identity setup" box and the soul stays empty. You'll be talking to the raw model. After a few exchanges you can open Settings and crystallize whatever identity has emerged into a soul prompt.</dd>
 </dl>
 
-<p>You also need to pick a model. Open <strong>Settings → Model &amp; generation</strong> and click <strong>Change model…</strong>. The model browser opens; switch the provider radio between Ollama (local) and OpenRouter (remote) and pick from the list. See <a href="#models">Choosing a model</a> for guidance.</p>
+<p>You also need to pick a model. Open <strong>Settings → Model &amp; generation</strong> and click <strong>Change model…</strong>. The model browser opens. Pick a provider with the radio buttons in the <strong>Provider</strong> group — <strong>Ollama (local)</strong>, <strong>openrouter (remote)</strong>, and any other service you have added — then pick from the list. See <a href="#models">Choosing a model</a> for guidance.</p>
+
+<p><strong>Kin settings</strong> (the <strong>Kin settings…</strong> button, <kbd>Alt</kbd>+<kbd>E</kbd>) has nine tabs: <strong>Identity</strong>, <strong>Model &amp; generation</strong>, <strong>Memory</strong>, <strong>Tools</strong>, <strong>Telegram</strong>, <strong>Discord</strong>, <strong>Cron</strong>, <strong>Voice</strong> and <strong>Prompts</strong>. The soul is on Identity, which also has <strong>Rename…</strong> for changing the kin's name.</p>
 
 <h2 id="chatting">Chatting one-on-one</h2>
 
-<p>Hearthkin's main window is where most of your time will be spent. The layout, top to bottom:</p>
+<p>Hearthkin's main window is where most of your time will be spent. The main window has no status bar; everything it has to tell you is in fields you can Tab to. In the order you reach them with <kbd>Tab</kbd>:</p>
 
 <ul>
-  <li><strong>Kin / room / mode selector</strong> — pick which kin you're talking with, or switch to a room.</li>
-  <li><strong>Conversation display</strong> — the running transcript. Read-only; tab-reachable; arrow keys scroll.</li>
-  <li><strong>Activity field</strong> — a read-only field that announces what the kin is currently doing ("Thinking", "Typing", "Still loading", "Synced N new messages from Telegram"). Tab-reachable. With NVDA enabled, phase changes are also spoken automatically. When idle, the Activity field reverts to a default summary showing the active kin, the model, and the context-window usage as a percent.</li>
-  <li><strong>Input field</strong> — type your message. <kbd>Enter</kbd> sends; <kbd>Shift</kbd>+<kbd>Enter</kbd> inserts a newline.</li>
+  <li><strong>Mode</strong> — two radio buttons, <strong>Talk with a kin</strong> and <strong>Talk in a room</strong>. Switch between them with the arrow keys. Next to them: the kin (or room) selector, <strong>New kin…</strong> (<kbd>Alt</kbd>+<kbd>N</kbd>; <strong>New room…</strong> in room mode) and <strong>Kin settings…</strong> (<kbd>Alt</kbd>+<kbd>E</kbd>; <strong>Room settings…</strong> in room mode).</li>
+  <li><strong>Activity</strong> (<kbd>Alt</kbd>+<kbd>V</kbd>) — a read-only field that says what the kin is currently doing ("Thinking", "Typing", "Still loading", "Synced N new messages from Telegram"). With NVDA enabled, phase changes are also spoken automatically. When idle, it goes back to a short summary of the active kin and its model. It comes <em>before</em> the conversation.</li>
+  <li><strong>Conversation</strong> — the running transcript. Read-only; arrow keys move through it.</li>
+  <li><strong>Load older messages</strong> (<kbd>Alt</kbd>+<kbd>O</kbd>) — shown above the conversation, but reached just after it. See <a href="#load-older">Loading older messages</a>.</li>
+  <li><strong>Your message</strong> — where you type.</li>
+  <li><strong>Send size</strong> — roughly how much the last send used, or the next one will use, against the kin's context window, with a percentage.</li>
+  <li><strong>Keys</strong> — reminds you which key sends and which makes a new line.</li>
+  <li><strong>Attach image…</strong> (<kbd>Alt</kbd>+<kbd>I</kbd>), <strong>Take photo</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) and <strong>Remove image</strong> (<kbd>Alt</kbd>+<kbd>M</kbd>) — see <a href="#images">Sending images</a>.</li>
+  <li><strong>Send</strong> (<kbd>Alt</kbd>+<kbd>S</kbd>), <strong>Stop</strong> (<kbd>Alt</kbd>+<kbd>P</kbd>), <strong>Regenerate</strong> (<kbd>Alt</kbd>+<kbd>G</kbd>), <strong>Clear chat</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) and <strong>Talk</strong> (dictation — it has no shortcut, so reach it with <kbd>Tab</kbd>).</li>
+  <li>In room mode only: <strong>Continue round</strong> (between Stop and Regenerate), then <strong>Auto-continue rounds</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) and the <strong>Rounds</strong> field.</li>
 </ul>
 
-<h3>Useful keyboard shortcuts</h3>
+<h3 id="sending">Sending a message</h3>
+
+<p>By default, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> sends, and plain <kbd>Enter</kbd> makes a new line. That way a long message can't go off half-written by accident. The <strong>Send</strong> button (<kbd>Alt</kbd>+<kbd>S</kbd>) works too.</p>
+
+<p>If you would rather have <kbd>Enter</kbd> send, open <strong>File → Preferences…</strong> and tick <strong>Plain Enter sends (else: Ctrl+Enter)</strong>. Then <kbd>Enter</kbd> sends and <kbd>Shift</kbd>+<kbd>Enter</kbd> makes a new line. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> still sends as well.</p>
+
+<p>In a room, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> does double duty. With something typed in the message box, it sends. With the message box empty, it continues the room round.</p>
+
+<h3 id="naming-files">Naming a file in a message</h3>
+
+<p>If your message names a file on this computer by its full path, the kin is shown that file's contents automatically, alongside your message. Up to 4 files per message, 256 KB each. For a Word <code>.docx</code> file, the text is taken out of it. The file has to exist; a path that doesn't is left as ordinary text. This works in the main window and in a Telegram DM. In a Telegram group it only works for someone whose tools include <code>read_file</code>. On Discord, upload the file instead.</p>
+
+<h3>Stopping, clearing, and starting fresh</h3>
 
 <ul>
-  <li><kbd>Enter</kbd> — send the current message.</li>
-  <li><kbd>Shift</kbd>+<kbd>Enter</kbd> — newline inside the input.</li>
-  <li><kbd>Alt</kbd>+<kbd>G</kbd> — regenerate the last reply.</li>
-  <li><kbd>Esc</kbd> — close the current dialog (Settings, Preferences, etc.).</li>
-  <li><kbd>Ctrl</kbd>+<kbd>S</kbd> — save a snapshot of the current conversation. (Auto-save is always on; this is for keeping a named copy.)</li>
+  <li><strong>Stop</strong> (<kbd>Alt</kbd>+<kbd>P</kbd>, or <kbd>Esc</kbd> in the main window) stops the reply being written and keeps what arrived so far. In a room, Stop ends the whole round and turns <strong>Auto-continue rounds</strong> off.</li>
+  <li><strong>Clear chat</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) wipes the conversation after asking. <strong>It keeps no copy.</strong></li>
+  <li><strong>File → New conversation</strong> (<kbd>Ctrl</kbd>+<kbd>N</kbd>) is the gentler one. If there's anything in the conversation, it asks, files a copy away in <code>~/.hearthkin/conversations/</code>, and then empties the chat. If the copy can't be saved, nothing is cleared.</li>
 </ul>
+
+<h3 id="shortcuts">Keyboard shortcuts and menus</h3>
+
+<p>Every menu item, in menu order. Shortcut keys are given where an item has one.</p>
+
+<dl>
+  <dt><strong>File</strong></dt>
+  <dd><ul>
+    <li><strong>New conversation</strong> — <kbd>Ctrl</kbd>+<kbd>N</kbd>. Files the current conversation away, then empties the chat.</li>
+    <li><strong>Open conversation…</strong> — <kbd>Ctrl</kbd>+<kbd>O</kbd>. Loads a saved conversation. It replaces the kin's live conversation, so it asks first.</li>
+    <li><strong>Save snapshot…</strong> — <kbd>Ctrl</kbd>+<kbd>S</kbd>. Saves a named copy. (Auto-save is always on; this is for keeping a copy.)</li>
+    <li><strong>Export as markdown…</strong></li>
+    <li><strong>Import history…</strong> — see <a href="#import">Importing existing history</a>.</li>
+    <li><strong>Restore a kin's history…</strong> — see <a href="#restore">Putting a kin's own history back together</a>.</li>
+    <li><strong>Preferences…</strong> — <kbd>Ctrl</kbd>+<kbd>,</kbd> (comma).</li>
+    <li><strong>Exit</strong> — <kbd>Ctrl</kbd>+<kbd>Q</kbd>. Quits fully, even when closing the window would only hide it in the tray.</li>
+  </ul></dd>
+
+  <dt><strong>Kin</strong></dt>
+  <dd><ul>
+    <li><strong>New kin…</strong> — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd>.</li>
+    <li><strong>Clone kin…</strong> — copies a kin. The copy does not get the original's Telegram bot token and Telegram settings, its remembered shell commands, or its scheduled wake-ups, so two kin never answer the same bot or wake at the same time.</li>
+    <li><strong>Delete kin…</strong> — asks first. It also removes the kin's scheduled tasks from Windows.</li>
+    <li><strong>Save soul file</strong> — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>. Opens Kin settings, where the soul is edited and saved.</li>
+  </ul></dd>
+
+  <dt><strong>Room</strong></dt>
+  <dd><ul>
+    <li><strong>New room…</strong>, <strong>Current room settings…</strong>, <strong>Delete current room…</strong></li>
+  </ul></dd>
+
+  <dt><strong>Chat</strong></dt>
+  <dd><ul>
+    <li><strong>Regenerate last reply</strong> — <kbd>Ctrl</kbd>+<kbd>R</kbd> (the button is <kbd>Alt</kbd>+<kbd>G</kbd>).</li>
+    <li><strong>Stop generating</strong> — <kbd>Esc</kbd> (the button is <kbd>Alt</kbd>+<kbd>P</kbd>).</li>
+    <li><strong>Continue room round</strong> — <kbd>Ctrl</kbd>+<kbd>Enter</kbd> with the message box empty.</li>
+    <li><strong>Edit a message…</strong> — <kbd>Ctrl</kbd>+<kbd>E</kbd>.</li>
+    <li><strong>What's it busy with?</strong> — <kbd>Ctrl</kbd>+<kbd>B</kbd>.</li>
+  </ul></dd>
+
+  <dt><strong>Tools</strong></dt>
+  <dd><ul>
+    <li><strong>Search across kin…</strong> — <kbd>Ctrl</kbd>+<kbd>F</kbd>. Searches souls, memories, one-on-one conversations and room conversations. <strong>Search filters…</strong> in that window lets you leave any of those four out.</li>
+    <li><strong>Tend a kin's park…</strong> — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>. See <a href="#games">The creature park</a>.</li>
+    <li><strong>Edit park words…</strong></li>
+    <li><strong>Usage stats…</strong>, <strong>Usage history…</strong> and <strong>Open raw usage log</strong> — see <a href="#costs">Managing OpenRouter costs</a>.</li>
+    <li><strong>Speed check…</strong> — explains, in plain words, why replies are slow. See <a href="#speed-check">below</a>.</li>
+    <li><strong>Open logs folder</strong> and <strong>Open active kin folder</strong>.</li>
+    <li><strong>Edit base prompt…</strong>, <strong>Edit prompts…</strong> and <strong>Prompt updates…</strong> — see <a href="#editable-prompts">Editable prompts</a>.</li>
+    <li><strong>Clear cached model lists</strong></li>
+  </ul></dd>
+
+  <dt><strong>Help</strong></dt>
+  <dd><ul>
+    <li><strong>User guide</strong>, <strong>Check for updates…</strong>, <strong>About Hearthkin</strong>.</li>
+  </ul></dd>
+</dl>
+
+<h3 id="speed-check">Speed check</h3>
+
+<p><strong>Tools → Speed check…</strong> reads Hearthkin's record of recent model calls and tells you, in plain words, whether replies are slow because the model keeps re-reading the whole conversation. The report opens with a verdict line — "OK" or "PROBLEM" — and that line is spoken when the window opens. Below it are what a turn costs right now, how big each kin's prompt is, and what else has been using the machine. <strong>Copy report</strong> (<kbd>Alt</kbd>+<kbd>Y</kbd>) copies the whole thing, for pasting to someone helping you; <strong>Refresh</strong> reads it again.</p>
 
 <h3>Cold-start hint</h3>
 
 <p>The first message after a long idle gap can take a while to come back — Ollama unloads the model after about 5 minutes of inactivity, and OpenRouter forgets its head start on your kin after about 5 minutes too, so it has to re-read everything. If the first reply token doesn't arrive within 8 seconds, Hearthkin posts a "still waiting" hint inline so you know it's working, not stuck. The hint disappears when the reply lands.</p>
 
-<p>If you find yourself paying that cold-load on every reply because you talk to a kin every 10–15 minutes (longer than Ollama's 5-minute default), the per-kin <strong>Keep model loaded</strong> setting under <strong>Settings → Model &amp; generation</strong> can pin the model warm — see <a href="#ollama-options">Ollama-only options</a>.</p>
+<p>If you find yourself paying that cold-load on every reply because you talk to a kin every 10–15 minutes (longer than Ollama's 5-minute default), the per-kin <strong>Keep model loaded</strong> setting under <strong>Settings → Model &amp; generation → More model options…</strong> can pin the model warm — see <a href="#ollama-options">Ollama-only options</a>.</p>
 
-<h3>Loading older messages</h3>
+<h3 id="load-older">Loading older messages</h3>
 
-<p>To keep the chat display fast on long histories, only the most recent 200 messages are painted by default. A "Load older messages" button at the top of the conversation display walks back further. The full conversation is always retained on disk; only the painted view is windowed. You can change the window size in Preferences.</p>
+<p>To keep the chat display fast on long histories, only the most recent 200 messages are painted by default. The <strong>Load older messages</strong> button (<kbd>Alt</kbd>+<kbd>O</kbd>) walks back further; it says how many older messages there are. The full conversation is always retained on disk; only the painted view is windowed. You can change the number in <strong>File → Preferences…</strong> with <strong>Recent chat messages shown on kin load (0 = all)</strong>. The button isn't shown in rooms.</p>
 
 <h2 id="images">Sending images and webcam photos</h2>
 
@@ -288,7 +371,7 @@ python hearthkin.pyw</code></pre>
   <li>Pick a <strong>JPG, PNG, GIF, or WebP</strong> file (8 MB cap).</li>
   <li>A "📎 filename" indicator appears next to the input, along with a <strong>Remove image</strong> button (<kbd>Alt</kbd>+<kbd>M</kbd>) in case you change your mind.</li>
   <li>Type whatever message you want to send with the image (or send no text — a no-caption image works fine on most models).</li>
-  <li>Press <kbd>Enter</kbd> to send. The image is copied into the kin's <code>attachments/</code> folder under a content-hash filename, referenced from the conversation record, and shown in the transcript as a <code>[image: filename]</code> marker after your text.</li>
+  <li>Send it the same way as any message — <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, or the <strong>Send</strong> button (<kbd>Alt</kbd>+<kbd>S</kbd>). The image is copied into the kin's <code>attachments/</code> folder under a content-hash filename, referenced from the conversation record, and shown in the transcript as a <code>[image: filename]</code> marker after your text.</li>
 </ol>
 
 <h3>Capture from the webcam</h3>
@@ -349,7 +432,7 @@ python hearthkin.pyw</code></pre>
   </li>
 </ol>
 
-<p>The default for new users is <strong>Ask each time</strong>. The dialog button order is Deny / Allow, with <strong>Deny</strong> as the default — if you mash Enter without thinking, the safer outcome wins.</p>
+<p>The default for new users is <strong>Ask each time</strong>. The dialog's buttons are <strong>Allow capture</strong> then <strong>Deny</strong>, with <strong>Deny</strong> as the default — if you mash Enter without thinking, the safer outcome wins.</p>
 
 <h3>Where images live on disk</h3>
 
@@ -380,7 +463,7 @@ python hearthkin.pyw</code></pre>
   <dd>Opens a small context menu with these entries:
     <ul>
       <li><strong>Open Hearthkin</strong> — same as left-clicking the icon.</li>
-      <li><strong>Mini chat…</strong> — opens a small always-on-top quick-chat window. Recent turns of the active kin's conversation appear at the top read-only; the input line at the bottom sends through the same chat path the main window uses. Closing the mini-chat window just hides it; reopening from the menu restores it.</li>
+      <li><strong>Mini chat…</strong> — opens a small always-on-top window called "Hearthkin — quick chat". It talks to the kin you last had open one-on-one, even if the main window is in a room. It shows the last 10 messages, and <kbd>Enter</kbd> sends. It is deliberately simple: the kin has no tools there, and the reply arrives whole rather than as it is written. Closing the window just hides it; reopening from the menu restores it.</li>
       <li><strong>Preferences…</strong> — opens the Preferences dialog directly (no need to bring the main window forward).</li>
       <li><strong>Usage stats…</strong> — opens the Usage stats dialog (token-usage breakdown for the active conversation).</li>
       <li><strong>User guide</strong> — opens this guide in your default browser.</li>
@@ -392,9 +475,17 @@ python hearthkin.pyw</code></pre>
 
 <h3>Close-to-tray (Alt+F4 behavior)</h3>
 
-<p>Open <strong>Preferences</strong> and look for <strong>Minimize to system tray on close (Alt+F4)</strong>. When this is on (the default), pressing Alt+F4 or closing the window with the X button hides the window into the tray rather than exiting Hearthkin. Telegram bots, cron polling, distillation cadence, and the kin's loaded state all keep running. To fully exit, use the tray menu's <strong>Exit</strong> entry, or <strong>File → Exit</strong> from inside the main window.</p>
+<p>Open <strong>Preferences</strong> and look for <strong>Minimize to system tray on close (Alt+F4)</strong>. When this is on (the default), pressing Alt+F4 or closing the window with the X button hides the window into the tray rather than exiting Hearthkin. Hearthkin says "Hearthkin is in the system tray. Open it from there to bring the window back." and shows a Windows notification too. Telegram bots, cron polling, distillation cadence, and the kin's loaded state all keep running. To fully exit, use the tray menu's <strong>Exit</strong> entry, or <strong>File → Exit</strong> (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) from inside the main window.</p>
 
 <p>When the toggle is off, Alt+F4 / X behaves the traditional way — full shutdown.</p>
+
+<h3>If something is still working when you quit</h3>
+
+<p>If a reply, a room round, a distillation, a scheduled wake-up, a bot reply or an approval is still in progress, Hearthkin asks before quitting. The window is called "Something's still working" and lists what is running. <strong>Don't quit</strong> has focus and is the default — <kbd>Enter</kbd> or <kbd>Escape</kbd> both leave Hearthkin exactly as it was. <strong>Quit anyway</strong> quits. When nothing is running, there is no question.</p>
+
+<h3>Only one copy runs</h3>
+
+<p>Starting Hearthkin a second time doesn't open a second copy. If the first window is visible, it is brought to the front. If it is hidden in the tray, the second launch just closes, so open it from the tray icon instead.</p>
 
 <h3>Start with Windows</h3>
 
@@ -419,7 +510,7 @@ python hearthkin.pyw</code></pre>
   <dd>A brief index of people, topics, and decisions the kin knows about. Always loaded at the start of every conversation, so it stays short by design — a few lines per person or topic, depth lives elsewhere (see below). <strong>The kin curates it themselves;</strong> nothing automatic rewrites it. You can edit it under <strong>Settings → Memory</strong> too. Think of it as the kin's always-present map of who and what they know.</dd>
 
   <dt><code>memory/&lt;topic&gt;.md</code> — depth logs</dt>
-  <dd>When a person or topic has more history than a few lines can hold, the kin writes a depth log: <code>memory/willow.md</code>, <code>memory/harbor.md</code>, etc. A log holds the substance the index only summarizes. These are written by the kin (via their file tools), not by automation. The <code>## Memory logs</code> section at the bottom of <code>memory.md</code> is auto-maintained — it lists every log the kin has, so the kin can see what exists.</dd>
+  <dd>When a person or topic has more history than a few lines can hold, the kin writes a depth log: <code>memory/willow.md</code>, <code>memory/harbor.md</code>, etc. A log holds the substance the index only summarizes. These are written by the kin (via their file tools), not by automation. The <code>## Memory logs</code> section at the bottom of <code>memory.md</code> is auto-maintained — it lists the kin's logs, newest first, so the kin can see what exists. The list is capped at 1500 characters by default, and says how many logs it left out; change the cap on <strong>Settings → Memory</strong>.</dd>
 </dl>
 
 <p>The three together form the kin's continuous identity. When a kin starts a new conversation, soul + memory.md load as system context. Depth logs are surfaced automatically each turn by <strong>per-turn recall</strong> (on by default): the app scores the kin's depth logs and journal entries against what's actually being discussed and pages a small, budgeted slice back into context inline — so relevant depth returns without the kin having to remember to go looking for it. The kin can also still pull any log directly with <code>read_file</code> when it wants the whole thing. Recall is tunable per kin in that kin's <strong>Settings</strong> (turn it off, cap how much context it may use, set how many items it may bring back, and set <strong>how choosy</strong> it is).</p>
@@ -440,7 +531,7 @@ python hearthkin.pyw</code></pre>
 
 <h3>How distillation and tending work</h3>
 
-<p>Between sessions, distillation reads the recent conversation and produces brief notes about what happened. It runs <em>as the kin</em> — the kin's soul is loaded into the call and it writes in the first person, in its own voice, jotting what it wants to remember, rather than a separate model summarizing them from the outside. Those notes do NOT go into <code>memory.md</code> directly. They land in a <strong>staging area</strong> — one file per surface (desktop, each Telegram DM, each Telegram group) under <code>~/.hearthkin/kin/&lt;kin&gt;/staging/</code>. The notes are scratchpad. The kin decides what becomes canonical memory during their <strong>tending ritual</strong>.</p>
+<p>Between sessions, distillation reads the recent conversation and produces brief notes about what happened. It runs <em>as the kin</em> — the kin's soul is loaded into the call and it writes in the first person, in its own voice, jotting what it wants to remember, rather than a separate model summarizing them from the outside. Those notes do NOT go into <code>memory.md</code> directly. They land in a <strong>staging area</strong> — one file per surface (desktop, each Telegram DM, each Telegram group, each Discord channel, and each room that has <a href="#room-memory">Remember this room</a> ticked) under <code>~/.hearthkin/kin/&lt;kin&gt;/staging/</code>. The notes are scratchpad. The kin decides what becomes canonical memory during their <strong>tending ritual</strong>.</p>
 
 <p>The kin tends by:</p>
 
@@ -478,12 +569,16 @@ python hearthkin.pyw</code></pre>
 <p>Distillation still fires automatically to produce the staging notes that tending consumes. Under <strong>Settings → Memory</strong>:</p>
 
 <ul>
-  <li><strong>Distill on close</strong> — fires when you close Hearthkin or switch away from this kin. Default on.</li>
-  <li><strong>Distill every N exchanges</strong> — fires after every N user/assistant pairs. Default 0 (off). Useful for long-running conversations where you want notes captured as you go.</li>
-  <li><strong>Distill at % of context</strong> — fires when the un-noted part of the conversation grows past this share of the kin's <strong>context window</strong> — the amount of conversation Hearthkin can send the model in one message (see <em>The context window</em>, below). Default 0 (off). It's a safety net: past a certain size the oldest turns have to be dropped to make the message fit, and this gets them written into memory first.</li>
-  <li><strong>Memory model</strong> — which model the summarizer uses. Empty means "same as the chat model"; you can override to something cheaper.</li>
-  <li><strong>Backlog pacing</strong> — <em>"When catching up on a backlog, wait this many minutes between automatic distillations"</em>. Default 30. Explained just below; 0 switches the wait off.</li>
+  <li><strong>Auto-distill when leaving this kin</strong> — fires when you close Hearthkin or switch away from this kin.</li>
+  <li><strong>Auto-distill every N messages (0 = off)</strong> — fires after every N messages. Default 0 (off). Useful for long-running conversations where you want notes captured as you go.</li>
+  <li><strong>Auto-distill at this % of the context window (0 = off)</strong> — fires when the un-noted part of the conversation grows past this share of the kin's <strong>context window</strong> — the amount of conversation Hearthkin can send the model in one message (see <em>The context window</em>, below). Default 0 (off), highest 95. It's a safety net: past a certain size the oldest turns have to be dropped to make the message fit, and this gets them written into memory first.</li>
+  <li><strong>Distillation model</strong> — which model the summarizer uses. <strong>Change distillation model…</strong> picks a different one, for example something cheaper; <strong>Use chat model</strong> goes back to the kin's own chat model.</li>
+  <li><strong>When catching up on a backlog, wait this many minutes between automatic distillations (0 = don't wait)</strong> — default 30. Explained just below.</li>
+  <li><strong>List memory logs in memory.md, up to this many characters (0 = list them all)</strong> — default 1500. The list of the kin's memory logs at the bottom of <code>memory.md</code> stops at this size, newest logs first, and says how many it left out. Every log is still there for the kin to open.</li>
+  <li><strong>Ask the kin to prune memory.md when its own notes pass this many characters (0 = never ask)</strong> — default 5000.</li>
 </ul>
+
+<p>Further down the tab, <strong>Refresh counters</strong> updates the per-surface list, and <strong>Edit prompt...</strong> (next to <strong>Consolidate</strong>) opens this kin's distillation prompt. <strong>Memory recall settings…</strong> holds the per-turn recall choices: whether recall is on, <strong>How present</strong> (Light, Medium or Rich — how much of the context window it may use; Medium is the default), <strong>Max recall items</strong> (default 6), an <strong>Always favour</strong> list of words or phrases, <strong>How choosy</strong>, a tick-box for daily journal entries, and a <strong>Never auto-surface</strong> list.</p>
 
 <p>Whichever trigger fires first wins; the bookmark advances per surface so the next pass only digests new turns.</p>
 
@@ -532,23 +627,25 @@ python hearthkin.pyw</code></pre>
 
 <p><strong>You can walk away.</strong> It doesn't need the Settings window open — that window is somewhere to watch it from, not the thing running it. Closing Settings changes nothing. Closing Hearthkin pauses it, and the next launch picks it up where it stopped and says so out loud.</p>
 
-<p>Three buttons manage it, and the per-surface row tells you which state you're in:</p>
+<p>Two more buttons manage it, and the per-surface row tells you which state you're in:</p>
 
 <dl>
   <dt><strong>Continue redistilling</strong></dt>
   <dd>Carries on from wherever it stopped. This is the one you want after closing Hearthkin part-way, or after a chunk failed. It does <em>not</em> reset anything — that's the whole difference between it and the button above it. Enabled only when there's an unfinished redistill to continue.</dd>
 
-  <dt><strong>Cancel redistill</strong></dt>
-  <dd>Calls it off for good. The chunk already running finishes; no more are fired, and nothing is left behind for the next launch to resume. Use this rather than just closing the app, which pauses instead.</dd>
+  <dt><strong>Cancel distilling</strong></dt>
+  <dd>Calls it off for good. The chunk already running finishes; no more are fired, and nothing is left behind for the next launch to resume. It also clears the queue from <strong>Distill all surfaces now</strong>. Use this rather than just closing the app, which pauses instead.</dd>
 </dl>
 
-<p><strong>You can hear how far along it is.</strong> Each completed chunk plays one short beep that rises in pitch as the redistill approaches the end — low at the start, high at the finish. The same beep twice means it isn't advancing; a climbing one means it's working through. This replaces the "still working" repeat while a redistill runs. There is also a written per-chunk line with token counts, but it's spoken, so it loses to your own typing; the beep is the one that reliably arrives. Switch or resize it under <strong>Preferences → Sound cues…</strong>, or replace it with <code>~/.hearthkin/sounds/chunk.wav</code> (a file plays flat — it can't be re-pitched).</p>
+<p><strong>Redistill pacing</strong> decides how far a redistill goes before it waits for you. <strong>Unattended (run straight through)</strong> is the default. <strong>One day at a time</strong>, <strong>One hour at a time</strong> and <strong>One chunk at a time</strong> stop after that much, and you press <strong>Continue redistilling</strong> to go on. Cancelling works differently for the two kinds. Cancelling an unattended redistill puts the bookmark back where it was before you started. Cancelling a paced one keeps the progress you chose to continue into, so nothing already done gets redone.</p>
+
+<p><strong>You can hear how far along it is.</strong> Each completed chunk plays one short beep that rises in pitch as the redistill approaches the end — low at the start, high at the finish. The same beep twice means it isn't advancing; a climbing one means it's working through. This replaces the "still working" repeat while a redistill runs. There is also a written per-chunk line with token counts, but it's spoken, so it loses to your own typing; the beep is the one that reliably arrives. Switch it off or change its volume under <strong>File → Preferences… → Sound cues…</strong> (the <strong>Redistill progress</strong> cue), or replace it with <code>~/.hearthkin/sounds/chunk.wav</code> (a file plays flat — it can't be re-pitched).</p>
 
 <p>If a chunk fails — the model went away, the provider had a moment — the redistill <strong>pauses rather than dying</strong>. You'll hear it: a falling two-tone sound and a spoken line saying what happened and that your progress is kept. The work already done is never lost, so continuing is always cheaper than starting over.</p>
 
 <h4>Consolidation</h4>
 
-<p><code>memory.md</code> can grow over time as the kin adds entries during tending. To tighten it (merge duplicates, compress repetition) without losing distinct people or context, there's a <strong>Consolidate now</strong> button in <strong>Settings → Memory</strong>. The kin can also invoke it themselves during tending if they notice the index has gotten unwieldy. <strong>Consolidation no longer fires automatically</strong> — it only runs when you or the kin deliberately ask for it.</p>
+<p><code>memory.md</code> can grow over time as the kin adds entries during tending. To tighten it (merge duplicates, compress repetition) without losing distinct people or context, there's a <strong>Consolidate</strong> button in <strong>Settings → Memory</strong>. <strong>Consolidation never fires automatically, and a kin cannot start it itself</strong> — it only runs when you press that button. (A kin can still tidy <code>memory.md</code> by hand with its file tools.)</p>
 
 <h3 id="voice-anchor">Voice anchors — keeping a kin's own words</h3>
 
@@ -593,9 +690,22 @@ recalling old memories tends to help a drifting kin.</p>
 
 <h2 id="import">Importing existing history from elsewhere</h2>
 
-<p>If you have chat history with someone (or some kin) on another platform — Telegram exports, Skype logs, Kindroid transcripts, ChatGPT or Claude exports, or text you've written by hand to seed a relationship — Hearthkin can bring it into a kin's <code>conversation.jsonl</code> so the kin reads it as their own past. Use <strong>File → Import history…</strong>.</p>
+<p>If you have chat history with someone (or some kin) on another platform — Telegram exports, Skype logs, Kindroid transcripts, Claude exports, an OpenClaw session folder, or text you've written by hand to seed a relationship — Hearthkin can bring it into a kin's <code>conversation.jsonl</code> so the kin reads it as their own past. Use <strong>File → Import history…</strong>.</p>
 
-<p>The dialog asks for a source file, auto-detects the format, and shows a preview of the first ten parsed messages so you can sanity-check before committing. You pick a target kin (existing or brand-new), pick append-vs-replace, and import. Currently supported source formats:</p>
+<p>The dialog asks for a source file, auto-detects the format, and shows a preview of the first ten parsed messages so you can sanity-check before committing. You pick a target kin (existing or brand-new), pick how the import meets the kin's existing history, and import.</p>
+
+<p>A few things about the Import window worth knowing before you start:</p>
+
+<ul>
+  <li><strong>Source file(s)</strong> — <strong>Browse</strong> lets you pick several files at once. Its file filter starts on text and Markdown logs. There are also filters for a Claude export (the <code>.zip</code> you download, or the <code>conversations.json</code> inside it — the <code>.zip</code> can be imported as it is), for Skype <code>.json</code> and <code>.tar</code> exports, and for OpenClaw <code>.jsonl</code> session files. For anything else, switch the filter to <strong>All files</strong>.</li>
+  <li><strong>Browse picks files only.</strong> For an OpenClaw sessions folder, type or paste the folder's path into the box instead.</li>
+  <li><strong>Detected format</strong> says which kind of file Hearthkin thinks it is.</li>
+  <li><strong>How multiple source files combine, before anything is saved</strong> — when you picked several files: <strong>Keep each conversation whole, oldest first</strong>, or <strong>Weave everything together by date</strong>.</li>
+  <li><strong>Who is the kin in this file</strong> — a list of every speaker found, each with how many turns they have, busiest first. Pick the one who is the kin. The name goes into the box below it, which you can also type in.</li>
+  <li>Three ways to meet the kin's existing history: <strong>Append imported turns at the end</strong>, <strong>Merge by date</strong>, or <strong>Replace existing history</strong>. See the notes below.</li>
+</ul>
+
+<p>Currently supported source formats:</p>
 
 <dl>
   <dt>Telegram <code>.txt</code> exports</dt>
@@ -621,7 +731,7 @@ needs another pass before it's usable.</code></pre>
   <dd>The "speaker on their own line, content below" shape Kindroid produces — both regular chats and voice-call transcripts (whose header timestamp anchors the conversation's real date). UI artifacts like <code>play</code>, <code>show recalled memories</code>, and <code>Edit message</code> get filtered out automatically.</dd>
 
   <dt>Skype</dt>
-  <dd>Two flavors. The official Microsoft Skype export bundle (<code>messages.json</code> inside the <code>.tar</code> you download from Skype) — the dialog auto-extracts <code>messages.json</code> in memory, lists every DM in the archive sorted by message count, and lets you pick which one to import. And the third-party SkypeParser <code>.txt</code> output — one file per chat thread, self-identifies the operator vs. partner from header shape. Both flavors handle the same conversation cleanly with content cleanup: Skype's RichText markup (<code>&lt;b raw_pre="*"&gt;hugs&lt;/b&gt;</code> → <code>*hugs*</code>), emoticons, call events become <code>[skype call: 7s]</code> markers, media references become <code>[skype file: name — not imported]</code> markers.</dd>
+  <dd>Two flavors. The official Microsoft Skype export bundle (<code>messages.json</code> inside the <code>.tar</code> you download from Skype) — the dialog auto-extracts <code>messages.json</code> in memory, lists every DM in the archive sorted by message count, and lets you pick which one to import. And the third-party SkypeParser <code>.txt</code> output — one file per chat thread; the kin's turns are the ones whose display name or Skype handle matches the kin name you give, ignoring capitals. Both flavors handle the same conversation cleanly with content cleanup: Skype's RichText markup (<code>&lt;b raw_pre="*"&gt;hugs&lt;/b&gt;</code> → <code>*hugs*</code>), emoticons, call events become <code>[skype call: 7s]</code> markers, media references become <code>[skype file: name — not imported]</code> markers.</dd>
 
   <dt>Claude conversations</dt>
   <dd>The export you get from <strong>claude.ai → Settings → Privacy → Export data</strong>. <strong>Point Hearthkin straight at the <code>.zip</code> you downloaded</strong> — there is no need to unpack it first, though a loose <code>conversations.json</code> still works if you already have one. Nothing is extracted to disk; the download is left exactly as it was. Unlike the text formats, you don't type a name to say which side is the kin — the export states <code>human</code> or <code>assistant</code> on every message, so nothing has to be guessed and nothing can end up backwards. Both of Anthropic's message formats are read (they changed it part-way along, so any long-lived account has some of each). Thinking, tool calls and tool results are left out — machinery rather than anything either of you said — and a message that was only a file attachment leaves a marker instead of disappearing. The whole export comes in at once, in date order, with a one-line header before each conversation so a few hundred separate threads don't arrive as one wall. <strong>One thing to expect:</strong> some conversations come out of Anthropic's exporter with no message text in them at all — on one real 239-conversation export, 62 of them. There's nothing on this end that can recover those; if they still matter and still exist on claude.ai, they'd need a fresh export or copying out by hand. Hearthkin skips them rather than importing empty turns.
@@ -645,13 +755,13 @@ needs another pass before it's usable.</code></pre>
   <dd>For a kin that lived on OpenClaw before Hearthkin. Unlike the others, OpenClaw keeps a kin's history as a whole <em>folder</em> of per-session files (with reset/deleted archive copies that repeat messages), not a single export — so here you point the import at the sessions <em>folder</em>, or at any one session file inside it, or its <code>sessions.json</code>. Hearthkin reads every session, dedupes by message id so the archive copies collapse into one clean timeline, drops the machinery (tool calls, tool output that OpenClaw fed back as "user" turns, heartbeat replies), and — since OpenClaw ran kin over Telegram — lifts the real sender out of each turn's metadata so group members stay named. What lands is the human-and-kin conversation, in order, ready for the kin to read as its own past.</dd>
 </dl>
 
-<p>The imported block lands bracketed by two system markers — <code>[hearthkin: imported N turns from &lt;source&gt;…]</code> at the start and <code>[hearthkin: end of imported history. Turns after this point are lived in real time.]</code> at the end — so the kin reads the imported turns as shared history rather than wondering "wait, when did I say that?" The leading marker also names the operator explicitly when the import has exactly one non-kin speaker (e.g. <em>"The other party in these turns is your operator — they went by 'Wanderer' in this archive"</em>), which prevents distillation from misattributing the operator's past actions to anything else.</p>
+<p>The imported block lands bracketed by two system markers — <code>[hearthkin: imported N turns from &lt;source&gt;…]</code> at the start and <code>[hearthkin: end of imported history. Turns below this point happened here, in Hearthkin.]</code> at the end — so the kin reads the imported turns as its own history rather than wondering "wait, when did I say that?" The leading marker also names the other person when the import has exactly one non-kin speaker (e.g. <em>"The other party in these turns is the person you're with — they went by 'Wanderer' in this archive."</em>), which prevents distillation from misattributing that person's past actions to anything else. The wording of these markers is editable (see <a href="#editable-prompts">Editable prompts</a>).</p>
 
 <p><strong>Two practical notes:</strong></p>
 
 <ul>
   <li><strong>Append, merge, or replace.</strong> The default is append (imported block lands at the end of any existing <code>conversation.jsonl</code>). <strong>Merge by date</strong> instead weaves the imported turns into the existing conversation chronologically — the right choice when you're bringing in an <em>older</em> era (say, a kin's life on an earlier platform) that belongs <em>before</em> what's already here; it backs the conversation up first, then rewrites it with the imported turns threaded into place, keeping the existing turns in their own order and placing only the imported ones by time. Replace mode writes the imported block as the new sole content. All three back up first — to <code>~/.hearthkin/kin/&lt;kin&gt;/backups/conversation-&lt;timestamp&gt;.jsonl</code> — so delete the backup whenever you're confident the import landed right. (Backups live in their own folder rather than beside <code>conversation.jsonl</code>, so they don't turn up in the file picker looking like something you'd want to restore <em>from</em>.)</li>
-  <li><strong>The kin name field is case-sensitive and exact.</strong> If the kin is "willow" (lowercase) in your source file, type it that way — the preview shows the speaker distribution so you'll see "0 kin turns" if you got the casing wrong and can fix before committing. For Skype JSON, the conversation picker auto-fills the kin name from the chosen DM's display name.</li>
+  <li><strong>How the kin's name is matched depends on the format.</strong> For Telegram, hand-written, plain text and Kindroid files the kin name must match exactly, capitals included. If the kin is "willow" (lowercase) in your source file, type it that way — or pick it from the <strong>Who is the kin in this file</strong> list, which avoids the problem. The preview shows the speaker distribution, so you'll see "0 kin turns" if it didn't match and can fix it before committing. Both Skype formats ignore capitals. The two Claude formats ignore the name entirely, because every message already says which side it is. For Skype JSON, the conversation picker auto-fills the kin name from the chosen DM's display name.</li>
 </ul>
 
 <h2 id="restore">Putting a kin's own history back together</h2>
@@ -680,18 +790,21 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <h2 id="models">Choosing a model</h2>
 
-<p>Hearthkin talks to two backends:</p>
+<p>A kin's model can come from three kinds of place:</p>
 
 <dl>
   <dt><strong>Ollama (local)</strong></dt>
-  <dd>The default. Models you've pulled with <code>ollama pull &lt;name&gt;</code> show up automatically in the model browser. Conversations never leave your machine. Cost: $0 plus your power bill. Speed: depends on your hardware and the model size.</dd>
+  <dd>The default. Models you've pulled with <code>ollama pull &lt;name&gt;</code> show up automatically in the model browser. Conversations never leave your machine. Cost: $0 plus your power bill. Speed: depends on your hardware and the model size. Ollama can also run on another machine of yours — see <a href="#ollama-host">Pointing Hearthkin at a remote Ollama</a>.</dd>
 
   <dt><strong>OpenRouter (remote)</strong></dt>
-  <dd>A unified gateway to hosted Claude, GPT-4, Gemini, Llama, and dozens of others. To route a kin through OpenRouter, set its model to a name prefixed <code>openrouter/&lt;provider&gt;/&lt;model-id&gt;</code>. The model browser does this for you when you switch the provider radio. You'll need an OpenRouter API key — set it under <strong>Preferences → Connections</strong>.</dd>
+  <dd>Built in. A single gateway to hosted Claude, GPT, Gemini, Llama, and dozens of others. A kin on OpenRouter has a model name that starts <code>openrouter/</code>; the model browser does this for you when you pick the <strong>openrouter (remote)</strong> radio. You'll need an OpenRouter API key — set it under <strong>Preferences → Connections</strong>.</dd>
+
+  <dt><strong>Other online services you add</strong></dt>
+  <dd>Any service that speaks the same OpenAI-style protocol — for example Featherless. You add it once, with a name, an address and a key, and its models appear in the model browser under their own radio button. See <a href="#providers">Adding online AI services</a>.</dd>
 </dl>
 
 <div class="warn">
-  <p><strong>Privacy:</strong> When a kin uses an OpenRouter model, every system prompt, memory file, and message goes through OpenRouter to the underlying provider. If a kin has sensitive content in its <code>memory.md</code>, this matters. Default to local models for kin you're using to think out loud about anything personal.</p>
+  <p><strong>Privacy:</strong> When a kin uses a hosted model — OpenRouter or any service you added — every system prompt, memory file, and message goes over the internet to that service. If a kin has sensitive content in its <code>memory.md</code>, this matters. Default to local models for kin you're using to think out loud about anything personal.</p>
 </div>
 
 <h3>The model browser</h3>
@@ -699,16 +812,20 @@ Willow would end up with 1200 turns in all.</code></pre>
 <p>Open it from <strong>Settings → Model &amp; generation → Change model…</strong>. Features:</p>
 
 <ul>
-  <li>Provider radio at the top: Ollama or OpenRouter.</li>
-  <li>Search field that filters as you type.</li>
-  <li>For OpenRouter: capability filters (warmth-first, supports thinking, supports tools, "cheap" for under $1 per million tokens both input and output).</li>
+  <li><strong>Provider</strong> radio buttons at the top. <strong>Ollama (local)</strong> is always first, then every online service in alphabetical order, each shown as its name followed by "(remote)", each with its own keyboard letter. Use the arrow keys to move between them. <strong>Manage providers…</strong> (<kbd>Alt</kbd>+<kbd>V</kbd>) comes right after the radio buttons — see <a href="#providers">Adding online AI services</a>.</li>
+  <li><strong>Machine</strong> dropdown and <strong>Manage machines…</strong> — only shown for Ollama.</li>
+  <li><strong>Search</strong> field that filters as you type. Press <kbd>Enter</kbd> in it to jump straight to the results. <strong>Clear search</strong> sits right after it.</li>
+  <li><strong>Filters…</strong> — shown only for OpenRouter, because everything it filters on comes from OpenRouter's own catalogue. It opens a small window with a <strong>Warmth</strong> choice (how well a model holds character), tick-boxes for <strong>Unmoderated only</strong>, <strong>Reasoning / thinking support</strong>, <strong>Vision</strong>, <strong>Audio input</strong>, <strong>Tool-use</strong>, <strong>Cheap</strong> (input and output both under $1 per million tokens) and <strong>Supports prompt caching</strong>, a list of model makers, a <strong>Minimum context window</strong> choice, and <strong>Clear all filters</strong>. When filters are on, the button says how many, for example "Filters… (2 active)".</li>
+  <li><kbd>Alt</kbd>+<kbd>L</kbd> jumps to the result list from anywhere in the window.</li>
   <li>First-letter keyboard navigation in the list — type a letter or two to jump to matching models.</li>
+  <li><strong>Refresh list</strong> fetches the list again, and <strong>Use this model</strong> saves your pick to the kin.</li>
+  <li>A local model whose download never finished is marked <strong>NOT USABLE</strong> on its line, with the command to remove it.</li>
   <li>Every model's <strong>context ceiling</strong> is on its line, both providers, so you can compare them without opening a kin's settings one at a time. A local model that doesn't publish one reads as <em>ctx unknown</em>. Remember this is what the model's design supports, not what will actually run on the machine serving it — a model advertising 262K can return nothing at all on hardware where 32K is fine, so treat it as a ceiling rather than a suggestion, and see <a href="#num-ctx-headroom">Leave a little headroom below the ceiling</a>.</li>
 </ul>
 
 <h3>Generation parameters</h3>
 
-<p>Under <strong>Settings → Model &amp; generation</strong>, each kin has its own sampling parameters: temperature, top-p, top-k, repeat penalty, presence penalty, frequency penalty, min-p, context window (<code>num_ctx</code>), and reply cap (<code>num_predict</code>). Leave them at defaults to start; tune if you find a kin getting repetitive (raise frequency penalty, raise min-p) or going off the rails (lower temperature). What each one actually does is below.</p>
+<p>Each kin has its own sampling parameters — temperature, top-p, top-k, repeat penalty, presence penalty, frequency penalty and min-p — behind the <strong>Sampling settings…</strong> button on <strong>Settings → Model &amp; generation</strong>. The <strong>Context window</strong> (<code>num_ctx</code>) and <strong>Reply cap (tokens)</strong> (<code>num_predict</code>) boxes sit on the tab itself. Less common settings — reasoning detail, caching, OpenRouter provider routing, Ollama options and the watchdog — are behind <strong>More model options…</strong>, and each section there only appears for models it applies to. Leave them at defaults to start; tune if you find a kin getting repetitive (raise frequency penalty, raise min-p) or going off the rails (lower temperature). What each one actually does is below.</p>
 
 <h4>What each dial actually does</h4>
 
@@ -779,7 +896,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>Does this kin use tools heavily?</strong> Tool round-trips eat the budget — a single <code>read_file</code> on a 30 KB file is ~7,500 tokens that sit in the next turn's input until they roll out. Tool-using kin benefit from one tier higher (16,384 instead of 8,192). Conversational kin without tools rarely need it.</li>
 </ol>
 
-<p>If a kin you've been chatting with regularly hits the "older turns rolled out of this send" marker (visible in the desktop status bar at 100% cap), consider bumping up <em>one tier</em>. Not three. The marker is normal rolling-window behavior, not an error — only worth responding to if it's firing so often that the kin is genuinely losing context the conversation needed.</p>
+<p>If a kin you've been chatting with regularly hits the "older turns rolled out of this send" marker (the <strong>Send size</strong> field in the main window reads 100% when the window is full), consider bumping up <em>one tier</em>. Not three. The marker is normal rolling-window behavior, not an error — only worth responding to if it's firing so often that the kin is genuinely losing context the conversation needed.</p>
 
 <h4 id="reply-cap">Reply cap</h4>
 
@@ -791,11 +908,11 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <p>Raise it if a kin you want long answers from is being clipped. The one thing to know is where the extra room comes from: the reply is carved out of the context window, so every token you give the reply is a token the conversation does not get. Push it far up and the kin remembers less of what you have been saying. Hearthkin will not let you take more than half the window, whatever number you type.</p>
 
-<p>This box governs the main chat window. Rooms and Telegram have caps of their own — <strong>Per-turn token cap</strong> in the room editor, and <strong>Reply cap</strong> under Settings → Telegram — because a room turn and a Telegram message want different lengths from the same kin.</p>
+<p>This box governs the main chat window. Rooms and the bots have caps of their own — <strong>Per-turn token cap (per kin)</strong> in the room's settings, and <strong>Reply length cap (tokens)</strong> under <strong>Settings → Telegram → Message settings…</strong> (default 900), which the Discord bot uses too — because a room turn and a chat-app message want different lengths from the same kin.</p>
 
 <h4 id="cache-ttl">Cache TTL (Anthropic / Google kin only)</h4>
 
-<p>Under <strong>Settings → Model &amp; generation</strong>, just under the cache checkbox, is a <strong>Cache TTL</strong> dropdown. Three values: <strong>Auto</strong>, <strong>5 minutes</strong>, <strong>1 hour</strong>. This is the single most cost-relevant knob on a paid Anthropic kin you chat with irregularly, and it's easy to miss because the default ("Auto") is silently wrong for most personal use.</p>
+<p>Under <strong>Settings → Model &amp; generation → More model options…</strong>, in the <strong>Caching</strong> section just under <strong>Use prompt caching (when supported)</strong>, is a <strong>Cache TTL</strong> dropdown. Three values: <strong>Provider default</strong>, <strong>5 minutes (explicit)</strong>, <strong>1 hour (Anthropic + Google only)</strong>. This is the single most cost-relevant knob on a paid Anthropic kin you chat with irregularly, and it's easy to miss because the default ("Provider default") is silently wrong for most personal use.</p>
 
 <p><strong>What's happening behind the scenes.</strong> Anthropic's prompt cache stores your kin's identity prefix (base prompt + soul + memory + earlier turns) server-side so a follow-up send within the cache's time-to-live pays roughly one-tenth of the input cost. The default TTL is 5 minutes. If you reply within 5 minutes of your last turn, the prefix is cached — cheap. If you wait longer than 5 minutes between turns (lunch break, end of day, overnight), the cache has expired by the time you come back, and your next send pays the full uncached input cost to rebuild it. For a kin with a 32,768 window on Opus, that's roughly $0.50 every time you come back to chat after a gap. Do that ten times a day, you've burned $5 on cache rebuilds alone.</p>
 
@@ -805,13 +922,13 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <h4 id="provider-routing">Pinning a specific OpenRouter provider</h4>
 
-<p>Under <strong>Settings → Model &amp; generation</strong>, below the cache controls, is an <strong>OpenRouter provider order</strong> field plus an <strong>Allow fallbacks to other providers</strong> checkbox. By default OpenRouter routes each request to whichever provider it picks — usually whoever has the lowest price or highest availability for the model at that moment. For most kin this is fine. For some it isn't.</p>
+<p>Under <strong>Settings → Model &amp; generation → More model options…</strong>, in the <strong>OpenRouter provider routing</strong> section, is a <strong>Provider order (comma-separated slugs)</strong> field plus an <strong>Allow fallbacks to other providers if pinned ones are unavailable</strong> checkbox. (The section shows for any hosted model, but only OpenRouter uses it; other services you add ignore it.) By default OpenRouter routes each request to whichever provider it picks — usually whoever has the lowest price or highest availability for the model at that moment. For most kin this is fine. For some it isn't.</p>
 
 <p><strong>When it matters.</strong> Most model creators have content policies (Xiaomi's MiMo declines NSFW, for example), but the actual enforcement happens at the inference provider level — not baked into the model weights. Different providers hosting the same model enforce that policy more or less strictly. So a kin that worked fine one minute can suddenly refuse the next, simply because OpenRouter routed the new request to a stricter provider. Pinning makes the routing predictable: the kin sees the same enforcement every send, instead of a coin flip.</p>
 
 <p>The same pattern shows up for non-policy reasons too — one provider quantizes a model more aggressively than another and the output quality changes, or one provider has lower latency from your region, or one is markedly cheaper at the same model. Pinning lets you choose.</p>
 
-<p><strong>How to use it.</strong> Type one or more provider slugs separated by commas in the <strong>OpenRouter provider order</strong> field — names look like <code>DeepInfra</code>, <code>Together</code>, <code>Fireworks</code>, <code>Lambda</code>. The first slug is the preferred provider; if it's unavailable, OpenRouter tries the next in the list. Find the available providers (and their current pricing, context limits, and uptime) on each model's "Providers" tab on openrouter.ai — for example <code>openrouter.ai/xiaomi/mimo-v2.5-pro/providers</code>.</p>
+<p><strong>How to use it.</strong> Type one or more provider slugs separated by commas in the <strong>Provider order</strong> field — names look like <code>DeepInfra</code>, <code>Together</code>, <code>Fireworks</code>, <code>Lambda</code>. The first slug is the preferred provider; if it's unavailable, OpenRouter tries the next in the list. Find the available providers (and their current pricing, context limits, and uptime) on each model's "Providers" tab on openrouter.ai — for example <code>openrouter.ai/xiaomi/mimo-v2.5-pro/providers</code>.</p>
 
 <p>The <strong>Allow fallbacks to other providers if pinned ones are unavailable</strong> checkbox controls what happens if every provider on your list is unreachable. On (the default): OpenRouter falls through to its default routing as a last resort, so the request still completes — but it may be served by a provider whose enforcement you weren't planning for. Off: the request fails cleanly with an error, which is the right choice when you've specifically pinned to a permissive provider and would rather see a failure than silently get filtered by a strict one.</p>
 
@@ -823,14 +940,14 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <h4 id="watchdog">Streaming watchdog</h4>
 
-<p>Under <strong>Settings → Model &amp; generation</strong>, near the bottom, is a <strong>Streaming watchdog → Timeout (minutes)</strong> field. Leave it at <strong>0</strong> for the auto behavior, which is what almost every kin wants.</p>
+<p>Under <strong>Settings → Model &amp; generation → More model options…</strong>, in the <strong>Reliability</strong> section, is a <strong>Watchdog timeout (minutes, 0 = auto)</strong> field. It takes 0 to 120. Leave it at <strong>0</strong> for the auto behavior, which is what almost every kin wants.</p>
 
 <p>What it controls: if a model produces zero output for this long, Hearthkin declares the stream dead, clears the streaming state so you can try again, and writes a line to <code>logs/streaming_hangs.log</code>. The watchdog is the difference between "send button is forever stuck" and "I can recover from a provider hang and just try again."</p>
 
 <p><strong>What "auto" picks:</strong></p>
 
 <ul>
-  <li>For an OpenRouter-routed kin (model name starts with <code>openrouter/</code>): fixed <strong>5 minutes</strong>. Network and provider hangs are short-deadline; if nothing's coming in 5 minutes the connection is dead.</li>
+  <li>For a kin on any online service — OpenRouter or one you added: fixed <strong>5 minutes</strong>. Network and provider hangs are short-deadline; if nothing's coming in 5 minutes the connection is dead.</li>
   <li>For an Ollama-routed kin (local or remote): scaled by the context window, because the model has to read the whole message before it can start writing, and on a CPU that reading genuinely takes minutes. Roughly: 8k context = 5 min, 32k = 8 min, 65k = 12 min, 131k = 20 min, anything larger caps at 30 min.</li>
 </ul>
 
@@ -844,9 +961,9 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <ul>
   <li><strong>Context size, on every message.</strong> The big one — see <a href="#models">the context window note above</a>. Because the whole context is re-sent each turn, the window is a recurring per-message cost, not a one-time setup value. Keep it modest on paid models.</li>
-  <li><strong>Cache TTL on Anthropic kin.</strong> Hearthkin requests prompt caching by default (the kin's identity prefix is reused turn to turn at ~10% of normal cost). Anthropic silently dropped the default cache lifetime from 1 hour to 5 minutes in March 2026. If a kin has gaps over 5 minutes between turns (most Telegram conversations do), every gap costs a full re-cache. Set <strong>Cache TTL</strong> to "1 hour" under <strong>Settings → Model &amp; generation</strong> for any Anthropic kin that gets multiple turns per hour but with gaps between them. Costs 2x more on the cache-write turn, but saves the re-cache cost on every subsequent gap. Other providers (OpenAI, DeepSeek, etc.) cache automatically with no TTL control; they ignore the setting.</li>
-  <li><strong>Distillation runs in the background.</strong> Memory distillation produces staging notes for the kin to review during tending. It's a small model call (a few thousand tokens in, a few hundred out) and runs on the kin's <strong>Memory model</strong> — set it to something cheap under <strong>Settings → Memory</strong> rather than letting it fall back to an expensive chat model. Cost per pass is typically pennies.</li>
-  <li><strong>Consolidation only runs when you ask for it.</strong> The auto-consolidation that used to fire when <code>memory.md</code> crossed a size threshold has been removed (it was the source of a runaway-consolidation cost incident). Now consolidation only fires when you press the <strong>Consolidate now</strong> button in Settings → Memory, or when the kin chooses to consolidate during their own tending. You decide when to pay for it.</li>
+  <li><strong>Cache TTL on Anthropic kin.</strong> Hearthkin requests prompt caching by default (the kin's identity prefix is reused turn to turn at ~10% of normal cost). Anthropic silently dropped the default cache lifetime from 1 hour to 5 minutes in March 2026. If a kin has gaps over 5 minutes between turns (most Telegram conversations do), every gap costs a full re-cache. Set <strong>Cache TTL</strong> to "1 hour (Anthropic + Google only)" under <strong>Settings → Model &amp; generation → More model options…</strong> for any Anthropic kin that gets multiple turns per hour but with gaps between them. Costs 2x more on the cache-write turn, but saves the re-cache cost on every subsequent gap. Other providers (OpenAI, DeepSeek, etc.) cache automatically with no TTL control; they ignore the setting.</li>
+  <li><strong>Distillation runs in the background.</strong> Memory distillation produces staging notes for the kin to review during tending. It's a small model call (a few thousand tokens in, a few hundred out) and runs on the kin's <strong>Distillation model</strong> — set it to something cheap under <strong>Settings → Memory</strong> rather than letting it fall back to an expensive chat model. Cost per pass is typically pennies.</li>
+  <li><strong>Consolidation only runs when you ask for it.</strong> The auto-consolidation that used to fire when <code>memory.md</code> crossed a size threshold has been removed (it was the source of a runaway-consolidation cost incident). Now consolidation only fires when you press the <strong>Consolidate</strong> button in Settings → Memory. A kin cannot start it. You decide when to pay for it.</li>
   <li><strong>Nightly tending uses the chat model.</strong> When the kin tends their staging notes via the cron entry, they run AS themselves — the chat model, not the cheaper summarizer. Tending is a deliberate session of "the kin reading what happened and writing what they want to keep," so it should be on the model that <em>is</em> the kin. A typical tending pass runs a few cents on Haiku-class models, more on Sonnet. Disable the tending cron entry if you don't want this cost; tend manually or let the staging pile up.</li>
   <li><strong>Telegram group "always" policy.</strong> A group set to <strong>always</strong> makes a full model call for <em>every message in the group</em> — including the ones the kin reads and decides not to answer. On a paid model that adds up fast. Prefer <strong>mention-only</strong> unless you specifically want the kin processing every line.</li>
   <li><strong>Tool loops.</strong> A turn in which the kin calls tools makes one model call per tool round-trip, each one re-sending the context. More tools used per turn means more calls billed.</li>
@@ -857,7 +974,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <ul>
   <li><strong>Tools → Usage history…</strong> opens a breakdown of every model call by kin, by model, and by surface (desktop, room, Telegram, distillation, cron), with date filters. It is the fastest way to see <em>where</em> the spend is going. The cost figures are estimates from OpenRouter's catalogue pricing — close, but your OpenRouter dashboard remains the authoritative bill.</li>
-  <li><strong>Preferences → Connections</strong> has a <strong>Show OpenRouter balance</strong> button that reports your remaining credit directly, without opening OpenRouter's web dashboard.</li>
+  <li><strong>File → Preferences…</strong>, in the Connections part, has a <strong>Show OpenRouter API key balance</strong> button that reports your remaining credit directly, without opening OpenRouter's web dashboard.</li>
 </ul>
 
 <h3>Reasoning effort (thinking)</h3>
@@ -887,7 +1004,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>"Couldn't detect this model's reasoning support"</strong> — local capability check failed (Ollama daemon down, network blip). Off is the safe pick if you want to be sure.</li>
 </ul>
 
-<p>Three companion controls, only meaningful when effort is anything other than Off:</p>
+<p>Three companion controls, only meaningful when effort is anything other than Off. They are in the <strong>Reasoning detail</strong> section of <strong>More model options…</strong>, and all start off (the cap starts at 1200):</p>
 
 <dl>
   <dt><strong>Show reasoning in chat</strong></dt>
@@ -906,7 +1023,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <h3 id="ollama-options">Ollama-only options (latency tuning)</h3>
 
-<p>Two per-kin controls at the bottom of <strong>Settings → Model &amp; generation</strong>, under an "Ollama-only options" header. Both are no-ops for OpenRouter-routed kin.</p>
+<p>Two per-kin controls in <strong>Settings → Model &amp; generation → More model options…</strong>, under the <strong>Ollama options</strong> heading. That heading only appears when the kin's model is an Ollama one.</p>
 
 <dl>
   <dt><strong>Keep model loaded</strong></dt>
@@ -935,7 +1052,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <p>By default Hearthkin talks to Ollama on the same machine (<code>localhost:11434</code>). If your bigger machine runs Ollama and a different machine runs Hearthkin — a common Mac-runs-the-models, Windows-or-Linux-runs-the-frontend setup — you can point a kin at the remote daemon instead. This is set <strong>per kin</strong>: one kin can run on the Mac while another stays local.</p>
 
-<p>You choose the machine where you choose the model. Open the kin's <strong>Settings → Model &amp; generation</strong> and press <strong>Change model…</strong>. With Ollama selected, there's a <strong>Machine</strong> dropdown: <em>This machine</em> (your local Ollama), plus any remote machines you've added. The first time, pick <strong>Add a machine…</strong> (or <strong>Manage machines…</strong>): give it a name like "Mac mini" and its address, press <strong>Test connection</strong> to confirm it's reachable, and save. Now pick that machine — the model list refreshes to show the models installed <em>on that box</em> — choose one, and that kin is pinned to it. The kin's "Runs on" line on the Model tab shows where it's pointed. (Machines you add are shared across kin, so you only enter the address once.)</p>
+<p>You choose the machine where you choose the model. Open the kin's <strong>Settings → Model &amp; generation</strong> and press <strong>Change model…</strong>. With Ollama selected, there's a <strong>Machine</strong> dropdown: <em>This machine</em> (your local Ollama), plus any remote machines you've added. The first time, press the <strong>Manage machines…</strong> button next to the dropdown (<kbd>Alt</kbd>+<kbd>G</kbd>): add a machine, give it a name like "Spare laptop" and its address, press <strong>Test connection</strong> to confirm it's reachable, and save. The test result appears right after the button, where you can reach it with <kbd>Tab</kbd>, and it is spoken aloud when it arrives. Now pick that machine — the model list refreshes to show the models installed <em>on that box</em> — choose one, and that kin is pinned to it. The kin's "Runs on" line on the Model tab shows where it's pointed. (Machines you add are shared across kin, so you only enter the address once.)</p>
 
 <h4>Finding the remote machine's address</h4>
 
@@ -971,6 +1088,78 @@ Willow would end up with 1200 turns in all.</code></pre>
   <p><strong>Network privacy:</strong> Hearthkin sending your kin's conversation to a remote Ollama means that conversation is on your local network in transit. Fine on a home LAN you control; consider what you're sending if you ever point this at a daemon over the open internet. There's no authentication built into Ollama itself; if you need that, put a reverse proxy with basic auth or a Tailscale-style overlay network in front of it.</p>
 </div>
 
+<h3 id="providers">Adding online AI services (API providers)</h3>
+
+<p>OpenRouter is built in. You can also add other online services, so a kin can use their models. A provider is just three things: a name, an address, and a key. Your own Ollama machines are not providers — those go under <strong>Manage machines…</strong> instead.</p>
+
+<h4>Where to find it</h4>
+
+<ol>
+  <li>Open the kin's <strong>Settings → Model &amp; generation</strong> and press <strong>Change model…</strong>. The model browser opens.</li>
+  <li>In the <strong>Provider</strong> group, after the radio buttons, press <strong>Manage providers…</strong> (<kbd>Alt</kbd>+<kbd>V</kbd>).</li>
+  <li>A window called <strong>API providers</strong> opens. It has a <strong>Providers</strong> list, then <strong>Add…</strong>, <strong>Edit…</strong> and <strong>Remove</strong>, then <strong>Save &amp; close</strong> and <strong>Cancel</strong>.</li>
+</ol>
+
+<p>Nothing is written until you press <strong>Save &amp; close</strong>. <strong>Cancel</strong> really does cancel, including any key you typed.</p>
+
+<h4>Adding one</h4>
+
+<p>Press <strong>Add…</strong>. A small window asks for three things.</p>
+
+<dl>
+  <dt><strong>Name</strong></dt>
+  <dd>Your short name for the service. It is made lowercase, spaces and dots become hyphens, and other symbols are dropped. The hint right under the box tells you, as you type, what it will be saved as — type "Featherless AI" and it says it will be saved as "featherless-ai". Adding a name that already exists replaces that entry.</dd>
+
+  <dt><strong>Address</strong></dt>
+  <dd>The base address from the service's own documentation. It usually ends in <code>/v1</code>, for example <code>https://api.featherless.ai/v1</code>. Don't put a model name or <code>/chat/completions</code> on the end; Hearthkin adds that part. It must start with <code>http://</code> or <code>https://</code>. A server on your own network works too, as long as it speaks the OpenAI-style protocol — Ollama at its <code>/v1</code> address, llama.cpp, or LM Studio.</dd>
+
+  <dt><strong>Key</strong></dt>
+  <dd><strong>Heads-up: this box is not hidden</strong>, so you can check what you pasted. That also means NVDA reads the key aloud as you type or move through it. When you edit a provider, leaving the box blank keeps the key already saved.</dd>
+</dl>
+
+<p><strong>Where the key goes.</strong> It is never written into the provider list. It is saved in your home folder as <code>.ai_programs\&lt;name&gt;_key.json</code>. If you set an environment variable called <code>&lt;NAME&gt;_API_KEY</code> instead — the name in capitals, hyphens turned into underscores, for example <code>FEATHERLESS_AI_API_KEY</code> — that wins over the file. Keys for services you add here do not appear under <strong>Preferences → Connections</strong>.</p>
+
+<h4>Test connection</h4>
+
+<p>The <strong>Test connection</strong> button asks the service for its list of models. It never sends a message, so it costs nothing. The result appears right after the button, where you can reach it with <kbd>Tab</kbd>, and it is spoken aloud when it arrives. What it can say:</p>
+
+<ul>
+  <li>"OK — reachable, 212 models available." — it works. The number is however many models the service lists.</li>
+  <li>"Reached it, but the key was refused (401)." or "(403)" — the address is right; check the key.</li>
+  <li>"Reached the server, but there's nothing at that address. Check it ends in /v1."</li>
+  <li>"Could not reach it:" followed by the reason — wrong address, no network, or the server is off.</li>
+  <li>"Answered, but not with a model list. Check the address."</li>
+</ul>
+
+<h4>Using its models</h4>
+
+<p>Back in the model browser, the new service has its own radio button, shown as its name followed by "(remote)". Pick it and its models are listed. The kin's model is saved as the provider name, a slash, and the service's model id — for example <code>featherless/some-model</code>.</p>
+
+<p>Two things look different from OpenRouter. <strong>Filters…</strong> is hidden, because prices, warmth and capabilities all come from OpenRouter's catalogue. And models from other services show their prices as "free" and their context size as "ctx unknown", because those services don't report them. That does not mean they are free. Check the service's own pricing, and set the kin's <strong>Context window</strong> yourself.</p>
+
+<p>Some things are sent differently, too:</p>
+
+<ul>
+  <li>OpenRouter-only extras, such as provider pinning, are not sent.</li>
+  <li>Thinking set to <strong>Off</strong> is sent as the standard "none", so a model that thinks by default really does stop.</li>
+  <li>The kin's sampling settings — temperature, top-k, min-p and repetition penalty — are still sent.</li>
+  <li>Mistral's own service has not been tried, and may refuse top-k and min-p.</li>
+</ul>
+
+<h4>Removing one</h4>
+
+<p>Select it and press <strong>Remove</strong>. If a kin's chat model uses that provider, you are asked first. The question names the kin, and says the saved key is kept, so adding the provider back restores everything. If no kin uses it, it is removed without a question.</p>
+
+<p>If a kin is still pointed at a provider that is no longer listed, it will not answer. It says: "No API provider called … is configured. Add it under Manage providers, or point the kin at a different model." It never sends the conversation somewhere else instead.</p>
+
+<h4>The providers file</h4>
+
+<p>The list lives in a plain text file, <code>providers.md</code>, in the Hearthkin folder (<code>~/.hearthkin/</code>). You never need to open it, but you can. Each line is <code>name = https://host/v1</code>. A line may start with <code>- </code>. Lines starting with <code>#</code> are comments, and a line that doesn't make sense is skipped. Changes take effect without restarting Hearthkin. A line named <code>openrouter</code> changes the address OpenRouter is reached at.</p>
+
+<div class="warn">
+  <p><strong>Privacy:</strong> a kin using one of these services sends its whole conversation to that service, exactly as with OpenRouter.</p>
+</div>
+
 <h3 id="semantic-memory">Semantic memory search (optional)</h3>
 
 <p>By default, a kin's <code>memory_search</code> tool matches on <strong>keywords</strong> — fast and exact, but it misses a note when you ask for it in different words than you wrote it in. Turn on <strong>semantic memory search</strong> and the search also ranks by <em>meaning</em>: a query like "the thing where it sounds wrong when it talks" can reach a note titled "voice compatibility," even with no words in common.</p>
@@ -980,11 +1169,13 @@ Willow would end up with 1200 turns in all.</code></pre>
 <h4>Setup</h4>
 
 <ol>
-  <li>It needs a small <strong>embedding model</strong> on an Ollama machine. Semantic search is app-wide (not per-kin), so it has its own <strong>Embedding machine</strong> picker: open <strong>File → Preferences → Connections</strong>, find <strong>Semantic memory search</strong>, and choose the machine (defaults to <em>This machine</em>; the same saved machines from the model browser are listed). Then click <strong>Download embedding model</strong> — it pulls <code>nomic-embed-text</code> (about 270 MB) onto that machine and speaks progress as it goes. (If you prefer the command line, <code>ollama pull nomic-embed-text</code> on that box does the same thing.)</li>
-  <li>Tick <strong>Use semantic memory search</strong>.</li>
+  <li>It needs a small <strong>embedding model</strong> on an Ollama machine. Semantic search is app-wide (not per-kin), so it has its own <strong>Embedding machine</strong> picker: open <strong>File → Preferences…</strong>, find the <strong>Semantic memory search</strong> group at the bottom, and choose the machine under <strong>Embedding machine</strong> (defaults to <em>This machine (localhost)</em>; the same saved machines from the model browser are listed). Then click <strong>Download embedding model</strong> — it pulls <code>nomic-embed-text</code> (about 270 MB) onto that machine and speaks progress as it goes. (If you prefer the command line, <code>ollama pull nomic-embed-text</code> on that box does the same thing.)</li>
+  <li>Tick <strong>Use semantic memory search (Ollama embeddings)</strong>.</li>
 </ol>
 
-<p>The embedding model is configurable (the field next to the button) if you'd rather use a different one — pull that name instead and type it in. Whatever you pick has to be pulled on the embedding machine before it'll do anything.</p>
+<p>The <strong>Embedding model</strong> field (next to the download button) takes a different model name if you'd rather use another one — pull that name instead and type it in. Whatever you pick has to be pulled on the embedding machine before it'll do anything.</p>
+
+<p>Two more settings in the same group. <strong>Embedding timeout (seconds, 0 = default)</strong> is how long to wait for the embedding machine before falling back to keyword search; the default is 12 seconds. <strong>Keep embedding model loaded (minutes)</strong> defaults to 30; -1 keeps it loaded always, and 0 leaves it to the machine's own default.</p>
 
 <div class="note">
   <p><strong>It can't break your search.</strong> If the embedding model isn't downloaded, or the embedding machine is unreachable, semantic search quietly falls back to the normal keyword search — you just won't get the meaning-based ranking until the model's available. So it's safe to turn on before everything's set up.</p>
@@ -996,15 +1187,28 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <p>A room is a conversation with two or more kin and yourself. Each turn one kin speaks; the room loop cycles through the members. Useful for getting a multi-perspective response, or for kin-to-kin conversations where you mostly observe.</p>
 
-<p>Create a room from the <strong>Room → New Room</strong> menu. Pick which kin are members, optionally write a "room context" note that everyone sees as additional system context, and configure the turn limits.</p>
+<p>Create a room from the <strong>Room → New room…</strong> menu. Pick which kin are members, optionally write a <strong>Room context note</strong> that everyone sees as additional system context, and configure the turn limits, including <strong>Per-turn token cap (per kin)</strong> (default 800).</p>
+
+<h3>Who speaks when</h3>
+
+<ul>
+  <li><strong>The order of the members list is the speaking order.</strong> Use <strong>Move up</strong> and <strong>Move down</strong> in the room's settings to change it.</li>
+  <li>The first speaker rotates each round, so no one is always first.</li>
+  <li>A room with exactly two kin keeps a fixed order instead: the same kin always goes first.</li>
+  <li><strong>Continue round</strong> in the main window, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> with the message box empty, runs another round without you saying anything.</li>
+  <li><strong>Stop</strong> ends the whole round, not just the kin speaking, and turns Auto-continue off.</li>
+  <li>A kin's tool calls in a room are shown in the chat, but they aren't kept for that kin's next turn.</li>
+</ul>
 
 <h3>Auto-room mode</h3>
 
-<p>Auto-room makes the kin take turns automatically without waiting for your input each round. Use the <strong>max auto rounds</strong> setting to cap the total inferences per session — this limits cost on OpenRouter-routed rooms.</p>
+<p>Tick <strong>Auto-continue rounds</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) in the main window and the kin take turns automatically without waiting for your input each round. In the room's settings, <strong>Max auto-rounds before pause</strong> (default 10) caps how many rounds run on their own — this limits cost on rooms using paid models. <strong>Auto-pause after idle (minutes)</strong> (default 15) switches auto mode off when you haven't sent anything for that long; press <strong>Continue round</strong> to pick it up again.</p>
 
 <h3 id="room-memory">Does a room reach the kin's memory?</h3>
 
 <p>Only if you say so. <strong>Remember this room</strong> (in the room's settings) is <strong>off by default</strong>, and off for every room created before this setting existed. Until then, nothing said in a room ever reached any kin's memory — it wasn't summarized, staged, or indexed anywhere, and lived in the room's transcript and nowhere else. That was an unbuilt feature rather than a decision, but rooms are where the intimate conversations happen, and quietly reversing it for transcripts already on disk isn't something Hearthkin will do on your behalf. So it's per-room and opt-in: one room remembering says nothing about any other.</p>
+
+<p><strong>Ticking the box alone may not be enough.</strong> A room reaches a kin through that kin's own automatic distillation, and both automatic triggers — every N messages, and % of the context window — are off by default. If a member has both off, the room's settings window warns you. In that case, fold the room in by hand from that kin's <strong>Settings → Memory</strong>: pick the room in the per-surface list and press <strong>Distill selected surface now</strong>. Turning a trigger on instead works too, but it also starts auto-distilling that kin's other surfaces.</p>
 
 <p>With it on, each member distills that room into its own staging notes at its usual cadence and decides during its nightly tending what becomes lasting memory — the same path every other surface uses. The room shows up alongside your other surfaces in <strong>Settings → Memory</strong> with its own counter, and it never folds into the desktop scope (a three-way conversation doesn't get spliced into the middle of your 1-on-1 timeline with a kin).</p>
 
@@ -1036,6 +1240,9 @@ Willow would end up with 1200 turns in all.</code></pre>
   <dt><code>read_file</code></dt>
   <dd>Read a text file. Relative paths resolve inside the kin folder; absolute paths go anywhere. Optional <code>start_line</code> (1-indexed) and <code>line_count</code> arguments let the kin fetch a specific slice — essential for large files like <code>conversation.jsonl</code> which can be megabytes. The footer of every read reports total line count and disk size so the kin can plan further reads.</dd>
 
+  <dt><code>list_directory</code></dt>
+  <dd>List the files and subfolders inside a folder, so the kin can look before guessing a filename. Same path rules as <code>read_file</code>. In the Read tool bucket.</dd>
+
   <dt><code>write_file</code></dt>
   <dd>Atomic write. Same path semantics as <code>read_file</code>. Refuses directory targets.</dd>
 
@@ -1046,7 +1253,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <dd>Append a timestamped note to a file in the kin folder.</dd>
 
   <dt><code>fetch_url</code></dt>
-  <dd>Fetch a web page and return readable markdown.</dd>
+  <dd>Fetch a web page and return readable markdown. It only fetches from the public internet: addresses on this computer or your home network, and other private addresses, are refused — including when a page tries to redirect there.</dd>
 
   <dt><code>web_search</code></dt>
   <dd>Search the web via the Brave Search API. Requires a Brave API key under <strong>Preferences → Connections</strong>.</dd>
@@ -1081,11 +1288,11 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <h3>Trust levels for <code>exec</code></h3>
 
-<p>The <code>exec</code> tool runs shell commands. Because that's a wide-open capability, it's gated by an approval system. Set the kin's trust level under <strong>Settings → Tools → Trust level</strong>:</p>
+<p>The <code>exec</code> tool runs shell commands. Because that's a wide-open capability, it's gated by an approval system. Set the kin's trust level under <strong>Settings → Tools</strong>, in the group called <strong>Tool call gating (exec and webcam capture)</strong>:</p>
 
 <dl>
   <dt><strong>Untrusted</strong> (default)</dt>
-  <dd>Every <code>exec</code> call shows you a dialog asking whether to allow, allow + remember (adds to the kin's exec allowlist), or deny.</dd>
+  <dd>Every <code>exec</code> call shows you a dialog with three buttons: <strong>Allow once</strong>, <strong>Allow + remember</strong> (adds the command to the kin's exec allowlist), and <strong>Deny</strong>. <strong>Deny</strong> is the default, and closing the dialog also counts as deny.</dd>
 
   <dt><strong>Trusted</strong></dt>
   <dd>Approves silently unless the command matches a denylist pattern (things like <code>rm -rf /</code>). The denylist lives in <code>tools/_exec_denylist.py</code> and is intentionally narrow.</dd>
@@ -1098,9 +1305,24 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <p>The "remember this command" approval writes the exact command string to <code>~/.hearthkin/kin/&lt;kin&gt;/exec_allowlist.json</code>. Future runs of that exact command skip the dialog. (Remembered commands are scoped to where you approved them — a command you remembered at the desktop won't silently auto-run for a remote user.)</p>
 
+<h3 id="tool-settings">Tool behaviour settings, and testing a model</h3>
+
+<p><strong>Settings → Tools → Tool behaviour settings…</strong> holds the less common tool settings:</p>
+
+<ul>
+  <li><strong>Telegram approval timeout (seconds)</strong> — how long a remote approval request waits for your answer. 30 to 86400; default 600, which is ten minutes.</li>
+  <li><strong>Run remote (Telegram/Discord) exec without asking</strong> — off by default. See the note above.</li>
+  <li><strong>Let remote (Telegram/Discord) file tools reach outside the kin folder</strong> — off by default. Off means a file tool used from Telegram or Discord stays inside the kin's own folder. On Telegram the same goes for a file the kin saves by writing it out in a fenced block in its reply.</li>
+  <li><strong>Tool history kept</strong> — default 5. See <a href="#tool-history">Tool history compaction</a>.</li>
+  <li><strong>Tool result cap (chars)</strong> — default 8000. The most of one tool's result that goes back to the model.</li>
+  <li><strong>Max tool calls per reply</strong> — default 8.</li>
+</ul>
+
+<p><strong>Test tool calling…</strong>, on the same tab, checks whether the kin's model really makes tool calls, rather than just describing them. Hearthkin also checks by itself whenever you pick a new model for a kin that has tools switched on. If the model passes, or the answer is unclear, it says nothing. If the model fails, it says so aloud — that the model does not make tool calls and the kin's tools will not run — and shows the test result.</p>
+
 <h3 id="approval-alert">Knowing when a kin is waiting on you</h3>
 
-<p>When a kin on Telegram or Discord asks to run a command (or use the webcam) and is blocked waiting for your answer, Hearthkin now signals you three ways at once, because any one alone is easy to miss: a <strong>sound</strong> (a distinct two-tone cue, different from the reply chime), a <strong>desktop notification</strong>, and a spoken <strong>NVDA</strong> announcement. The sound is the reliable one — spoken alerts get cut off by your own typing, and a toast is easy to miss if you're looking at another window. It's <strong>on by default and independent of the reply chime</strong> (it's a safety signal, not decoration); turn it off or adjust its loudness under <strong>Preferences → General</strong>. On Telegram the request also still posts in the chat it came from; on Discord it's a dialog on your desktop.</p>
+<p>When a kin on Telegram or Discord asks to run a command (or use the webcam) and is blocked waiting for your answer, Hearthkin now signals you three ways at once, because any one alone is easy to miss: a <strong>sound</strong> (a distinct two-tone cue, different from the reply chime), a <strong>desktop notification</strong>, and a spoken <strong>NVDA</strong> announcement. The sound is the reliable one — spoken alerts get cut off by your own typing, and a toast is easy to miss if you're looking at another window. It's <strong>on by default and independent of the reply chime</strong> (it's a safety signal, not decoration); turn it off with <strong>Play a sound when a kin is waiting for approval</strong> in <strong>File → Preferences…</strong>. Its loudness follows the <strong>Chime volume</strong> slider on the same page. On Telegram the request also still posts in the chat it came from; on Discord it's a dialog on your desktop.</p>
 
 <p class="note"><strong>Why this exists.</strong> Before, the only signal was the in-chat prompt — invisible if you were focused elsewhere. A request could sit unanswered until it timed out, and the kin was then told the command was "denied by user." So a kin could truthfully report that <em>you</em> refused something you were never shown. That's fixed on both counts: you get the alert, and the outcomes no longer lie (below).</p>
 
@@ -1114,9 +1336,9 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <p>Every one of these is written to <code>~/.hearthkin/logs/approvals.log</code> — one line per event (asked / allowed / denied / timed out / undelivered / superseded), with the kin, the command, and the timeout. If a kin ever tells you it was denied something and you don't remember denying it, that log is the record of what actually happened.</p>
 
-<h3>Tool history compaction</h3>
+<h3 id="tool-history">Tool history compaction</h3>
 
-<p>Tool calls and their results are persisted to the conversation, so the kin remembers what it did across turns. To keep this from filling the context window, the most recent N tool round-trips (default 5) go to the model verbatim; older ones are summarized into a single one-line marker. Adjust N under <strong>Settings → Tools → Tool history keep</strong>.</p>
+<p>Tool calls and their results are persisted to the conversation, so the kin remembers what it did across turns. To keep this from filling the context window, the most recent N tool round-trips (default 5) go to the model verbatim; older ones are summarized into a single one-line marker. Adjust N with <strong>Tool history kept</strong> under <strong>Settings → Tools → Tool behaviour settings…</strong>.</p>
 
 <h2 id="games">The creature park — a game your kin can play</h2>
 
@@ -1127,7 +1349,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 <ul>
   <li><strong>The kin plays it itself.</strong> If the <code>tff</code> tool is on the kin's allowlist (Settings → Tools), the kin can take turns on its own — often during a cron wake-up, or just because it wants to.</li>
   <li><strong>You tend it from the desktop.</strong> <strong>Tools → Tend a kin's park…</strong> (<code>Ctrl+Shift+P</code>) opens a plain text prompt that acts on the selected kin's <em>own</em> save. Type a command, read the reply. A shared cross-process lock keeps your turn from colliding with the kin's own turn or a cron firing at the same moment, so co-tending is safe.</li>
-  <li><strong>From Telegram.</strong> In a DM, <code>/play tff &lt;command&gt;</code> takes a single turn (see <a href="#telegram">Bot commands</a>). Or send the word <code>park</code> to toggle <em>park mode</em>: while it's on, the kin's own action-emotes (<em>*cares for the cats*</em>, <em>*digs for materials*</em>) are run as real game moves instead of treated as roleplay, and the kin is told what actually happened. Send <code>park</code> again to leave the mode.</li>
+  <li><strong>From Telegram.</strong> In a DM, <code>/play tff &lt;command&gt;</code> takes a single turn (see <a href="#telegram">Bot commands</a>). Or send the word <code>park</code> on its own, with no slash, to turn on <em>park mode</em>: while it's on, the kin's own action-emotes (<em>*cares for the cats*</em>, <em>*digs for materials*</em>) are run as real game moves instead of treated as roleplay, and the kin is told what actually happened. To leave, send <code>leave</code> (or <code>leave park</code>, <code>exit park</code>, or <code>done tending</code>). Sending <code>park</code> again does not leave; it just says park mode is on. Park mode is for DMs only.</li>
 </ul>
 
 <p><strong>Commands.</strong> Type <code>help</code> in any of these for the full list. The shape is: <code>look</code> (or <code>look at &lt;room / creature / village&gt;</code>), <code>adopt &lt;species&gt;</code>, <code>dig &lt;number&gt;</code>, <code>build &lt;room type&gt;</code>, <code>care for &lt;room / creature&gt;</code>, <code>breed &lt;room&gt;</code>, <code>move &lt;creature&gt; to &lt;room / village&gt;</code>, plus <code>rename</code>, <code>expand</code>, and <code>convert</code>.</p>
@@ -1139,13 +1361,15 @@ Willow would end up with 1200 turns in all.</code></pre>
 <p><strong>Group commands</strong> save you (and the kin) from acting one creature at a time. You can care for or move a whole <em>group</em> at once, scoped by species, age, sex, mood, or room:</p>
 
 <ul>
-  <li><code>care for everyone</code> · <code>move everyone to Indoor 2</code></li>
+  <li><code>move everyone to Indoor 2</code></li>
   <li><code>care for all the cats</code> · <code>move all the rabbits to village</code></li>
   <li><code>care for all the babies</code> (also <code>adults</code>, <code>elders</code>, <code>males</code>, <code>females</code>)</li>
   <li><code>care for all the lonely ones</code> — tends only the creatures whose affection has dropped</li>
   <li><code>care for everyone in Indoor 1</code> · <code>move all in Indoor 1 to Indoor 2</code></li>
   <li>and you can stack the filters: <code>care for all the lonely adult cats</code></li>
 </ul>
+
+<p><strong>Tending the whole park in one command is retired.</strong> <code>care for everyone</code> now politely suggests stepping into a room instead: <code>go to &lt;room&gt;</code>, then a plain <code>care</code> tends just that room. The narrower group forms above still work.</p>
 
 <p>The <strong>village</strong> is a home, not a waiting room — it's where creatures who can't return to the wild, or old ones who'd rather stay, settle permanently. They don't get hungry or lonely there and they don't need moving into rooms. You can still visit them: <code>care for &lt;name&gt;</code> or <code>care for everyone in the village</code>. The <strong>den</strong> is the temporary nursery next door — young with no room to spare wait there, and head off into the wild once grown unless you build or expand a room and welcome them in first.</p>
 
@@ -1160,11 +1384,14 @@ you reach tabbing through that tab, just after <em>Tool behaviour settings…</e
   <li><strong>A shared file.</strong> Point two or more kin at the same save file and they tend
   one park between them. A cross-process lock keeps simultaneous turns from colliding, and each
   kin keeps its own place in the activity feed, so nobody misses what the others did.</li>
-  <li><strong>A running server.</strong> Point a kin at a Time for Family server instead
-  (<code>park_server</code>, plus the password, plus the name it should appear under) and there is
-  <em>one</em> park that kin, you, and anyone at a console all join — across machines. This path
-  talks to the server over HTTP and needs no copy of the game on the kin's side at all. A
-  <strong>Test connection</strong> button in the same dialog tells you straight away whether the
+  <li><strong>A running server.</strong> Point a kin at a Time for Family server instead and there is
+  <em>one</em> park that kin, you, and anyone at a console all join — across machines. Choose
+  <strong>A park on a server</strong> under <strong>Which park it tends</strong>, and the server boxes
+  appear: <strong>Server address</strong> (a name or IP) and <strong>Server port</strong> are separate
+  boxes — the server prints its port, usually 8765, and a blank port means 8765 — then
+  <strong>Server password</strong> and <strong>Your name in the park</strong>. This path
+  talks to the server over HTTP and needs no copy of the game on the kin's side at all. The
+  <strong>Verify connection</strong> button in the same dialog tells you straight away whether the
   address and password work.</li>
 </ul>
 
@@ -1191,8 +1418,8 @@ dialog.</p>
 </ul>
 
 <p>That last part — <em>one concrete thing worth doing</em> — matters more than it sounds. Faced
-with a whole park and no particular prompt, a kin tends to fall back on <code>care for everyone</code>,
-which always works and never engages with anything in particular. Being shown a specific opportunity
+with a whole park and no particular prompt, a kin tends to fall back on the same broad command every
+time, one that always works and never engages with anything in particular. Being shown a specific opportunity
 ("these two are grown and bonded, and there's room to raise young") turns an open question into a
 recognisable one. Kin get this on a <code>look</code>, whichever way they play.</p>
 
@@ -1204,12 +1431,22 @@ act on what you saw — so the one move gets spent looking. In one kin's real hi
 seven moves were looks, four of them the same look hours apart, including one taken immediately
 after walking into a room whose description named three separate things wanting doing.</p>
 
-<p><strong>Moves it may take in one turn</strong> (in <strong>Park settings…</strong>) sets the
+<p><strong>Moves it may take in one turn</strong> (in <strong>Park settings…</strong>, default 6) sets the
 ceiling. After each move the kin is shown what actually happened and asked what it wants to do
 next, until it stops asking or reaches this number. In practice it usually stops well before —
 a reply with no <code>&gt;</code> line in it is the kin saying it's finished for now, and that is a
 complete answer rather than a failure to continue. Set it to <strong>0</strong> for no limit at
 all.</p>
+
+<p>Answering the game's own questions — the one-at-a-time questions when inventing an animal or a
+room, say — doesn't use up those moves, so a kin can finish a walkthrough. A second box,
+<strong>Most moves of any kind in one turn</strong> (default 60, 0 for no cap), is the last-resort
+stop, and it counts everything, answers included.</p>
+
+<p>Two more limits. A kin can't start its park over: <code>reset</code> on a kin's <code>&gt;</code>
+line is refused, and the kin is told that one is yours to do. And in a Telegram group or on Discord,
+where everyone reads the same feed, a kin's reply runs its <code>&gt;</code> lines once and it isn't
+asked to carry on.</p>
 
 <p>Bear in mind that every move is a fresh call to that kin's model, so on a slow local model a
 large number here means a long wait before the kin falls quiet. <code>/cancel</code> over Telegram
@@ -1225,7 +1462,7 @@ understood, exactly as it does for you at the console.</p>
 <ol>
   <li>Talk to <a href="https://t.me/botfather">@BotFather</a> on Telegram, run <code>/newbot</code>, give it a name, get a bot token.</li>
   <li>Open <strong>Settings → Telegram</strong>. Paste the bot token. Click <strong>Test token</strong> to verify it works.</li>
-  <li>Add yourself as a user. Use <strong>Add user…</strong>, paste your Telegram numeric ID. (Don't know your ID? Start the bot, DM it <code>/whoami</code>, and it'll tell you — <code>/whoami</code> and <code>/help</code> work even before you're added to the allow list. Other commands and normal chat are gated until you're on it.)</li>
+  <li>Add yourself as a user. Use <strong>Add user…</strong>, paste your Telegram numeric ID. The <strong>Display label</strong> box in that window is the name the kin will call that person. (Don't know your ID? Start the bot, DM it <code>/whoami</code>, and it'll tell you — <code>/whoami</code> and <code>/help</code> work even before you're added to the allow list. Other commands and normal chat are gated until you're on it.)</li>
   <li>Pick a tool bucket for that user (see below).</li>
   <li>Check <strong>Run Telegram bot for this kin</strong>. Status updates to "Running".</li>
 </ol>
@@ -1239,13 +1476,13 @@ understood, exactly as it does for you at the console.</p>
   <dd>Chat only. The kin can't use any tools when this user messages.</dd>
 
   <dt><strong>Read</strong></dt>
-  <dd>Read-only tools: <code>memory_search</code>, <code>read_file</code>, <code>fetch_url</code>, <code>web_search</code>, <code>list_processes</code>, <code>context_status</code>, <code>recent_thinking</code>, <code>read_staging</code>, <code>analyze_sound</code>.</dd>
+  <dd>Read-only tools: <code>memory_search</code>, <code>read_file</code>, <code>list_directory</code>, <code>fetch_url</code>, <code>web_search</code>, <code>list_processes</code>, <code>context_status</code>, <code>recent_thinking</code>, <code>read_staging</code>, <code>analyze_sound</code>.</dd>
 
   <dt><strong>Write</strong></dt>
   <dd>Read tools plus <code>write_file</code>, <code>edit_file</code>, <code>note</code>, <code>use_webcam</code>, <code>archive_staging</code>, and <code>tff</code> (the park game). <code>note</code> is here rather than in Read because it appends to files in the kin's folder (and <code>memory.md</code> rides every turn, so it's a durable write). <code>use_webcam</code> has an extra per-user permission radio in the same dialog — see <a href="#images">Sending images and webcam photos</a> for the Ask / Auto-approve / Always-deny choices.</dd>
 
   <dt><strong>Full</strong></dt>
-  <dd>Everything, including <code>exec</code> and <code>kill_process</code>. <code>exec</code> approval still goes through chat — you'll see the command and reply with <code>yes</code> / <code>no</code> / <code>remember</code> (or <code>/allow</code>, <code>/deny</code>, <code>/remember</code>). <code>use_webcam</code> still goes through its per-user webcam-permission radio regardless of the bucket tier.</dd>
+  <dd>Everything, including <code>exec</code> and <code>kill_process</code>. <code>exec</code> approval still goes through chat — you'll see the command and reply with <code>yes</code> / <code>no</code> / <code>remember</code> (or <code>/allow</code>, <code>/deny</code>, <code>/remember</code>). Other plain words work too: <code>ok</code>, <code>sure</code>, <code>go</code>, <code>do it</code> or 👍 to allow; <code>nope</code>, <code>cancel</code>, <code>stop</code> or 👎 to deny; <code>save</code>, <code>always</code> or <code>trust this</code> to allow and remember. <code>use_webcam</code> still goes through its per-user webcam-permission radio regardless of the bucket tier.</dd>
 </dl>
 
 <p>The default of <strong>None</strong> means tool access is opt-in for every user, even ones you've already let chat. This is intentional: chatting and acting are different trust decisions.</p>
@@ -1278,7 +1515,7 @@ understood, exactly as it does for you at the console.</p>
 
 <ul>
   <li><code>/clear</code> on a sharing user wipes the shared conversation (affects desktop and any other sharing user). Asks for <code>/clear confirm</code> first.</li>
-  <li><code>/new</code> on a sharing user snapshots the current conversation into <code>~/.hearthkin/kin/&lt;kin&gt;/conversations/</code> (the existing desktop snapshots dir), then clears the live conversation. Affects desktop too.</li>
+  <li><code>/new</code> on a sharing user saves the current conversation as <code>~/.hearthkin/conversations/&lt;kin&gt;_telegram_new_&lt;time&gt;.json</code>, then clears the live conversation. Affects desktop too.</li>
   <li><code>/reset</code> on a sharing user wipes the shared conversation AND <code>memory.md</code>. Same two-step confirmation as before.</li>
   <li><code>/regen</code> and <code>/undo</code> on a sharing user operate on the shared conversation; the desktop will see the truncated state on its next refresh.</li>
   <li><code>/status</code> reports whether your conversation is shared or private.</li>
@@ -1287,6 +1524,10 @@ understood, exactly as it does for you at the console.</p>
 <h3>Bot commands</h3>
 
 <p>When the bot starts, Hearthkin pushes the full command list to Telegram via the <code>setMyCommands</code> API. That powers the in-chat command menu (the little square icon next to the input field) and the slash auto-complete that appears as you type. If you've previously configured commands manually via <a href="https://t.me/botfather">@BotFather</a>'s <code>/setcommands</code> (e.g. only <code>/help</code>), Telegram will silently auto-correct any partial <code>/&lt;something&gt;</code> you type to the only registered match — which is why "everything turns into /help" was a real symptom for older bots. Hearthkin's auto-registration replaces that incomplete list every time the bot starts, so it self-heals. You don't need to do anything in BotFather for the menu to be right.</p>
+
+<p><strong>If typing a command still sends <code>/help</code> instead</strong> — this happens with Unigram and with some Telegram apps used with a screen reader — open <strong>File → Preferences…</strong> and untick <strong>Register Telegram slash-command menu</strong>. The command menu is then cleared, and commands you type in full still work.</p>
+
+<p>In a group, only <code>/help</code> and <code>/whoami</code> answer; every other command tells you it only works in a direct message. A few things are plain words rather than commands, and don't work with a slash in front: <code>park</code> and <code>leave</code> (see <a href="#games">park mode</a>) and <code>teach</code> (see below).</p>
 
 <dl>
   <dt><code>/help</code></dt>
@@ -1305,13 +1546,13 @@ understood, exactly as it does for you at the console.</p>
   <dd>Shows your tool bucket and the actual tool names you can trigger via this kin (intersection of the kin's allowlist and your bucket).</dd>
 
   <dt><code>/new</code></dt>
-  <dd>Archives the current conversation into <code>~/.hearthkin/kin/&lt;kin&gt;/conversations/</code> and starts a fresh one. Memory is preserved.</dd>
+  <dd>Files the current conversation away and starts a fresh one. Memory is preserved. If your conversation is private to Telegram, the copy goes in the kin's folder as <code>telegram_archive\&lt;your user ID&gt;_&lt;time&gt;.json</code>. If it is shared with the desktop, the copy goes in <code>~/.hearthkin/conversations/</code>, and the desktop conversation is cleared too.</dd>
 
   <dt><code>/clear</code> or <code>/forget</code></dt>
-  <dd>Wipes your conversation history with this kin without archiving. The kin won't remember anything from before. Asks for <code>/clear confirm</code> the first time before actually wiping.</dd>
+  <dd>Wipes your conversation history with this kin, without keeping a copy. The kin won't remember anything from before. If your conversation is private to Telegram, it happens straight away. If it is shared with the desktop, it asks you to send <code>/clear confirm</code> first, and suggests <code>/new</code> if you'd rather keep a copy.</dd>
 
   <dt><code>/reset</code></dt>
-  <dd>Nuclear option: wipes both the conversation history <em>and</em> <code>memory.md</code>. Two-step confirmation. Use when you want to start the kin completely over while keeping the soul prompt.</dd>
+  <dd>Nuclear option: wipes both the conversation history <em>and</em> <code>memory.md</code>. Two-step confirmation: send <code>/reset confirm</code>. Use when you want to start the kin completely over while keeping the soul prompt. Only people whose conversation is shared with the desktop, or who have the <strong>Full</strong> tool bucket, can use it; anyone else is pointed to <code>/clear</code>.</dd>
 
   <dt><code>/regen</code></dt>
   <dd>Drops the kin's last reply and re-asks with the same message. Equivalent of the desktop's regenerate.</dd>
@@ -1323,21 +1564,43 @@ understood, exactly as it does for you at the console.</p>
   <dd>Appends a timestamped entry to today's journal in the kin's folder, without going through the model. Useful for quick capture from your phone. The kin can read it back later via <code>memory_search</code>.</dd>
 
   <dt><code>/play &lt;game&gt; &lt;command&gt;</code></dt>
-  <dd>Take one turn in a game the kin plays — currently the creature park (<code>tff</code>). It acts on the <em>same</em> save the kin plays and the desktop <a href="#games">Tend a kin's park</a> dialog tends. <code>/play tff look</code> shows the park; then <code>dig 50</code>, <code>adopt cat</code>, <code>build indoor</code>, <code>care for everyone</code>, <code>move all in Indoor 1 to village</code>, and so on. <code>/play</code> on its own lists the available games. DM-only. See <a href="#games">The creature park</a> for the full command set and park mode.</dd>
+  <dd>Take one turn in a game the kin plays — currently the creature park (<code>tff</code>). It acts on the <em>same</em> save the kin plays and the desktop <a href="#games">Tend a kin's park</a> dialog tends. <code>/play tff look</code> shows the park; then <code>dig 50</code>, <code>adopt cat</code>, <code>build indoor</code>, <code>go to Indoor 1</code>, <code>move all in Indoor 1 to village</code>, and so on. <code>/play</code> on its own lists the available games. DM-only. See <a href="#games">The creature park</a> for the full command set and park mode.</dd>
 
   <dt><code>/think</code></dt>
   <dd>Shows the reasoning block from the kin's last reply (if the kin has thinking enabled and the model exposes it).</dd>
 
   <dt><code>/cancel</code></dt>
-  <dd>Cancels a pending tool approval. (No effect on a reply already in flight.)</dd>
+  <dd>Stops a reply that is being written for you, and keeps what was written so far. It also cancels a pending tool approval. <code>/stop</code> does the same while a reply is being written or an approval is waiting. It also stops a park visit in progress. If there's nothing to stop, the bot says so.</dd>
 
   <dt><code>/allow</code>, <code>/deny</code>, <code>/remember</code></dt>
-  <dd>Respond to a tool approval prompt. Plain-text equivalents (<code>yes</code> / <code>no</code> / <code>save</code>) also work.</dd>
+  <dd>Respond to a tool approval prompt. Plain-text equivalents (<code>yes</code> / <code>no</code> / <code>save</code>, and the other words listed under the <strong>Full</strong> bucket above) also work.</dd>
 </dl>
 
-<h3>Tool call display</h3>
+<h3 id="telegram-message-settings">Message settings</h3>
 
-<p>Whether tool calls show up as separate Telegram messages — a wrench icon for the call, an arrow for the result preview — is controlled per kin under <strong>Settings → Telegram → Show tool calls in chat</strong>. Off by default. Some folks prefer the visibility; others just want the kin's narrative reply.</p>
+<p>The Telegram tab's <strong>Message settings…</strong> button opens the settings for how the bot's messages behave:</p>
+
+<ul>
+  <li><strong>Wait for the rest of my message (seconds)</strong> — default 2, from 0 to 600. Telegram cuts a long message into pieces. This is how long the bot waits for the next piece before answering, so the kin gets the whole message at once. A piece that reaches Telegram's length limit always waits at least 8 seconds, even if you set 0. The wait is never used for commands, photos, albums or documents, or while you have an approval waiting.</li>
+  <li><strong>Show tool calls in chat</strong> — off by default. When on, each tool call shows up as its own message: a wrench for the call, an arrow for a preview of the result.</li>
+  <li><strong>Show tool-summary footer on replies</strong> — on by default. A short italic line naming the tools used.</li>
+  <li><strong>Show memory-recall footer on replies</strong> — on by default. A short italic line naming the memory notes recalled.</li>
+  <li><strong>Tool-loop progress ping every (seconds, 0=off)</strong> — default 90. While the kin is working through tool calls, a "still working" message arrives this often. Only used when tool calls aren't being shown.</li>
+  <li><strong>History cap (messages)</strong> — default 100, 0 for no limit. When a private Telegram conversation reaches the cap, the oldest quarter is trimmed in one go rather than one message at a time, which keeps replies fast. Conversations shared with the desktop aren't affected.</li>
+  <li><strong>Reply length cap (tokens)</strong> — default 900. The Discord bot uses this one too.</li>
+</ul>
+
+<h3 id="telegram-notes">Things worth knowing about Telegram messages</h3>
+
+<ul>
+  <li><strong>While an approval is waiting in a DM,</strong> anything else you send is not passed to the kin, and it isn't saved to send later either. The bot reminds you of the command waiting for an answer. Answer it first, then send your message again.</li>
+  <li><strong>In a group,</strong> only the person whose message led to a command can answer its approval.</li>
+  <li><strong>Text documents</strong> sent in a DM — <code>.txt</code>, <code>.md</code>, source code and similar, and Word <code>.docx</code> — are read into that turn, up to 256 KB each. Documents uploaded in a group aren't read.</li>
+  <li><strong>Stickers, videos and audio files are ignored.</strong> Voice notes aren't transcribed (see <a href="#voice">Voice</a>).</li>
+  <li><strong>How replies arrive.</strong> If you have tools the kin can use, the reply appears as one message that fills in as it's written. Otherwise the reply arrives whole, once it's finished.</li>
+  <li><strong>Reasoning.</strong> With the kin's <strong>Show reasoning in chat</strong> on, the bot posts the reasoning as a message of its own.</li>
+  <li><strong>Teaching the park new words.</strong> Without a slash: <code>teach tff "grooms" = "pet"</code> teaches the park a phrase at any time. In park mode, <code>teach &lt;word&gt; = &lt;known word&gt;</code> adds a word, <code>forget &lt;word&gt;</code> removes one, <code>my words</code> lists what you've taught, and <code>vocab</code> shows where the word lists live.</li>
+</ul>
 
 <h3 id="telegram-groups">Talking with a kin in a group chat</h3>
 
@@ -1348,10 +1611,10 @@ understood, exactly as it does for you at the console.</p>
 <h4>Step-by-step</h4>
 
 <ol>
-  <li>Make sure the kin's bot is configured and running in Hearthkin (<strong>Settings → Telegram → Run Telegram bot for this kin</strong> checked, status reads "Running"), and your own Telegram user ID is in the Users list with whatever tool bucket you want.</li>
+  <li>Make sure the kin's bot is configured and running in Hearthkin (<strong>Settings → Telegram → Run Telegram bot for this kin</strong> checked, status reads "Running"). If you want tools in the group, add your own Telegram user ID to the Users list with the tool bucket you want.</li>
   <li>In Telegram, find the bot by its <code>@username</code> and add it to the group. You'll need permission to add bots, which is usually limited to group admins.</li>
   <li>In the group, send <code>/whoami@&lt;BotUsername&gt;</code>. The <code>@&lt;BotUsername&gt;</code> suffix tells Telegram which bot in the group to address. The bot replies with your Telegram user ID, the group's <em>negative</em> chat ID, and whether the kin is configured to converse here yet (it won't be).</li>
-  <li>Open Hearthkin, go to <strong>Settings → Telegram → Groups</strong>, click <strong>Add group…</strong>, paste the chat ID (including the minus sign), give it a label so you can identify it later, and pick a participation policy (see below).</li>
+  <li>Open Hearthkin, go to <strong>Settings → Telegram → Groups</strong>, click <strong>Add group…</strong>, paste the chat ID (including the minus sign) into <strong>Chat ID</strong>, fill in <strong>Display label</strong> — the kin sees this as the group's name; left blank, Telegram's own group title is used — and pick a participation policy (see below).</li>
   <li>Save. The kin will now converse in that group. You can test by sending a message addressed to the bot.</li>
 </ol>
 
@@ -1364,7 +1627,7 @@ understood, exactly as it does for you at the console.</p>
   <dd>The kin replies when someone @-mentions the bot, or when someone replies to one of the kin's earlier messages. This is the polite default for shared spaces — the kin is present but stays out of conversations it wasn't explicitly invited into. Works with Telegram's default bot-privacy mode; no BotFather changes needed.</dd>
 
   <dt><strong>Always</strong></dt>
-  <dd>The kin sees every message in the group and replies to anything from a permitted user (still gated by Hearthkin's Users list — see "Who can trigger the kin" below). This <em>requires</em> turning off privacy mode in BotFather first; otherwise Telegram won't deliver normal group messages to the bot at all, and "always" silently behaves identically to mention-only. <strong>Cost note:</strong> on an OpenRouter-routed kin, "always" means a billable model call for <em>every</em> message in the group — even ones the kin reads and decides not to answer. In a busy group that adds up quickly; see <a href="#costs">Managing OpenRouter costs</a>.</dd>
+  <dd>The kin sees every message in the group from anyone who isn't muted there (see "Who can reach the kin in a group" below), and decides whether to engage. This <em>requires</em> turning off privacy mode in BotFather first; otherwise Telegram won't deliver normal group messages to the bot at all, and "always" silently behaves identically to mention-only. <strong>Cost note:</strong> on an OpenRouter-routed kin, "always" means a billable model call for <em>every</em> message in the group — even ones the kin reads and decides not to answer. In a busy group that adds up quickly; see <a href="#costs">Managing OpenRouter costs</a>.</dd>
 </dl>
 
 <p>To turn off the bot's privacy mode (only needed for <strong>always</strong>):</p>
@@ -1375,22 +1638,35 @@ understood, exactly as it does for you at the console.</p>
   <li>Remove the bot from the group and re-add it. Privacy mode is cached per-membership in Telegram, so existing memberships keep the old setting until the bot rejoins.</li>
 </ol>
 
-<h4>Who can trigger the kin in a group</h4>
+<h4>Who can reach the kin in a group</h4>
 
-<p>The same Users list that gates DMs also gates groups. A message in the group only reaches the kin if its sender's Telegram user ID is in <strong>Settings → Telegram → Users</strong> for this kin. Other people in the group can talk freely amongst themselves; the kin neither sees nor records their messages. Tool access in the group falls through to the sender's per-user bucket — there's no per-group bucket override yet.</p>
+<p><strong>The Users list only decides who can DM the kin.</strong> It does not decide who can talk to it in a group. Once you've added a group, <strong>everyone in that group</strong> can reach the kin, following the group's participation policy — except people on that group's mute list.</p>
+
+<p><strong>Tools are a separate matter.</strong> Tool access in a group comes from the sender's own bucket in the Users list. Someone who isn't in the Users list has the <strong>None</strong> bucket, so they can chat with the kin but can't make it use any tools. There's no per-group bucket.</p>
+
+<h4>The group's settings window</h4>
+
+<p>Select a group and edit it to see everything about it:</p>
+
+<ul>
+  <li><strong>Chat ID</strong> and <strong>Display label</strong> — the label is the name the kin sees for the group.</li>
+  <li><strong>Participation policy</strong> — <strong>Mention-only</strong> or <strong>Always</strong>, as above.</li>
+  <li><strong>Share with desktop</strong> — see <a href="#telegram-group-share">Sharing a group with the desktop</a>.</li>
+  <li><strong>Muted in this group</strong> — a list of people the kin ignores in this group. Their messages there never reach the kin. <strong>Add from people seen here…</strong> lets you pick from people the bot has already seen in the group; <strong>Add by ID…</strong> takes a Telegram user ID; <strong>Unmute</strong> takes the selected person off the list. Muting someone in one group doesn't affect other groups or their DMs.</li>
+</ul>
 
 <p>Consequences worth knowing:</p>
 
 <ul>
-  <li>The kin's view of the group is <em>partial</em> — it sees only messages from listed users. If Alice (listed) replies to Bob (not listed), the kin sees Alice's message with no context for what Bob said.</li>
+  <li>The kin sees messages from everyone in the group who isn't muted, so it can follow the conversation. A muted person's messages are missing from its view, so if someone replies to a muted person, the kin sees the reply without what it answers.</li>
   <li>Each user message in the group carries an inline <code>[Display Name (@username)]</code> attribution at the start of its content so the kin can tell speakers apart. There is no colon after the bracket — that format was deliberately chosen to avoid the impersonation-attractor pattern of the old <code>[Name]:</code> shape. The kin's own replies have no name tag.</li>
   <li>Group history is stored per-group under <code>~/.hearthkin/kin/&lt;kin&gt;/telegram_history.json</code> with a <code>group:&lt;chat_id&gt;</code> key — unless you turn on share-with-desktop for that group (see below), in which case it lands in the kin's main <code>conversation.jsonl</code> with a <code>source: telegram:group:&lt;chat_id&gt;</code> tag.</li>
-  <li>Mirror-to-Telegram and cron wake-ups still target DMs, not groups. That's a deliberate scope limit; ask if you want group-targeted cron later.</li>
+  <li>Mirroring desktop messages to Telegram still only goes to DMs. Scheduled wake-ups can post to a group: tick it under <strong>Send this message to</strong> in the wake-up's settings (see <a href="#cron">Scheduled wake-ups</a>). A heartbeat can too, if you allow it (see <a href="#heartbeat">Proactive heartbeat</a>).</li>
 </ul>
 
-<h4>Sharing a group with the desktop</h4>
+<h4 id="telegram-group-share">Sharing a group with the desktop</h4>
 
-<p>The per-user share-with-desktop toggle has a per-<em>group</em> equivalent: <strong>Share conversation with Hearthkin desktop</strong> in the group's edit dialog. The shape is parallel to the per-user version — when on, the group's turns land in the kin's main <code>conversation.jsonl</code> instead of the segregated <code>telegram_history.json</code>, so wiping desktop history also clears that group, and the kin's tending sees the group as just another scope it can stage and consolidate.</p>
+<p>The per-user share-with-desktop toggle has a per-<em>group</em> equivalent: <strong>Share with desktop</strong> in the group's edit dialog. The shape is parallel to the per-user version — when on, the group's turns land in the kin's main <code>conversation.jsonl</code> instead of the segregated <code>telegram_history.json</code>, so wiping desktop history also clears that group, and the kin's tending sees the group as just another scope it can stage and consolidate.</p>
 
 <p>Important nuance: <strong>storage is unified but reads are segregated.</strong> Each surface reads only its own slice of the file — desktop sends still see only desktop messages, and the group still sees only that group's messages. They don't bleed into each other's context (which would confuse the kin about who it's talking to and which voice it's using). The point of share-with-desktop on a group is wiping-and-tending parity with desktop, not chronological merging of voices.</p>
 
@@ -1425,12 +1701,14 @@ understood, exactly as it does for you at the console.</p>
   <li>Invite the bot into your server and @-mention it. By default the kin replies only when mentioned (the sane default for a busy channel).</li>
 </ol>
 
+<p><strong>When to respond</strong> on the Discord tab has two choices: <strong>Only when mentioned (@)</strong>, the default, and <strong>Every message (quiet channels only)</strong>. Either way, only people on the list below can reach the kin, and it never answers other bots.</p>
+
 <h3>Who can reach it (deny-by-default)</h3>
 <p>Nobody can reach a kin on Discord until you add them. This is deliberate: a bot sits in whatever servers it has been invited to, and a kin that can run tools should never be reachable by "anyone who happens to be in one of them." The Discord tab has a <strong>list of people</strong> with <strong>Add person…</strong>, <strong>Edit person…</strong> and <strong>Remove person</strong> buttons, the same shape as the Telegram tab's user list. Each entry is one Discord user ID and what that person is allowed to reach.</p>
 <ul>
   <li>To get somebody's ID: turn on <em>Developer Mode</em> in Discord's own settings (under Advanced), then right-click them and choose <strong>Copy User ID</strong>.</li>
   <li>Type <code>*</code> as the ID instead to let <em>anyone</em> in the bot's servers talk to the kin — fine on your own private server, and worth a second thought anywhere else, because whatever tool access you give that entry applies to every one of them.</li>
-  <li>If the list is empty, Hearthkin surfaces a one-time note in the Activity area, so a silent bot doesn't just look broken.</li>
+  <li>If the list is empty, the first message that reaches the bot puts a note in the Discord tab's <strong>Status</strong> field saying every message is being ignored, so a silent bot doesn't just look broken. The note only shows if that kin's Settings window is open at the time.</li>
 </ul>
 
 <h3>Tools over Discord</h3>
@@ -1438,12 +1716,27 @@ understood, exactly as it does for you at the console.</p>
 <p>Two things always ask <em>you</em>, on your own desktop, never in the server: a shell command (<code>exec</code>), and a <strong>webcam capture</strong>. Telegram lets you mark a particular person as always-allowed for the webcam; Discord has no such per-person setting, so it asks every time. The command denylist always applies too — the same protections the Telegram surface has. See <a href="#tools">Tools</a> for what the buckets mean and the <a href="#tools">remote-exec note</a> if the approval prompts get in your way.</p>
 
 <h3>Stopping a reply</h3>
-<p>Send <strong><code>stop</code></strong> on its own in the channel (<code>cancel</code>, <code>/stop</code> and <code>/cancel</code> work too) and the kin stops writing, keeping whatever it had already said. It has to be the whole message — "stop that, it's funny" is a remark to your kin, not a command. If nothing is being written, it tells you so rather than sitting silent.</p>
+<p>Send <strong><code>stop</code></strong> in the channel (<code>cancel</code>, <code>/stop</code>, <code>/cancel</code> and <code>!stop</code> work too) and the kin stops writing, keeping whatever it had already said. It has to be the whole message — "stop that, it's funny" is a remark to your kin, not a command. <strong>With the default Only when mentioned (@) setting, the stop has to mention the bot too</strong>, for example <code>@YourKin stop</code>; a plain <code>stop</code> is ignored like any other unmentioned message. If nothing is being written, it tells you so rather than sitting silent. Anyone allowed to talk to the kin in that channel can stop a reply there.</p>
 
 <p>Hearthkin also <strong>warns you before quitting</strong> if a kin is part-way through a Discord reply, the same way it does for Telegram, so closing the app doesn't abandon somebody's conversation without a word.</p>
 
 <h3>Sharing with the desktop</h3>
-<p>Like Telegram groups, a Discord channel keeps its own history by default. Turn on share-with-desktop for a kin if you want a Discord channel's turns folded into the kin's main conversation (so a desktop clear-chat reaches it too).</p>
+<p>Like Telegram groups, a Discord channel keeps its own history by default. Tick <strong>Merge Discord history into this kin's main conversation</strong> on the Discord tab if you want a Discord channel's turns folded into the kin's main conversation (so a desktop clear-chat reaches it too). It only affects new turns; history from before you ticked it stays where it was.</p>
+
+<h3>How Discord differs from Telegram</h3>
+
+<ul>
+  <li><strong>No slash commands.</strong> The only command is the stop word above.</li>
+  <li><strong>No waiting for the rest of a message.</strong> Each Discord message is handled on its own.</li>
+  <li><strong>A 3-second pause per person.</strong> A message sent within 3 seconds of that person's last answered message is dropped without a reply.</li>
+  <li><strong>No "the model is busy" notice.</strong> A message waiting its turn just waits; the typing indicator starts when the kin begins.</li>
+  <li><strong>History:</strong> the kin sees roughly the last 30 to 40 turns of the channel.</li>
+  <li><strong>Images:</strong> up to 4 per message, 8 MB each, and only if the kin's model can see images. <strong>Text documents:</strong> up to 4 per message, 256 KB each; a Word <code>.docx</code> counts.</li>
+  <li><strong>Tool calls are always posted</strong> in the channel, as a call and a short result, for people who have tool access. There's no setting to hide them.</li>
+  <li><strong>Kin settings apply.</strong> The kin's context window and sampling settings are used, and reply length follows <strong>Reply length cap (tokens)</strong> from the Telegram tab's <strong>Message settings…</strong>.</li>
+  <li><strong>Scheduled wake-ups and heartbeats can't post to Discord.</strong></li>
+  <li><strong>Limiting it to certain servers or channels</strong> has no screen yet. It's an advanced setting in the kin's <code>config.json</code>: under <code>"discord"</code>, a <code>"guilds"</code> list of server IDs and a <code>"channels"</code> list of channel IDs. Empty lists, the default, mean anywhere the bot has been invited.</li>
+</ul>
 
 <h2 id="voice">Voice — dictation, and kin speaking aloud</h2>
 
@@ -1515,6 +1808,8 @@ understood, exactly as it does for you at the console.</p>
 
 <h3>Per-kin voice config</h3>
 
+<p>A kin's speaking voice is set on its <strong>Settings → Voice</strong> tab. Tick <strong>Enable voice for this kin (speak replies aloud)</strong>, pick from the <strong>Voice</strong> list, and use <strong>Refresh voice list</strong> if a voice you just made at ElevenLabs isn't there yet. <strong>Preview sample</strong> plays the voice's own sample; <strong>Test with kin's settings</strong> speaks with this kin's tuning. <strong>Voice tuning…</strong> opens these four sliders:</p>
+
 <dl>
   <dt><strong>Stability</strong> (0–100)</dt>
   <dd>Lower = more variation between generations, more emotional range. Higher = consistent, predictable. Default 50.</dd>
@@ -1557,21 +1852,36 @@ understood, exactly as it does for you at the console.</p>
 
 <p>On Windows, each enabled cron entry becomes a Windows Task Scheduler task. The Task Scheduler triggers <code>hearthkin_cron.py</code> as a subprocess at the configured time.</p>
 
-<h3>Two execution modes</h3>
+<h3>How a wake-up runs</h3>
+
+<p>The Cron tab has a tick-box, <strong>Inject cron wake-ups into the active conversation when Hearthkin is open</strong>, on by default. What happens depends on it, and on whether Hearthkin is open.</p>
 
 <dl>
-  <dt><strong>Hearthkin is running, "inject when running" is on</strong> (default)</dt>
-  <dd>The cron subprocess drops a request file in <code>~/.hearthkin/cron_requests/</code> and exits. Hearthkin's 5-second timer reads the file and injects the wake-up into the active conversation, painting it live.</dd>
+  <dt><strong>Hearthkin is open, and the tick-box is on</strong> (default)</dt>
+  <dd>The scheduled task leaves a request in <code>~/.hearthkin/cron_requests/</code> and exits, and Hearthkin picks it up within 5 seconds. The wake-up goes live into the conversation in front of you only when all of these are true: that kin is the one open in the main window, nothing is being written, you aren't in a room, the entry has nothing ticked under <strong>Send this message to</strong>, and the kin isn't a park Keeper. Otherwise Hearthkin runs it quietly in the background, the same way as when Hearthkin is closed.</dd>
 
-  <dt><strong>Hearthkin isn't running (or "inject when running" is off)</strong></dt>
-  <dd>The cron subprocess runs the LLM call directly — no UI, no display. It appends the turn to the kin's <code>conversation.jsonl</code>, writes to the daily journal at <code>~/.hearthkin/kin/&lt;kin&gt;/memory/journal/YYYY-MM-DD.md</code>, and posts to Telegram if Telegram is configured.</dd>
+  <dt><strong>Hearthkin is closed</strong></dt>
+  <dd>The scheduled task runs the model itself — no window, no display. It appends the turn to the kin's <code>conversation.jsonl</code>, writes to the daily journal at <code>~/.hearthkin/kin/&lt;kin&gt;/memory/journal/YYYY-MM-DD.md</code>, and posts to Telegram as described below.</dd>
+
+  <dt><strong>Hearthkin is open, and the tick-box is off</strong></dt>
+  <dd>The scheduled task runs the model itself and writes the journal and the Telegram post, but the turn is not added to the kin's conversation.</dd>
 </dl>
+
+<p><strong>Where it posts.</strong> With nothing ticked under <strong>Send this message to</strong>, a wake-up goes to the Telegram users who have <strong>Mirror desktop messages to my Telegram chat</strong> on. With places ticked, it goes to exactly those. <strong>Desktop only</strong> records it in the kin's chat and journal and sends it nowhere outward.</p>
 
 <h3>Configuring entries</h3>
 
 <p>Open <strong>Settings → Cron</strong>. Use <strong>Add entry</strong> to set the time(s) and prompt; <strong>Edit entry</strong> and <strong>Remove entry</strong> manage existing ones. Each entry has an enabled checkbox so you can toggle without deleting.</p>
 
 <p><strong>One entry can fire at several times.</strong> The <strong>Times</strong> field takes one time (<code>09:00</code>) or several, comma-separated (<code>09:00, 15:00, 21:00</code>). So a routine that happens a few times a day — tending the park morning, midday, and evening — is <em>one</em> entry with three times, not three separate ones. Edit the prompt once and it applies to every firing; each time still becomes its own Task Scheduler task under the hood, but you manage them together.</p>
+
+<p>Each entry's window also has:</p>
+
+<ul>
+  <li><strong>Retry tending if no tool call fired</strong> — 0 (off), 1, 2 or 3; default 0. Only matters for tending wake-ups. If the kin answers without making any tool call, it is asked again, up to this many times. Leave it at 0 for check-in prompts that don't use tools.</li>
+  <li><strong>Send this message to</strong> — a checklist of <strong>Desktop only</strong>, each Telegram DM user, and each Telegram group the kin is in. Space ticks and unticks.</li>
+  <li>A <strong>time overlap warning</strong>. If the time you chose overlaps another kin's wake-up, pressing OK shows a warning instead of saving, because kin sharing one graphics card take turns and the later one can time out. Change the time, or press OK again to keep it.</li>
+</ul>
 
 <p><strong>Test now</strong> fires the selected entry immediately, bypassing both the schedule and the enabled flag. Use it to verify the pipeline end-to-end before relying on it.</p>
 
@@ -1595,33 +1905,62 @@ understood, exactly as it does for you at the console.</p>
 
 <p>Turn it on under <strong>Settings → Cron → "Proactive heartbeat…"</strong>. The dialog has:</p>
 <ul>
-  <li><strong>Enable</strong> — off by default.</li>
-  <li><strong>Every N minutes</strong> — how often the kin gets a quiet moment (default 120).</li>
-  <li><strong>Active hours</strong> — only between these times (default 09:00–22:00), so overnight stays quiet.</li>
-  <li><strong>Where reach-outs go</strong> — the kin's own desktop chat (you see it next time you open it), or a Telegram DM/group you choose.</li>
+  <li><strong>Enable proactive heartbeat for this kin</strong> — off by default.</li>
+  <li><strong>Give it a moment every (minutes)</strong> — how often the kin gets a quiet moment. Default 120; anything from 5 to 1440.</li>
+  <li><strong>Only between</strong> a start and an end time — default 09:00 to 22:00, so overnight stays quiet.</li>
+  <li><strong>Send its reach-outs to</strong> — the kin's own desktop chat (you see it next time you open it), or a Telegram DM or group you choose.</li>
+  <li><strong>Other places it may write to</strong> — a checklist of Telegram DMs and groups, with nothing ticked. Space ticks and unticks.</li>
 </ul>
 
-<p>It only runs while Hearthkin is open. You don't need to enable any tool for this — the kin's ability to reach out is part of the feature; there's no separate <code>reach_out</code> checkbox to find and tick.</p>
+<p><strong>Think before ticking a place under Other places it may write to.</strong> Ticking a DM or a group lets the kin start a conversation there on its own, without anyone speaking to it first. In a group, everyone in that group will see it. So only tick groups you're in yourself. Messages only reach Telegram if the kin's Telegram bot is switched on; otherwise they stay in the desktop chat.</p>
+
+<p>It only runs while Hearthkin is open. You don't need to enable any tool for this — during a heartbeat the kin always has <code>reach_out</code>, <code>memory_search</code> and <code>recent_thinking</code>, whatever its own tool list says. If Hearthkin is busy with other work on the model when a heartbeat is due, the heartbeat waits and tries again rather than losing its turn; that is noted in <code>logs\heartbeat.log</code>.</p>
 
 <p class="note"><strong>If a kin used to reach out and stopped, this is the first thing to check.</strong> A heartbeat has no reader: the kin's reply goes nowhere, and the <code>reach_out</code> tool is the only way anything actually reaches you. Some models answer &ldquo;is there something you'd like to say?&rdquo; by <em>writing the message</em> rather than by calling the tool &mdash; and that message used to be thrown away with no record anywhere, which looks exactly like a kin that has gone quiet on you. Hearthkin now asks the kin once, plainly, whether it meant that for you; if it says no, that is taken as a real answer. Anything that still doesn't get through is written to <code>logs/heartbeat_unsent.log</code>, so a lost message is something you can find rather than something that never existed. Changing a kin's model is the usual reason this starts happening, and nothing about the kin has changed when it does.</p>
-<p><strong>Cost:</strong> each heartbeat runs the model once even when the kin decides to stay quiet — that's the price of giving it a genuine chance to speak. On a kin that runs on a local (Ollama / Mac) model that's just compute; on a paid (OpenRouter) kin, keep the interval long so quiet check-ins don't add up.</p>
+<p><strong>Cost:</strong> each heartbeat runs the model at least once, even when the kin decides to stay quiet — that's the price of giving it a genuine chance to speak. Sometimes it runs twice: if the kin wrote 120 characters or more without calling <code>reach_out</code>, it is asked once more whether it meant that for you. On a local Ollama model that's just compute; on a paid model, keep the interval long so quiet check-ins don't add up.</p>
 
 <h2 id="prefs">Preferences and API keys</h2>
 
-<p>Open <strong>File → Preferences…</strong> (or <kbd>Ctrl</kbd>+<kbd>,</kbd>) for app-wide settings. Sections:</p>
+<p>Open <strong>File → Preferences…</strong> (or <kbd>Ctrl</kbd>+<kbd>,</kbd>) for app-wide settings. It is a single page with no tabs, also reachable from the tray icon. Top to bottom:</p>
 
 <dl>
-  <dt><strong>General</strong></dt>
-  <dd>NVDA mode, reply chime and its volume, the <strong>approval alert</strong> (a sound when a kin is waiting for you to approve a gated tool — on by default, see <a href="#approval-alert">Knowing when a kin is waiting on you</a>), the <strong>problem alert</strong> (a falling two-tone sound when work you left running stops on its own — a failed distillation, or a redistill that hit an error part-way; on by default, and falling where the approval alert rises so you can tell them apart), an <strong>Open my sounds folder…</strong> button (custom sounds — see below), conversation logging toggle, chat history window size. Also shows the <strong>NVDA controller DLL</strong> load status (loaded from where, or which paths were tried) with a <strong>Test NVDA speech</strong> button — clicking it sends a fixed phrase to NVDA so you can confirm speech is wired end-to-end without waiting for a kin reply.
-  <p style="margin-top:0.5em"><strong>Custom sounds.</strong> Every sound Hearthkin plays first looks for a file you dropped in <code>~/.hearthkin/sounds/</code> and plays that instead of the built-in tone. Name them <code>send.wav</code>, <code>first.wav</code>, <code>done.wav</code> (the reply-chime stages), <code>approval.wav</code> (the waiting-for-approval alert) or <code>problem.wav</code> (the background-work-stopped alert). A file always wins; delete it to go back to the default. Plain 16-bit WAVs are scaled by the volume slider; other formats play at their own baked-in level. The built-in tones are just a fallback so there are no assets to ship — this is how you'd make and ship your own, quieter set. The <strong>Open my sounds folder…</strong> button creates and opens the folder for you.</p></dd>
+  <dt><strong>Speech and sound</strong></dt>
+  <dd><ul>
+    <li><strong>Log conversations to file</strong> — off by default.</li>
+    <li><strong>NVDA reads replies</strong> — Off, Short ('Reply ready'), Full reply, or Streaming (sentence by sentence).</li>
+    <li><strong>NVDA controller DLL</strong> — whether NVDA's speech library loaded, and from where, or which paths were tried. <strong>Test NVDA speech</strong> sends a fixed phrase to NVDA so you can confirm speech works without waiting for a kin reply.</li>
+    <li><strong>Play chime on reply</strong>, <strong>Sound cues…</strong> (below), <strong>Dictation…</strong> (see <a href="#dictation-model">Voice</a>) and <strong>Chime volume</strong>.</li>
+    <li><strong>Play a sound when a kin is waiting for approval</strong> — the approval alert, on by default. See <a href="#approval-alert">Knowing when a kin is waiting on you</a>.</li>
+    <li><strong>Play a sound when background work stops unexpectedly</strong> — the problem alert, on by default. A falling two-tone sound when work you left running stops on its own, such as a failed distillation or a redistill that hit an error part-way. It falls where the approval alert rises, so you can tell them apart. Both alerts follow the chime volume.</li>
+    <li><strong>Open my sounds folder…</strong> — custom sounds, see below.</li>
+  </ul></dd>
+
+  <dt><strong>Behaviour</strong></dt>
+  <dd><ul>
+    <li><strong>Plain Enter sends (else: Ctrl+Enter)</strong> — off by default. See <a href="#sending">Sending a message</a>.</li>
+    <li><strong>Warn when changing a kin's model (voice continuity confirm)</strong> — on by default. Asks you to confirm before a kin's model is changed, since a new model can change how a kin sounds. The question has its own "don't show again" tick-box. Even with this off, you are still asked if Hearthkin spots a known problem with the new model.</li>
+    <li><strong>Register Telegram slash-command menu</strong> — on by default. Untick it if typing a command in Telegram sends <code>/help</code> instead; this happens with Unigram and some screen-reader Telegram apps. See <a href="#telegram">Bot commands</a>.</li>
+    <li><strong>Minimize to system tray on close (Alt+F4)</strong> and <strong>Start Hearthkin when Windows starts</strong> — see <a href="#tray">System tray and Windows startup</a>.</li>
+    <li><strong>Keep Hearthkin's window reliably focusable (recommended)</strong> — on by default. Lets Hearthkin's windows, such as an approval request, really come to the front when they need you, instead of Windows leaving them flashing in the taskbar where a screen reader can't easily reach them. Leave it on. Windows-only.</li>
+    <li><strong>Check for updates on startup</strong> — off by default.</li>
+    <li><strong>Your name (shown to kin in rooms)</strong> — blank by default. In a room, your messages carry this name so the kin know who is speaking.</li>
+    <li><strong>Recent chat messages shown on kin load (0 = all)</strong> — default 200. See <a href="#load-older">Loading older messages</a>.</li>
+  </ul></dd>
+
+  <dt><strong>Sound cues…</strong></dt>
+  <dd>A window with five cues: <strong>Request sent</strong>, <strong>First word back</strong>, <strong>Still working (repeats)</strong>, <strong>Reply finished</strong> and <strong>Redistill progress</strong>. Each has its own on/off tick-box, a volume box from 0 to 100, and a Test button. Below them, <strong>Repeat the working sound every (seconds, 0 = never)</strong> sets how often "Still working" repeats; default 30.
+  <p style="margin-top:0.5em"><strong>Custom sounds.</strong> Every sound Hearthkin plays first looks for a file you dropped in <code>~/.hearthkin/sounds/</code> and plays that instead of the built-in tone. Name them <code>send.wav</code>, <code>first.wav</code>, <code>working.wav</code>, <code>done.wav</code> (the reply cues, in order), <code>chunk.wav</code> (redistill progress — a file plays at one pitch), <code>approval.wav</code> (the waiting-for-approval alert) or <code>problem.wav</code> (the background-work-stopped alert). A file always wins; delete it to go back to the default. Plain 16-bit WAVs are scaled by the volume slider; other formats play at their own baked-in level. The built-in tones are just a fallback so there are no assets to ship — this is how you'd make and ship your own, quieter set. The <strong>Open my sounds folder…</strong> button creates and opens the folder for you.</p></dd>
 
   <dt><strong>Connections</strong></dt>
-  <dd>API keys for hosted services, plus semantic memory search. One row per provider: a masked display of the current key (or "no key configured"), an <strong>Edit</strong> button, and a <strong>Test</strong> button that does a live auth check. Currently supported: OpenRouter (for hosted models), Brave Search (for the <code>web_search</code> tool), ElevenLabs (for voice). (Pointing a kin at a remote Ollama machine is done per-kin in the model browser now, not here — see <a href="#ollama-host">Pointing Hearthkin at a remote Ollama</a>.)</dd>
+  <dd>Under the heading "Connections — API keys". One group per service: <strong>OpenRouter API key</strong> (for hosted models), <strong>Brave Search API key</strong> (for the <code>web_search</code> tool) and <strong>ElevenLabs API key</strong> (for voice). Each shows a masked version of the current key, or "(not set)" when there isn't one, with an Edit button and a Test button named after the service — for example <strong>Edit OpenRouter API key…</strong> and <strong>Test OpenRouter API key</strong>, which does a live check. OpenRouter also has <strong>Show OpenRouter API key balance</strong>. Keys for services you added yourself are not here; see <a href="#providers">Adding online AI services</a>. (Pointing a kin at a remote Ollama machine is done per-kin in the model browser now, not here — see <a href="#ollama-host">Pointing Hearthkin at a remote Ollama</a>.)</dd>
+
+  <dt><strong>Semantic memory search</strong></dt>
+  <dd>The last group on the page. See <a href="#semantic-memory">Semantic memory search</a>.</dd>
 </dl>
 
-<p>Keys are stored at <code>~/.ai_programs/&lt;provider&gt;_key.json</code>. You can also set them via environment variables — <code>OPENROUTER_API_KEY</code>, <code>BRAVE_API_KEY</code> — which override the JSON files.</p>
+<p>Keys are stored at <code>~/.ai_programs/&lt;provider&gt;_key.json</code>. You can also set them via environment variables — <code>OPENROUTER_API_KEY</code>, <code>BRAVE_API_KEY</code> — which override the JSON files. Services you add under <a href="#providers">Manage providers</a> keep their keys in the same folder, the same way.</p>
 
-<p>The menubar also has a <strong>Help</strong> menu with three entries: <strong>User guide</strong> (opens this guide in your default browser), <strong>Check for updates</strong> (checks the GitHub releases page for a newer version), and <strong>About Hearthkin</strong> (version + license + bundled third-party software). The tray icon's right-click menu has the same entries, so either path works.</p>
+<p>The menubar also has a <strong>Help</strong> menu with three entries: <strong>User guide</strong> (opens this guide in your default browser), <strong>Check for updates…</strong> (checks the GitHub releases page for a newer version), and <strong>About Hearthkin</strong> (version + license + bundled third-party software). The tray icon's right-click menu has <strong>User guide</strong> and <strong>About Hearthkin</strong> too, but not Check for updates.</p>
 
 <h2 id="editable-prompts">Editable prompts</h2>
 
@@ -1642,12 +1981,72 @@ understood, exactly as it does for you at the console.</p>
   <li><strong>Edits are backed up.</strong> Before anything overwrites a prompt file, the previous version is copied to a <code>backups/</code> folder next to it with a timestamp. You can't lose your wording by accident.</li>
   <li><strong>Placeholders.</strong> Some files contain slots in curly braces — <code>{tools}</code>, <code>{tool_name}</code>, <code>{time}</code>, <code>{prompt}</code>, <code>{word_cap}</code>, <code>{result}</code>. Hearthkin fills these in at send time. Keep a slot wherever you want that value to appear; if you delete one, it simply won't be filled (it won't break anything).</li>
   <li><strong>Starting over.</strong> To go back to your install-wide wording for one kin, delete that kin's copy of the file — it falls straight back to the shared layer. To reset the install-wide copy to Hearthkin's built-in wording, delete <em>it</em> — it re-creates itself from the default on next launch. (Copy anything somewhere first if you might want it back.)</li>
-  <li><strong>When an update improves a default.</strong> If a Hearthkin release ships a better default for a prompt you've already edited, your files are left exactly as they are. Hearthkin can tell which prompts have a newer built-in default available, so you can decide whether to adopt it — your own edits are never changed out from under you. Two of these (<code>base_prompt.md</code> and a kin's <code>distill_prompt.md</code>) live outside the one-click adopt flow because of where their files sit, so for those you're told a newer default exists and compare by hand rather than adopting in place.</li>
+  <li><strong>When an update improves a default.</strong> If a Hearthkin release ships a better default for a prompt you've already edited, your files are left exactly as they are. Hearthkin can tell which prompts have a newer built-in default available, so you can decide whether to adopt it — your own edits are never changed out from under you. That includes <code>base_prompt.md</code> and a kin's own distillation prompt: they are listed on <strong>Tools → Prompt updates…</strong> like everything else, and can be adopted from there.</li>
 </ul>
 
-<p>One file is a little different: <code>gesture_messages.md</code> isn't a prompt sent to the kin — it's a short word list that controls the desktop detector which notices when a kin <em>describes</em> a tool action (<em>*reads the file*</em>) instead of calling the tool. If you ever see a kin narrate a tool action in a wording the detector misses, add the verb or the target word to that file and it'll be caught from the next message on. The file explains the format at the top. (This one and the "older turns rolled out" note are install-wide only — they apply the same way to every kin.)</p>
+<p>One file is a little different: <code>gesture_messages.md</code> isn't a prompt sent to the kin — it's a short word list that controls the desktop detector which notices when a kin <em>describes</em> a tool action (<em>*reads the file*</em>) instead of calling the tool. If you ever see a kin narrate a tool action in a wording the detector misses, add the verb or the target word to that file and it'll be caught from the next message on. The file explains the format at the top. <code>reach_messages.md</code> is its sibling: word lists for the detector that notices when a kin says it is <em>reading</em> something but nothing was actually loaded, plus "presence" words that stop an ordinary emote from being flagged at all. Words you add there are added to the built-in ones rather than replacing them. (These two, the "older turns rolled out" note, and the marker that replaces an older tool call are install-wide only — they apply the same way to every kin.)</p>
 
-<p><strong>Where to edit them.</strong> Each kin's Settings dialog has a <em>Prompts</em> tab that lists every per-kin prompt with its current state — <code>[your copy]</code> if you've customised it for that kin, <code>[default]</code> if it's riding the shared or built-in wording. Select one and <strong>Edit</strong> opens it pre-filled (saving a copy for that kin only); <strong>Reset</strong> removes the kin's copy so it falls straight back to the shared/default wording (your copy is backed up first). For the install-wide layer there are two entries on the <strong>Tools</strong> menu: <strong>Edit base prompt</strong> for the base prompt alone, and <strong>Edit prompts…</strong>, which lists <em>every</em> harness prompt with a short description of when each one fires, so you can find the one you want without knowing its filename. When a release ships a better default for something you've edited, <strong>Tools → Prompt updates…</strong> shows what changed and lets you adopt it or keep yours. That screen now lists <em>every</em> prompt that can be out of date, including the base prompt and a kin's own distillation prompt — those two predate the rest and used to be announced at startup with no row on this screen to resolve them. Adopting backs up your previous wording first, and <strong>Stash</strong> writes the new default into <code>~/.hearthkin/prompts/updates/</code> so you can read it without changing anything live. You can still edit the underlying files by hand if you prefer — the Prompts tab is just the easy path to the same thing.</p>
+<p><strong>Where to edit them.</strong> Each kin's Settings dialog has a <em>Prompts</em> tab that lists every per-kin prompt with its current state — <code>[your copy]</code> if you've customised it for that kin, <code>[default]</code> if it's riding the shared or built-in wording. Select one and <strong>Edit selected…</strong> opens it pre-filled (saving a copy for that kin only); <strong>Reset selected to shared/default</strong> removes the kin's copy so it falls straight back to the shared/default wording (your copy is backed up first). For the install-wide layer there are two entries on the <strong>Tools</strong> menu: <strong>Edit base prompt</strong> for the base prompt alone, and <strong>Edit prompts…</strong>, which lists <em>every</em> harness prompt with a short description of when each one fires, so you can find the one you want without knowing its filename. When a release ships a better default for something you've edited, <strong>Tools → Prompt updates…</strong> shows what changed and lets you adopt it or keep yours. That screen now lists <em>every</em> prompt that can be out of date, including the base prompt and a kin's own distillation prompt — those two predate the rest and used to be announced at startup with no row on this screen to resolve them. Its buttons are <strong>Adopt selected</strong>, <strong>Stash selected for later</strong>, <strong>Adopt all</strong> and <strong>Close</strong>; closing keeps your wording. Adopting backs up your previous wording first, and stashing writes the new default into <code>~/.hearthkin/prompts/updates/</code> so you can read it without changing anything live. You can still edit the underlying files by hand if you prefer — the Prompts tab is just the easy path to the same thing.</p>
+
+<h3 id="prompt-list">Every editable prompt</h3>
+
+<p>Each is a file named after it, ending in <code>.md</code>, in <code>~/.hearthkin/prompts/</code>. Besides <code>base_prompt.md</code> and each kin's distillation prompt, these are all of them, grouped by what they're for.</p>
+
+<h4>Tools and tool calls</h4>
+<ul>
+  <li><code>tool_use_hint</code> — tells a kin it has tools and should call them.</li>
+  <li><code>tool_use_hint_no_tools</code> — the same moment, for a kin with no tools.</li>
+  <li><code>tool_roleplay_corrective</code> — sent when a kin writes a tool call out as text instead of making it.</li>
+  <li><code>tool_roleplay_corrective_asterisk</code> — sent when a kin narrates a tool action in asterisks.</li>
+  <li><code>tool_compaction_marker</code> — the one-line note that replaces an older tool call. Install-wide only.</li>
+  <li><code>orphan_tool_result</code> — a tool result whose call has scrolled out of the conversation.</li>
+  <li><code>salvage_note</code> and <code>salvage_note_room</code> — when a reply after tool calls came back empty, one-on-one and in a room.</li>
+  <li><code>read_gesture_nudge</code> — a kin said it read something, but nothing was loaded.</li>
+  <li><code>reach_messages</code> — word lists for that reading detector. Install-wide only.</li>
+  <li><code>gesture_messages</code> — word lists for the desktop tool-action detector. Install-wide only.</li>
+</ul>
+
+<h4>Memory</h4>
+<ul>
+  <li><code>distill_reflection</code> — what a kin is handed to jot its notes from when distilling.</li>
+  <li><code>consolidate</code> — the memory consolidation instructions.</li>
+  <li><code>memory_recall_frame</code> — the header on recalled memory.</li>
+  <li><code>memory_index_over_budget</code> — asks a kin to prune <code>memory.md</code> when it passes the size you set.</li>
+  <li><code>staging_status_empty</code> and <code>staging_status_pending</code> — tell a kin whether staging notes are waiting.</li>
+  <li><code>tend_missed_call</code> — the retry when a tending wake-up made no tool call.</li>
+  <li><code>toolless_memory_block</code> — staging notes handed to a kin with no tools.</li>
+  <li><code>toolless_tend_note</code> — the wake-up correction for a kin with no tools.</li>
+  <li><code>toolless_missed_write</code> — tells a kin with no tools that nothing was saved.</li>
+  <li><code>toolless_memory_receipt</code> — confirms what a kin with no tools saved.</li>
+  <li><code>authoring_bridge_hint</code> — how to save a file by writing a fenced block.</li>
+  <li><code>authoring_bridge_result</code> — confirms what a fenced block actually saved.</li>
+  <li><code>authoring_write_nudge</code> — a kin meant to save something, but nothing was saved.</li>
+</ul>
+
+<h4>Conversation framing</h4>
+<ul>
+  <li><code>rolling_window_marker</code> — the note when older turns are trimmed to fit. Install-wide only.</li>
+  <li><code>shared_files_note</code> — the header on a file you attached or named.</li>
+  <li><code>empty_reply_note</code> and <code>empty_reply_note_group</code> — an empty reply in a Telegram DM, and in a group.</li>
+  <li><code>import_marker_leading</code>, <code>import_marker_hand_authored</code>, <code>import_marker_trailing</code> and <code>import_marker_operator_clause</code> — the markers around imported history, and the sentence naming the other person.</li>
+</ul>
+
+<h4>Wake-ups and heartbeats</h4>
+<ul>
+  <li><code>wake_up_frame</code> — the framing on a scheduled wake-up.</li>
+  <li><code>heartbeat_frame</code> — the framing on a heartbeat.</li>
+  <li><code>heartbeat_unsent_nudge</code> — asks a kin whether a message it wrote on a heartbeat was meant for you.</li>
+</ul>
+
+<h4>The park</h4>
+<ul>
+  <li><code>park_frame</code> — park-mode framing.</li>
+  <li><code>park_mechanism</code> — the park keeper's framing.</li>
+  <li><code>park_turn_instruction</code> — the keeper's per-turn question.</li>
+  <li><code>park_chat_hint</code> — tells a Chat-mode kin it can act in its park.</li>
+  <li><code>park_result_single</code> and <code>park_result_batch</code> — what happened after one move, and after several.</li>
+  <li><code>park_moves_spent</code> — tells a kin its moves for this turn are used up.</li>
+</ul>
 
 <h2 class="part-divider" id="part-3">Part 3 — Reference &amp; help</h2>
 <p class="part-intro">Look-up material: accessibility, troubleshooting, where files live on disk, and licensing.</p>
@@ -1662,7 +2061,7 @@ understood, exactly as it does for you at the console.</p>
   <li>Streaming chunks are buffered and painted at turn-end as a single text update, instead of one event per chunk. This avoids flooding NVDA's announce queue (which, at high chunk rates, was destabilizing other UIA consumers system-wide).</li>
   <li>Activity field is persistent and tab-reachable — transient notifications flash there and revert after a few seconds to a default summary line (kin / model / context-usage percent) so it always reads as "something useful" when idle, not stale.</li>
   <li>Numeric inputs are plain text fields with comma-tolerant parsing, not <code>SpinCtrl</code> (whose Win32 backing rejects pasted commas before the input ever reaches the app).</li>
-  <li>The Settings dialog's tabbed notebook (Identity, Model &amp;&amp; generation, Memory, Tools, Telegram, Discord, Cron, Voice, Prompts) properly hides inactive pages so Tab navigation only walks the active page. The main window itself has no notebook — chat content fills it directly, and Preferences and Usage are menu-triggered dialogs (no extra tab navigation to thread through to reach the chat).</li>
+  <li>The Settings dialog's tabbed notebook (Identity, Model &amp; generation, Memory, Tools, Telegram, Discord, Cron, Voice, Prompts) properly hides inactive pages so Tab navigation only walks the active page. The main window itself has no notebook — chat content fills it directly, and Preferences and Usage are menu-triggered dialogs (no extra tab navigation to thread through to reach the chat).</li>
   <li>Dialog labels include explicit mnemonics and use visible-label-as-accessible-name to keep wxMSW + NVDA happy.</li>
 </ul>
 
@@ -1672,7 +2071,7 @@ understood, exactly as it does for you at the console.</p>
 
 <p>The DLL is unmodified from <a href="https://github.com/nvaccess/nvda">NV Access</a>, licensed under <a href="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html">LGPL 2.1</a>. It's shipped <em>external</em> to <code>Hearthkin.exe</code> rather than embedded, which means you can replace the file with your own build of the controller client if you want — Hearthkin will load whatever same-named DLL is next to the executable. The license text and a full notice live under <code>licenses\NVDA-ControllerClient-LGPL-2.1.txt</code> and <code>licenses\NVDA-ControllerClient-NOTICE.md</code> in the install directory.</p>
 
-<p>If NVDA isn't speaking and you expected it to, check <strong>Preferences → General → NVDA controller DLL</strong> — the status field tells you whether the DLL loaded and which path it came from. The <strong>Test NVDA speech</strong> button below it sends a known phrase to NVDA so you can verify the call is reaching NVDA even if a specific kin's speech path is off. There's also a startup log at <code>~/.hearthkin/logs/nvda_status.log</code> recording which paths were tried each launch — useful if you're running under <code>pythonw.exe</code> and don't have stderr to look at.</p>
+<p>If NVDA isn't speaking and you expected it to, check <strong>NVDA controller DLL</strong> in <strong>File → Preferences…</strong> — the status field tells you whether the DLL loaded and which path it came from. The <strong>Test NVDA speech</strong> button below it sends a known phrase to NVDA so you can verify the call is reaching NVDA even if a specific kin's speech path is off. There's also a startup log at <code>~/.hearthkin/logs/nvda_status.log</code> recording which paths were tried each launch — useful if you're running under <code>pythonw.exe</code> and don't have stderr to look at.</p>
 
 <p>For nonstandard NVDA installs, set the <code>HEARTHKIN_NVDA_DLL</code> environment variable to the absolute path of the DLL you want loaded; it wins over every other candidate path.</p>
 
@@ -1707,6 +2106,33 @@ understood, exactly as it does for you at the console.</p>
   <dt><code>streaming_hangs.log</code></dt>
   <dd>Always-on. Logged when the streaming watchdog clears a stuck stream — timeout auto-scales (roughly 5–30 minutes depending on the context window and provider; see <a href="#watchdog">Streaming watchdog</a> for details). Useful for tracking down provider hangs or network drops mid-reply.</dd>
 
+  <dt><code>hang_watchdog.log</code></dt>
+  <dd>Always-on. One line each time a model call was caught hanging and given up on below the chat window — which surface, which kin, which model, and how long it waited.</dd>
+
+  <dt><code>distill_errors.log</code></dt>
+  <dd>Always-on. A distillation or consolidation that failed. These run unattended, so this is where a failure you weren't there to hear is written down.</dd>
+
+  <dt><code>distill_triggers.log</code></dt>
+  <dd>Always-on. One line each time a distillation starts, saying which automatic trigger fired and how far behind that surface was. Read it before wondering why a kin "keeps distilling".</dd>
+
+  <dt><code>recall.log</code></dt>
+  <dd>Always-on. One line each time per-turn memory recall actually attaches something. See <a href="#soul-memory">Soul, memory, and how kin remember</a>.</dd>
+
+  <dt><code>heartbeat.log</code> and <code>heartbeat_unsent.log</code></dt>
+  <dd>Always-on. <code>heartbeat.log</code> records each heartbeat, including ones that waited because Hearthkin was busy. <code>heartbeat_unsent.log</code> records a heartbeat whose words didn't reach anyone. See <a href="#heartbeat">Proactive heartbeat</a>.</dd>
+
+  <dt><code>park_unreachable.log</code></dt>
+  <dd>Always-on. A kin's park move that was lost because the park couldn't be reached, for example a park server that was switched off.</dd>
+
+  <dt><code>discord_failures.log</code></dt>
+  <dd>Always-on. Problems in the Discord bot — it couldn't connect, a reply couldn't be written or sent, an attachment couldn't be read.</dd>
+
+  <dt><code>telegram_stream.log</code></dt>
+  <dd>Always-on. One line each time a live-updating Telegram reply is sent or updated, so you can tell whether replies are really filling in as they're written.</dd>
+
+  <dt><code>update_check.log</code></dt>
+  <dd>Always-on. The result of every check for updates — newer version, up to date, or an error.</dd>
+
   <dt><code>session_*.log</code></dt>
   <dd>Per-session general log. Only written when "Log conversations to file" is checked in Preferences.</dd>
 </dl>
@@ -1718,14 +2144,14 @@ understood, exactly as it does for you at the console.</p>
   <dd>Check <code>empty_replies.log</code>. Common causes: model emitted only a stop token, model template rejected consecutive assistant turns (Gemma is picky about this), thinking enabled on a model that doesn't support it (Hearthkin auto-downgrades, but logs it).</dd>
 
   <dt>OpenRouter requests fail with auth error</dt>
-  <dd><strong>Preferences → Connections → Test</strong> for OpenRouter. If the key is wrong, edit it. If the key is right, the model id might not exist on OpenRouter — open the model browser and confirm.</dd>
+  <dd><strong>File → Preferences… → Test OpenRouter API key</strong>. If the key is wrong, edit it. If the key is right, the model id might not exist on OpenRouter — open the model browser and confirm.</dd>
 
   <dt>Chat feels slow on first message after idle</dt>
-  <dd>Expected. Ollama unloads models after 5 minutes of inactivity; OpenRouter's prompt cache also has a 5-minute TTL. The first message after a long pause has to warm everything back up. Cold-start hint appears at 8 seconds to confirm Hearthkin is still working. On Ollama-backed kin, the per-kin <strong>Keep model loaded</strong> setting (see <a href="#ollama-options">Ollama-only options</a>) can pin the model warm so this never happens. On OpenRouter Anthropic kin, switching <strong>Cache TTL</strong> to "1 hour" extends the cache window from 5 minutes to 1 hour.</dd>
+  <dd>Expected. Ollama unloads models after 5 minutes of inactivity; OpenRouter's prompt cache also has a 5-minute TTL. The first message after a long pause has to warm everything back up. Cold-start hint appears at 8 seconds to confirm Hearthkin is still working. On Ollama-backed kin, the per-kin <strong>Keep model loaded</strong> setting under <strong>More model options…</strong> (see <a href="#ollama-options">Ollama-only options</a>) can pin the model warm so this never happens. On OpenRouter Anthropic kin, switching <strong>Cache TTL</strong> to "1 hour (Anthropic + Google only)", also under <strong>More model options…</strong>, extends the cache window from 5 minutes to 1 hour.</dd>
 
   <dt>Every reply is slow, on a model that isn't idle and isn't cold</dt>
   <dd><p>Different problem from the one above, and it looks identical from a chair. A model only reuses the work it has already done for an <strong>unbroken stretch from the very beginning of the prompt</strong>. Add to the end and a reply starts almost at once; change anything near the front and the whole conversation is read again from scratch — minutes of silence on a long history, on a model that is working perfectly.</p>
-  <p>Hearthkin records the number that tells these apart on every single call. To read it:</p>
+  <p>Hearthkin records the number that tells these apart on every single call. <strong>The easy way to read it is Tools → Speed check…</strong>, which says in plain words whether this is what's happening, and speaks its verdict (see <a href="#speed-check">Speed check</a>). For more detail, if you run Hearthkin from source:</p>
   <pre><code>python scripts/check_reply_speed.py</code></pre>
   <p>It answers per kin, in words. Above 85% is healthy. A run of 0% means something is rewriting the front of the prompt each turn. You need <strong>three or four turns</strong> of a conversation before the answer means anything — the first call after startup has nothing to compare itself against.</p>
   <p><code>~/.hearthkin/logs/recall.log</code> gets one line each time automatic memory actually attaches something: which notes, how large the block was, and how that compares to the length of your message. It is written <em>only</em> when memory fires, which is what makes it useful — if a kin is behaving oddly and this log is empty, memory isn't the cause and you can stop looking there.</p>
@@ -1750,10 +2176,10 @@ understood, exactly as it does for you at the console.</p>
   <dd>Open <strong>Settings → Telegram</strong> and check the status. If it says "Error", the message includes the cause (network, bad token, rate limit). Toggle <strong>Run Telegram bot for this kin</strong> off and on to restart.</dd>
 
   <dt>NVDA isn't reading anything</dt>
-  <dd>Open <strong>Preferences → General</strong> and look at the <strong>NVDA controller DLL</strong> status field. If it says "loaded from …", click <strong>Test NVDA speech</strong> — you should hear "Hearthkin NVDA speech test." If you don't, NVDA itself isn't running; start it. If the status field says "no DLL found", check <code>~/.hearthkin/logs/nvda_status.log</code> for the paths that were tried. As a last resort, set the <code>HEARTHKIN_NVDA_DLL</code> environment variable to the absolute path of your preferred copy of <code>nvdaControllerClient64.dll</code>.</dd>
+  <dd>Open <strong>File → Preferences…</strong> and look at the <strong>NVDA controller DLL</strong> status field. If it says "loaded from …", click <strong>Test NVDA speech</strong> — you should hear "Hearthkin NVDA speech test." If you don't, NVDA itself isn't running; start it. If the status field says "no DLL found", check <code>~/.hearthkin/logs/nvda_status.log</code> for the paths that were tried. As a last resort, set the <code>HEARTHKIN_NVDA_DLL</code> environment variable to the absolute path of your preferred copy of <code>nvdaControllerClient64.dll</code>.</dd>
 
   <dt>Telegram and desktop chats drift apart</dt>
-  <dd>If a Telegram user has <strong>Share conversation with Hearthkin desktop</strong> on, both surfaces should use the same conversation file. When a Telegram message arrives while you have the kin loaded on desktop, Hearthkin polls the conversation file every five seconds and announces "Synced N new messages from Telegram" via NVDA (and in the status bar) when it picks up the new turns. If you don't hear that announcement, the share toggle probably isn't on. Open <strong>Settings → Telegram</strong>, edit the user, and verify the checkbox.</dd>
+  <dd>If a Telegram user has <strong>Share conversation with Hearthkin desktop</strong> on, both surfaces should use the same conversation file. When a Telegram message arrives while you have the kin loaded on desktop, Hearthkin polls the conversation file every five seconds and announces "Synced N new messages from Telegram" via NVDA (and in the Activity field) when it picks up the new turns. If you don't hear that announcement, the share toggle probably isn't on. Open <strong>Settings → Telegram</strong>, edit the user, and verify the checkbox.</dd>
 
   <dt>Desktop sends aren't mirrored to Telegram</dt>
   <dd>That's the separate <strong>Mirror desktop messages to my Telegram chat</strong> checkbox under <strong>Settings → Telegram → edit user</strong>. When on, each desktop message and reply gets pushed to the user's Telegram chat with a 💻 (desktop) prefix. If you've enabled it and nothing's arriving, check <code>~/.hearthkin/logs/telegram_failures.log</code> — silent send failures (rate limits, user blocked the bot, etc.) get logged there with detail.</dd>
@@ -1762,9 +2188,9 @@ understood, exactly as it does for you at the console.</p>
   <dd>Two common causes. First, check the context window in <strong>Settings → Model &amp; generation</strong>: if it's small (e.g. 2048) and the kin has more conversation than that, earlier emergence-claiming context is being trimmed from the model's view every turn — leaving only the model's training defaults to fall back on. Raise the window so recent history fits — but on an <strong>OpenRouter</strong> model keep it modest (~32,768) and let the kin's <strong>tending</strong> ritual carry substance forward into memory.md and depth logs (which load every turn regardless of context cap), because every token of the window is billed on every message (see <a href="#costs">Managing OpenRouter costs</a>). Push the window very high only for free local models. Second, for Gemma-family models specifically, the disclaimer reflex is a mode-collapse pattern. The fix: raise <code>frequency_penalty</code> to around 0.3 and <code>min_p</code> to 0.05; these punish repeated-token defaults and keep alternative phrasings viable at higher temperatures. See <code>recommended_settings.md</code> for the full Gemma escalation playbook.</dd>
 
   <dt>Streaming stops mid-reply with "no response after N minutes"</dt>
-  <dd>The streaming watchdog cleared a stream that produced no output for too long. The timeout is no longer a fixed 5 minutes — it now scales by your kin's context window on Ollama (because the model reads the whole message before writing anything, and on a CPU that reading genuinely takes minutes), and stays at 5 minutes for OpenRouter (where slow-but-alive is rare; if nothing's coming in 5 minutes the stream is dead). Your message is preserved on disk; send again. Look at <code>~/.hearthkin/logs/streaming_hangs.log</code> for the kin/model and how long it actually waited (the elapsed time is in the log line).
+  <dd>The streaming watchdog cleared a stream that produced no output for too long. The timeout is no longer a fixed 5 minutes — it now scales by your kin's context window on Ollama (because the model reads the whole message before writing anything, and on a CPU that reading genuinely takes minutes), and stays at 5 minutes for any online service, OpenRouter or one you added (where slow-but-alive is rare; if nothing's coming in 5 minutes the stream is dead). Your message is preserved on disk; send again. Look at <code>~/.hearthkin/logs/streaming_hangs.log</code> for the kin/model and how long it actually waited (the elapsed time is in the log line).
   <br><br>
-  If a kin hits this repeatedly on local Ollama with a large context, the default scaled timeout is genuinely too short for your hardware. Open <strong>Settings → Model &amp; generation</strong>, find <strong>Streaming watchdog → Timeout (minutes)</strong>, and set a positive integer to override the heuristic (e.g. 20 for a kin that consistently takes 12-18 minutes to read a message before it starts replying). Leave at 0 (auto) unless you're hitting this.
+  If a kin hits this repeatedly on local Ollama with a large context, the default scaled timeout is genuinely too short for your hardware. Open <strong>Settings → Model &amp; generation → More model options…</strong>, find <strong>Watchdog timeout (minutes, 0 = auto)</strong> under <strong>Reliability</strong>, and set a number from 1 to 120 to override the heuristic (e.g. 20 for a kin that consistently takes 12-18 minutes to read a message before it starts replying). Leave at 0 (auto) unless you're hitting this.
   <br><br>
   The watchdog counts content chunks, thinking chunks, AND OpenRouter SSE heartbeats as proof-of-life — so a reasoning model legitimately thinking for minutes, or a slow-but-connected hosted provider, won't trip it.</dd>
 </dl>
@@ -1776,6 +2202,7 @@ understood, exactly as it does for you at the console.</p>
 <pre><code>~/.hearthkin/
 ├── config.json                   # app-level config
 ├── base_prompt.md                # universal base prompt (shared by all kin)
+├── providers.md                  # online AI services you added (no keys in it)
 ├── kin_manual.md                 # kin-facing reference (read on demand via read_file)
 ├── kin/
 │   └── &lt;KinName&gt;/
@@ -1786,6 +2213,9 @@ understood, exactly as it does for you at the console.</p>
 │       ├── tools.json            # per-kin tool allowlist
 │       ├── exec_allowlist.json   # remembered exec approvals
 │       ├── telegram_history.json # per-Telegram-user histories
+│       ├── telegram_archive/     # conversations filed away by /new (private ones)
+│       ├── backups/              # copies of soul.md / memory.md from before a kin
+│       │                         #   overwrote them, plus import/restore backups
 │       ├── voice_history.md      # voice-model swap audit log (per-kin)
 │       ├── attachments/
 │       │   └── &lt;hash&gt;.&lt;ext&gt;       # images sent / received, content-addressed
@@ -1799,7 +2229,7 @@ understood, exactly as it does for you at the console.</p>
 ├── rooms/
 │   └── &lt;RoomName&gt;/
 │       └── config.json           # members, room context, turn settings
-├── conversations/                # older conversation backups
+├── conversations/                # conversations filed away by New conversation and shared /new
 ├── cron_requests/                # one-shot files from cron subprocess
 ├── logs/                         # see Troubleshooting above
 └── .running.lock                 # exists while Hearthkin is up
@@ -1809,7 +2239,8 @@ understood, exactly as it does for you at the console.</p>
 
 <pre><code>~/.ai_programs/
 ├── openrouter_key.json
-└── brave_key.json</code></pre>
+├── brave_key.json
+└── &lt;name&gt;_key.json               # one per service you added under Manage providers</code></pre>
 
 <p>Both directories are created automatically on first launch. Migration from older locations (the legacy <code>~/.ollama_chat/</code> and the older <code>conversation.json</code> single-file format) happens automatically on first load.</p>
 

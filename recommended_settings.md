@@ -50,11 +50,14 @@ a Claude-Opus dataset, so it carries a Claude-ish warmth and reasoning.
     context means a long wait before it speaks.
   - Occasionally returns an empty reply (Hearthkin logs + handles it).
   - Uncensored means uncensored — it won't refuse dark or NSFW material.
-- **Running several kin on it (recommended — one model, many kin):** on the
-  Ollama host set `OLLAMA_NUM_PARALLEL=2` (or higher — it's "how many kin stay
-  warm at once"), plus `OLLAMA_KV_CACHE_TYPE=q8_0` and
-  `OLLAMA_FLASH_ATTENTION=1` so the extra warm slots stay cheap. Then switching
-  between kin is instant instead of a 4-minute cold re-read each time.
+- **Running several kin on it (one model, many kin):** on the Ollama host,
+  `OLLAMA_KV_CACHE_TYPE=q8_0` and `OLLAMA_FLASH_ATTENTION=1` help — the first
+  halves the memory the conversation cache uses, the second is faster with
+  identical replies. **Don't count on `OLLAMA_NUM_PARALLEL` to keep several kin
+  warm at once.** On Ollama 0.30.10 the server read the setting, but the model
+  still loaded with a single slot, and two requests queued one behind the
+  other. So switching between kin (or surfaces) still costs a cold re-read.
+  The measurements are in `docs/troubleshooting.md`.
 
 ## qwen2.5:7b-instruct
 - **Size:** 7.6B params (Q4_K_M)
@@ -203,7 +206,10 @@ a paid one, check `num_ctx` — it carries its old (often huge) value over.
 # OpenRouter models
 
 These are hosted models reached via `openrouter/<provider>/<name>`.
-Settings differ from local Ollama because each provider's API has
+A provider you add yourself (Manage providers… in the model browser, or
+a line in `providers.md`) names its models `<name>/<model id>` instead,
+where `<name>` is what you called the provider. The notes below were
+written against OpenRouter. Settings differ from local Ollama because each provider's API has
 its own conventions, and OpenRouter normalizes the OpenAI-shape
 parameters across them.
 
@@ -266,8 +272,11 @@ terms of how creative the output reads.
     filter error rather than a normal reply — distinguishable from
     a model failure.
   - Citations / web-grounding features in Google's native API are
-    NOT exposed via OpenRouter. If you need those, use Google's
-    API directly (Hearthkin doesn't support that path).
+    NOT exposed via OpenRouter. Google also offers an OpenAI-compatible
+    endpoint, `https://generativelanguage.googleapis.com/v1beta/openai/`,
+    which can be added in Hearthkin as a provider with your Google key.
+    That hasn't been tested with Hearthkin, and it may not expose
+    those features either.
 
 ## Claude family (Anthropic) — via openrouter/anthropic/...
 
@@ -288,7 +297,8 @@ shape parameter defaults work fine. Hearthkin's app defaults
   is a concern.
 - **Audio**: NOT supported. Claude is text + vision only.
 - **Prompt caching**: works as designed and SHOULD be on for any kin
-  on Anthropic — Settings → Model & generation → "Use prompt caching."
+  on Anthropic — Kin settings → Model & generation → More model
+  options… → "Use prompt caching (when supported)."
   ~10x savings on input-token re-bills for repeated context.
 - **No min-p**: ignored.
 - **Watch for**: tool calls with `content: null` historically caused

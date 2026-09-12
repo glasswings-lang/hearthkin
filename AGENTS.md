@@ -1,9 +1,11 @@
 # AGENTS.md — working norms for Hearthkin
 
 Conventions any agent (or human) must follow when changing this codebase. This
-is the short, mandatory list. `CLAUDE.md` is the long-form "why" and history;
-`docs/architecture.md` is the structural map. Read those for depth — this file
-is the rules you don't get to skip.
+is the short, mandatory list. **`CLAUDE.md` is the authoritative, current rules
+file** — where this file and it disagree, `CLAUDE.md` wins. `docs/lessons.md`
+holds the long account behind each of its rules, and `docs/architecture.md` is
+the structural map. Read those for depth — this file is the rules you don't get
+to skip.
 
 ## Commands
 
@@ -12,7 +14,8 @@ is the rules you don't get to skip.
   though the frame's code lives in `frame/`.
 - **Tests:** `python tests/run_all.py` — plain-Python, no pytest. **The suite
   must be green before any change is considered done.** Each `tests/test_*.py`
-  is standalone and runnable on its own.
+  is standalone and runnable on its own; one that builds wx windows runs via
+  `python tests/_gui_runner.py <file>`.
 - **Build a release:** `build.bat` (PyInstaller onedir → `dist/Hearthkin/`).
   Don't hand-bump `app_version.py`; the build stamps the version from the git
   tag.
@@ -20,7 +23,10 @@ is the rules you don't get to skip.
 ## Architecture in one breath
 
 `llm_backend.chat()` is the single choke point every surface goes through
-(Ollama vs OpenRouter, streaming, message normalization, the tool loop). The
+(Ollama or a hosted provider, streaming, message normalization, the tool loop).
+Hosted providers are a registry — `api_providers()` merges the built-ins with
+`~/.hearthkin/providers.md` — and a model carrying a registered prefix is
+hosted: ask `is_hosted_model(model)`, not `startswith("openrouter/")`. The
 `Hearthkin(wx.Frame)` class is assembled in `hearthkin.pyw` (just `__init__` +
 `main()` + the class declaration) from concern mixins in `frame/`; shared
 module-level imports/constants/helpers live in `frame_shared.py`. Data layer is
@@ -38,11 +44,15 @@ regressions are correctness bugs.
   system-level cascade, not a UX nit: one MSAA/UIA event per chunk corrupts
   NVDA's event queue and damages *other* apps on the machine. Buffer streaming
   into `self._stream_buf` and paint once at turn-end. This applies to every
-  `_on_*_chunk` path. If you ever need visible streaming, gate it behind a
-  config toggle that defaults off.
+  `_on_*_chunk` path. No visible live-typing either, not even behind a
+  toggle — the streaming loop is calm by design (`CLAUDE.md`, "What not to
+  do").
 - **Every control must be reachable by Tab.** Object-navigation is a workaround,
-  not an accessibility solution. Use `wx.TextCtrl` (read-only when needed) over
-  `wx.StaticText` for anything the user must find. Use `dialogs._shared._IntField`
+  not an accessibility solution. Use `wx.TextCtrl` over `wx.StaticText` for
+  anything the user must find, and when it's read-only make it
+  `TE_MULTILINE | TE_READONLY` — a single-line read-only TextCtrl is not
+  keyboard-focusable on wxMSW. Speak a result that arrives while focus is
+  elsewhere. Use `dialogs._shared._IntField`
   (a validated `wx.TextCtrl`) for numeric inputs, never `wx.SpinCtrl` (it floods
   NVDA and its Win32 `ES_NUMBER` rejects comma-formatted pastes).
 - **A button's accessible name is its visible label** on wxMSW — `SetName()` is
@@ -53,10 +63,20 @@ regressions are correctness bugs.
   child from `SetName` — prefer plain `TextCtrl` + buddy label.
 - **Tab order = widget CONSTRUCTION order**, not sizer order. Reorder the
   constructor calls to fix tab placement.
-- **Hide-and-disable inactive selectors** rather than greying them out — a
-  greyed control still sits in the tab walk and confuses.
+- **Switching MODES: hide AND disable the inactive mode's controls** rather
+  than greying them out — a greyed control still sits in the tab walk and
+  says "unavailable" without saying why. `_apply_mode_visibility` (kin vs room
+  header) does both, because `Hide()` alone doesn't reliably leave the tab
+  walk. Two cases this is NOT: inside a `wx.Notebook`, the notebook already
+  hides inactive pages, so don't `Disable()`/`Show()` widgets there; and
+  transient state within one task (a picker that matters only sometimes)
+  stays present and says it's inconsequential, because a control that
+  appears and vanishes mid-task moves the map
+  (`tests/test_stable_tab_order.py`).
 - **Speak status phase changes** and slider values via `nvda_speak` where the
   visual-only signal would otherwise be lost.
+- **A menu accelerator wins over the focused control** on wxMSW. Before giving
+  a menu item a shortcut, check no text control relies on that key.
 
 ### Behavior over diffs
 The user validates by testing, not by reading code. Describe behavior changes
@@ -110,6 +130,38 @@ Remote surfaces confine file paths to the kin folder and gate exec; the exec
 denylist matches per shell-segment. Don't weaken these. When you fix a
 cross-provider quirk at the `chat()` choke point, add a case to
 `tests/test_llm_normalization.py` and an entry to `docs/troubleshooting.md`.
+
+### Load-bearing rules stated in CLAUDE.md
+One line each here; the rule and its reasons are in `CLAUDE.md`.
+
+- **State paths come from `hearthkin_paths`** — never write
+  `Path.home() / ".hearthkin"`.
+- **A test run never speaks or chimes** — silenced inside `audio`; only
+  `run_all.py` calls `audio.speak_result`, once, at the end.
+- **Widget-building tests run only on an isolated desktop**
+  (`tests/_gui_runner.py`), never on the live one.
+- **The prompt is append-only** — never change what the model has already
+  seen; per-turn variation goes in the tail.
+- **Never restructure a kin's `soul.md`.**
+- **Write the lesson, never the material** — tracked files are public. Arm
+  the guard in a fresh clone: `git config core.hooksPath githooks`.
+- **Anything added to `scripts/` gets a line in `scripts/README.md`**, in the
+  same change.
+- **A capability added to one surface is declared for all four** in
+  `tests/_surface_matrix.py`.
+- **All four anti-impersonation cleanup passes run on every path that saves a
+  room reply.**
+- **New background work is added to `_work_in_flight`** (confirm-on-close) —
+  and ask which process it runs in.
+- **A heartbeat reply without `reach_out` is asked about once, not dropped**
+  (`turn_steering.unsent_reach_note`).
+- **A paid dependency bought for one capability must not gate another.**
+- **Importers decide role by name match against `kin_display_name`**, never by
+  talk volume or position.
+- **A real per-message field sent to providers goes into
+  `_API_MESSAGE_FIELDS`**, or it is stripped.
+- **Never ask the owner to verify code.** They can't read it. Verify by
+  running the tests or the app, and report what you actually confirmed.
 
 ## Code style
 

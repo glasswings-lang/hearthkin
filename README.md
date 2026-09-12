@@ -35,7 +35,9 @@ Core ideas:
   running models on your own machine — or on another machine on your
   network (point a kin at a remote Ollama host, e.g. a dedicated
   inference box). No conversation data leaves your control unless you
-  opt into OpenRouter routing per kin (with optional provider pinning).
+  opt a kin into a hosted model. OpenRouter is built in (with optional
+  provider pinning), and any other service that speaks the OpenAI chat
+  format can be added as a provider.
 - **Accessibility is non-negotiable.** Designed against NVDA from day
   one. Every control is tab-reachable. No status-only surface that
   requires object navigation. Phase changes ("Thinking" / "Typing" /
@@ -51,12 +53,19 @@ Core ideas:
   write and edit files; fetch a web page; web search; memory search (BM25,
   optionally semantic-reranked via local embeddings); shell exec (gated by
   your approval) and background processes; a webcam glance and sound
-  analysis; notes and staging; and scheduled wake-ups via Windows Task
-  Scheduler. A detector nudges a kin that *describes* a tool action
-  instead of calling it.
+  analysis; notes and staging; and playing the park game. A nineteenth,
+  `reach_out`, lets a kin message you on its own; it isn't ticked per kin,
+  but comes with the Proactive heartbeat setting. Scheduled wake-ups run
+  via Windows Task Scheduler. A detector nudges a kin that *describes* a
+  tool action instead of calling it.
 - **Multiple surfaces.** Desktop chat, multi-kin rooms, Telegram bot and
   Discord bot (both with per-user tool gating), cron wake-ups that work
   whether the app is open or closed.
+- **Speak instead of typing.** Dictation puts what you say into the
+  message box. By default it is free and offline: a Whisper model on
+  your own computer, with no account. A graphics card makes it faster
+  but isn't needed. It can also use a Whisper server on another machine,
+  or ElevenLabs. Set it up from File → Preferences → Dictation….
 - **A park to keep.** Time for Family is a small creature-park game a kin
   can play in plain language, or *keep* — tending it on its own scheduled
   wake-ups. Park turns run through the same front door the console uses, so
@@ -89,11 +98,21 @@ currently-intentional quirks — see [`ROADMAP.md`](ROADMAP.md).
 Optional:
 
 - An [OpenRouter](https://openrouter.ai) account if you want to route
-  any kin to a hosted model (Claude, GPT-4, Gemini, Llama, etc.).
+  any kin to a hosted model (Claude, GPT-4, Gemini, Llama, etc.). Or an
+  address and key for any other service that speaks the OpenAI chat
+  format, added as a provider.
+- `pip install faster-whisper` for dictation on this computer. It isn't
+  installed by `requirements.txt` because it is large and downloads a
+  model the first time. Without it, dictation needs a Whisper server on
+  another machine or an ElevenLabs key.
+- An [ElevenLabs](https://elevenlabs.io) API key if you want a kin to
+  speak its replies aloud, or to use ElevenLabs for dictation.
 - A [Brave Search](https://brave.com/search/api/) API key if you want
   the `web_search` tool.
 - A Telegram bot token (via [@BotFather](https://t.me/botfather)) if
   you want to talk to a kin from your phone.
+- A Discord bot token, from the Discord Developer Portal, if you want a
+  kin in a Discord server.
 
 ## Install
 
@@ -124,19 +143,35 @@ PyInstaller against `Hearthkin.spec`, bundles third-party licenses
 into `licenses/`, and (if Inno Setup 6 is installed) produces
 `dist/Hearthkin-Setup-<version>.exe`.
 
+Before packaging, `build.bat` clones the Time for Family game from
+<https://github.com/glasswings-lang/time-for-family> over the network,
+so the park ships inside the build. That needs git and a connection.
+If the clone fails the build still finishes, without the game bundled.
+Set `HEARTHKIN_BUNDLE_GAME` to a local copy of the game to use that
+instead.
+
 ## Quick start
 
 1. Launch Hearthkin. The kin selector lists existing kin (or shows
    none on first run).
-2. **New Agent…** — give it a name. Either fill in the soul prompt
+2. **New kin...** — give it a name. Either fill in the soul prompt
    now, or check "Skip identity setup" to chat with the raw model
    first and let identity emerge.
-3. Open **Settings** and pick a model under **Model & generation →
-   Change model…**. Local Ollama models show up automatically; for
-   OpenRouter, switch the provider radio inside the model browser.
-4. Type into the input field. Enter sends; Shift+Enter is a newline.
-5. The Activity field reports state inline; the status bar shows
-   kin / model / context-usage at a glance.
+3. Open **Kin settings...** and pick a model under **Model & generation →
+   Change model…**. Local Ollama models show up automatically; for a
+   hosted model, switch the provider radio inside the model browser.
+   To add another service, press **Manage providers…** there and give
+   it a name, an address and a key. Adding a line to `providers.md` in
+   the Hearthkin folder (`~/.hearthkin/`) does the same. This works for
+   servers on your own network too, such as Ollama's `/v1` address,
+   llama.cpp or LM Studio.
+4. Type into the input field. Ctrl+Enter sends, and Enter starts a new
+   line. To send with plain Enter instead, turn on **File → Preferences
+   → "Plain Enter sends (else: Ctrl+Enter)"**; Shift+Enter is then the
+   new line.
+5. The Activity field reports what is happening as it happens. When
+   nothing is, it shows the kin, the model and how much of the context
+   is in use.
 
 The full **user guide** is at
 [`docs/user-guide.html`](docs/user-guide.html). Open in any browser.
@@ -146,9 +181,11 @@ troubleshooting, and where everything lives on disk.
 
 ## Project layout
 
-See [`CLAUDE.md`](CLAUDE.md) for the architecture, module map, and
-convention notes. It's written for contributors and AI-assisted
-development; not strictly required reading to use the app.
+See [`docs/architecture.md`](docs/architecture.md) for the architecture
+and module map, and [`CONTRIBUTING.md`](CONTRIBUTING.md) for how to work
+on the code. [`CLAUDE.md`](CLAUDE.md) holds the convention notes, written
+for AI-assisted development. None of it is required reading to use the
+app.
 
 ## License
 
@@ -174,11 +211,11 @@ runtime library:
   2.1 §6(b) — drop in your own build of the same-named DLL to
   override.
 
-  **Written offer (LGPL 2.1 §6(c)):** for the source corresponding to
-  the bundled `nvdaControllerClient64.dll`, open an issue at
-  <https://github.com/glasswings-lang/hearthkin/issues> or pull it
-  directly from <https://github.com/nvaccess/nvda> (the canonical
-  upstream).
+  **Written offer (LGPL 2.1 §6(c)):** the source corresponding to the
+  bundled `nvdaControllerClient64.dll` is the canonical upstream,
+  <https://github.com/nvaccess/nvda>, since the copy shipped here is
+  unmodified. Issues are turned off on this repository and it gives no
+  other contact route, so that upstream is currently the way to get it.
 
 See [`vendor/nvda/README.md`](vendor/nvda/README.md) for the full
 LGPL compliance notes and provenance.

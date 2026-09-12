@@ -13,8 +13,13 @@ reference, wrong as an introduction. Start here instead, then read
 
 A desktop app for talking with "kin" — configured personas, each with a soul
 prompt, its own memory, and its own model. It talks to **Ollama running locally**
-by default, so conversations don't leave the machine, and can route through
-OpenRouter when a model name is prefixed `openrouter/...`.
+by default, so conversations don't leave the machine. A kin can use a hosted
+model instead. OpenRouter is built in, and any service that speaks the OpenAI
+chat format can be added as a provider: a name, an address and a key, from
+"Manage providers…" in the model browser or as a line in
+`~/.hearthkin/providers.md`. That includes servers on your own network. The
+start of the model name picks the provider — `openrouter/...`, or the name you
+gave the one you added.
 
 Two interaction modes: one-to-one chat, and "rooms" where several kin take turns.
 Beyond the desktop window there are Telegram and Discord surfaces, and scheduled
@@ -24,6 +29,9 @@ Python + wxPython. Windows is the primary platform; the code runs elsewhere but
 some features (scheduled tasks, the screen-reader integration) are Windows-only.
 
 ## Running it
+
+You need Python 3.10 or later, the same as the README says. Release builds are
+made with Python 3.11.
 
 ```
 pip install -r requirements.txt
@@ -47,7 +55,7 @@ Plain Python, no pytest. Each `tests/test_*.py` also runs standalone. **Run the
 suite before opening a PR** — it's fast and it catches the things that have
 actually broken before.
 
-Two are worth knowing about specifically:
+Three are worth knowing about specifically:
 
 - **`test_tool_buckets.py`** — fails if you register a tool without assigning it
   a permission bucket. An unbucketed tool is silently invisible on Telegram and
@@ -60,6 +68,39 @@ Two are worth knowing about specifically:
   repo, so in your clone this test prints a `GUARD DISARMED` banner and
   passes. That is correct: you have nothing of anyone's to protect. It only
   binds on a checkout that has a `docs/private/` directory.
+
+### Writing a test
+
+`tests/run_all.py` runs each test file in its own process. Before it starts, it
+makes one fresh folder and points `HEARTHKIN_HOME` at it, so a run never
+touches your real `~/.hearthkin`. It refuses a `HEARTHKIN_HOME` you already had
+set, and says so. `--keep` leaves the folder behind so you can look at it.
+
+That one folder is shared by every test file in the run. A test that makes real
+`chat()` calls, or reads a log expecting only its own lines, should make a
+folder of its own inside it. Do this before importing anything from the
+project:
+
+```python
+os.environ["HEARTHKIN_HOME"] = tempfile.mkdtemp(
+    prefix="mytest-", dir=(os.environ.get("HEARTHKIN_HOME") or None))
+```
+
+When the test is run on its own, the `or None` puts that folder in the system
+temp directory rather than your real one.
+
+**Tests must never speak or make a sound.** You don't have to arrange that
+yourself: `audio.py` silences speech and sound cues during a test run, at the
+point where every sound goes out. Don't work around it.
+
+**A test that builds wx windows runs on a separate desktop.** Creating a window
+takes focus on Windows even when it is never shown, and a screen reader follows
+focus. So the runner spots these tests and runs them through
+`tests/_gui_runner.py`, on a Windows desktop with no path to the screen the
+person is using. If that desktop can't be made, the test is skipped, and the
+runner says so. In such a test, send keystrokes with `PostMessage` to the
+test's own window. Never use `SendInput`, which goes to whatever has focus on
+the real desktop.
 
 ## The one thing to understand before changing UI code
 
@@ -83,9 +124,10 @@ decisions in the UI code. Concretely:
   input, not composite widgets like `wx.SearchCtrl`. Composites wrap an inner
   control that the screen reader focuses instead, so the outer name never
   reaches the user.
-- **`scripts/narrate_ui.py`** prints what a screen reader would announce tabbing
-  through a screen. It's a reading aid, not an emulator — it can't see anything
-  hidden or enabled at runtime — but it catches a real class of problem cheaply.
+- **`scripts/audit_ui.py`** builds a screen and asks Windows what name a screen
+  reader would announce for each control. Run it with `--self-test` first. The
+  older `scripts/narrate_ui.py` only reads the source and guesses, and it has
+  cleared a dialog that had real problems, so prefer `audit_ui.py`.
 
 ## Adding a tool
 
@@ -98,19 +140,31 @@ Tools are functions a kin can call. One function per file in `tools/`:
    Imports are static on purpose; dynamic discovery would break the packaged
    build.
 3. **Add it to a permission bucket in `tools/_buckets.py`.** Skipping this makes
-   the tool invisible on remote surfaces with no error message.
+   the tool invisible on remote surfaces with no error message. In the same
+   file, add the tool to its bucket's line in `BUCKET_EXPLAINER` — that is the
+   description a person reads when choosing what someone on Telegram may do.
 4. Run `python tests/test_tool_buckets.py`.
+5. Switch it on for a kin by adding its name to that kin's `tools.json` (or
+   ticking it in Kin settings), then restart.
 
 A running app loads the registry at import, so a new tool needs a restart.
+
+## Adding a script
+
+Anything added to `scripts/` gets a line in `scripts/README.md` in the same
+change: what it does, how to run it, and what it changes — nothing, files it
+writes, or config it edits. A tool nobody but its author can find isn't a tool
+the project has.
 
 ## Conventions worth knowing
 
 - **Stdlib first.** `requirements.txt` holds only what's needed to launch.
   A tool wanting a heavier library should import it inside the function body and
   degrade gracefully when it's missing.
-- **Config a user touches must be reachable from the UI.** The intended user
-  doesn't edit JSON. A setting that exists only in a config file is a bug, not a
-  power-user feature.
+- **Config a normal user touches must be reachable from the UI.** The intended
+  user doesn't edit JSON. A setting only in a config file is acceptable for an
+  advanced override that power users go looking for. Anything an ordinary user
+  would need to change belongs in the UI.
 - **Heavy work goes off the UI thread.** Anything hitting the network or reading
   many files must run on a worker thread and marshal results back with
   `wx.CallAfter`, or the window freezes.

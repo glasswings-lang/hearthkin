@@ -10,7 +10,7 @@
 > `CHANGELOG.md`, `docs/`, and `docs/history/` — every development commit
 > message, grouped by release series.
 
-Python + wxPython desktop app for multi-kin local-LLM chat. Talks to Ollama by default (models run locally; no remote API calls) and can route through OpenRouter when a kin's model is prefixed `openrouter/...`. A "kin" is a configured persona with a soul prompt, distilled memory, and a model. Two interaction modes: 1-on-1 chat, and "rooms" where several kin take turns with the user.
+Python + wxPython desktop app for multi-kin local-LLM chat. Talks to Ollama by default (models run locally; no remote API calls) and can route through a hosted API provider when a kin's model carries that provider's prefix (`openrouter/...`, or any provider added in `providers.md`). A "kin" is a configured persona with a soul prompt, distilled memory, and a model. Two interaction modes: 1-on-1 chat, and "rooms" where several kin take turns with the user.
 
 ## Who you're working with
 
@@ -43,13 +43,13 @@ Entry point is `python hearthkin.pyw`. The frame is split across `frame_shared.p
 - `frame/` — one mixin per behavioral slice. **To add a frame method, put it in the matching mixin.** A test that monkeypatches a frame name patches the mixin module (`frame.memory_mixin`), not `hearthkin`.
 - `hearthkin_paths.py` — the one place that decides where runtime state lives (`config_dir` / `kin_dir` / `logs_dir`). Imports nothing from the project, so everything can sit on it.
 - `kin_persistence.py` — paths, defaults, atomic-write helpers, load/save for kin and rooms. Pure data layer, no LLM calls, no UI.
-- `dialogs/` — every `wx.Dialog` subclass, one per file. Big one: `dialogs/edit_kin.py` (seven-tab kin Settings).
+- `dialogs/` — every `wx.Dialog` subclass, one per file. Big one: `dialogs/edit_kin.py` (nine-tab kin Settings: Identity, Model & generation, Memory, Tools, Telegram, Discord, Cron, Voice, Prompts).
 - `telegram_bot.py` / `discord_bot.py` — the remote surfaces.
 - `audio.py` — NVDA speech (`nvda_speak`) and reply chimes.
 - `stt.py` — speech to text. Three backends (local Whisper, a Whisper server, ElevenLabs Scribe) as plain functions over WAV bytes, so none of them needs a microphone to test. `voice.py` owns the microphone and the text-to-speech.
 - `model_utils.py` — Ollama model-name parsing, capability detection, dropdown listing.
 - `chat_helpers.py` — streaming chunk extractors, sentence boundaries, token estimation, room-reply cleanup, `detect_tool_roleplay`.
-- `llm_backend.py` — the single dispatch layer. `chat(model, messages, ...)` routes on the `openrouter/...` prefix. Streaming, prompt caching, reasoning-toggle, `run_tool_loop`.
+- `llm_backend.py` — the single dispatch layer. `chat(model, messages, ...)` routes on any registered provider prefix — `api_providers()` merges the built-ins with `~/.hearthkin/providers.md`. Ask "is this hosted?" with `is_hosted_model(model)`; `provider_for_model(model) == "openrouter"` is only for OpenRouter's own catalogue and prices. Streaming, prompt caching, reasoning-toggle, `run_tool_loop`.
 - `compat.py` — pre-flight model-swap checks. Provider quirks live as data in `ModelProfile`, not scattered if-blocks.
 - `importers/` — history-import backends behind `dialogs/import_history.py`.
 - `model_browser.py` — NVDA-accessible model picker.
@@ -77,7 +77,7 @@ Migrated automatically from older `~/.ollama_chat/` if present.
   - `config.json`, `conversation.jsonl` (append-only), `tools.json`, `exec_allowlist.json`.
   - `memory/journal/YYYY-MM-DD.md` — daily cron wake-up entries.
 - `rooms/<roomname>/`, `cron_requests/`, `.running.lock`
-- `logs/` — session logs (opt-in), plus **always-on** ones regardless of the toggle: `empty_replies.log`, `cron_errors.log`, `openrouter_errors.log` (**check this BEFORE theorizing about an OpenRouter 400** — it holds the upstream provider's real error body), `distill_errors.log`, `hang_watchdog.log`, `park_unreachable.log`, `telegram_failures.log`, `save_failures.log`, `recall.log` (**one line each time per-turn recall actually attaches something** — sources, block size, and the block-to-message ratio. Written ONLY when it fires, so an empty log is a real answer: if a kin is behaving oddly and nothing is here, recall is not the cause. It exists because working this out by replaying the engine offline needs a faithful reconstruction of what a surface sent, and there are four surfaces that do not share a message list — get the surface wrong, or the history shape wrong, and the replay confidently says "nothing surfaced" about a turn where something did), `distill_triggers.log` (**one line each time a distillation starts, naming WHICH of the four triggers fired** and how far behind that scope was — bookmark, conversation length, the gap, the % figure, and the thresholds in force. **Read it before theorising about a kin that "keeps distilling".** It exists because the four triggers are described to the reader in the same words but have wildly different thresholds: leaving a kin fires on ONE new message, while the %-of-context trigger needs a share of the whole window. A run that looks impossibly early against the 70% figure is usually the other trigger doing its job, and three consecutive theories were wrong before anything wrote this down), `heartbeat_unsent.log` (**a heartbeat whose words did not reach anyone** — with the text when nobody ever asked the kin, and WITHOUT it when the kin was asked and declined, because that second one is a decision and the moment is genuinely its own).
+- `logs/` — session logs (opt-in), plus **always-on** ones regardless of the toggle. **The complete list is `kin_persistence.ALWAYS_ON_LOGS`** (trimmed at launch; `tests/test_log_trimming.py` fails when a log is written but not listed). The ones to know first: `empty_replies.log`, `cron_errors.log`, `openrouter_errors.log` (**check this BEFORE theorizing about an OpenRouter 400** — it holds the upstream provider's real error body), `distill_errors.log`, `hang_watchdog.log`, `park_unreachable.log`, `telegram_failures.log`, `save_failures.log`, `recall.log` (**one line each time per-turn recall actually attaches something** — sources, block size, and the block-to-message ratio. Written ONLY when it fires, so an empty log is a real answer: if a kin is behaving oddly and nothing is here, recall is not the cause. It exists because working this out by replaying the engine offline needs a faithful reconstruction of what a surface sent, and there are four surfaces that do not share a message list — get the surface wrong, or the history shape wrong, and the replay confidently says "nothing surfaced" about a turn where something did), `distill_triggers.log` (**one line each time a distillation starts, naming WHICH of the four triggers fired** and how far behind that scope was — bookmark, conversation length, the gap, the % figure, and the thresholds in force. **Read it before theorising about a kin that "keeps distilling".** It exists because the four triggers are described to the reader in the same words but have wildly different thresholds: leaving a kin fires on ONE new message, while the %-of-context trigger needs a share of the whole window. A run that looks impossibly early against the 70% figure is usually the other trigger doing its job, and three consecutive theories were wrong before anything wrote this down), `heartbeat_unsent.log` (**a heartbeat whose words did not reach anyone** — with the text when nobody ever asked the kin, and WITHOUT it when the kin was asked and declined, because that second one is a decision and the moment is genuinely its own).
 - `base_prompt.md` — prepended to every kin's `soul.md`.
 - `prompts/` — editable harness prompts, seeded from `APP_PROMPT_REGISTRY`; file wins after first access.
 
@@ -262,6 +262,8 @@ A kin speaks through **four** surfaces: the main window, Telegram, Discord, and 
 
 Probes are source-text markers with **comments and docstrings stripped** — a comment *about* a feature must never read as the feature. Deliberately coarse: it answers "is this wired at all", not "is it correct". Nothing this audit found was subtle, it was unobserved. **The detector checks itself against a positive control before any answer is believed** — its first version treated a string on a continuation line as a docstring and reported a wired feature as missing, and a detector that manufactures absences is worse than none, because absence is the whole claim.
 
+**A stub must have the real callback's shape.** The frame's `get_model_options` callback returns a `(model, options)` PAIR to both bots. Discord once took the pair itself as the options, so every Discord tool loop crashed and plain chat dropped the reply cap and the context window — while its test stubbed a bare `{}` and agreed with the bug. Pinned by `tests/test_discord_parity.py`. → `docs/lessons.md`
+
 ## Tools
 
 Kin-callable tools. One Python function per file; the model-facing schema is auto-derived from signature + docstring; opted into per-kin via an allowlist.
@@ -320,7 +322,9 @@ Denylist in `tools/_exec_denylist.py`. **Specific destructive shapes, not anythi
 - `resolve_provider_key(name)` — env var `<NAME>_API_KEY` first, then `~/.ai_programs/<name>_key.json`.
 - `write_provider_key(name, key)`.
 
-**Preferences → Connections** is the user-facing surface (masked display, Edit, Test). Adding a provider: a row in `_build_prefs_tab` and a branch in `_provider_key_test_call`.
+**Preferences → Connections** is the user-facing surface (masked display, Edit, Test). Adding a key-only service shown there (today `openrouter`, `brave`, `elevenlabs`): a row in `_build_prefs_tab` and a branch in `_provider_key_test_call`.
+
+**A chat provider needs no code.** It is a `name = https://host/v1` line in `~/.hearthkin/providers.md`, added by hand or through `dialogs/api_providers.py` ("Manage providers…" in the model browser), and a kin uses it by prefixing its model name. Keys never go in that file — they go through `write_provider_key`.
 
 ## Write the lesson, never the material
 
@@ -403,6 +407,10 @@ Three rules for this machinery:
 
 **Why this and not the flag:** `HEARTHKIN_GUI_TESTS=1` is not something the person this project is for can ever set — their screen reader is always running. Coverage that only exists for people who don't need it isn't coverage, and a gate is not a fix. The flag survives only as a fallback. `IsShown()` is not evidence here; ask Win32. Pinned by `tests/test_no_focus_theft.py`, which measures the foreground **from a process that never isolates** — `GetForegroundWindow()` is answered by the calling thread's desktop, so a process that moved cannot honestly report on the one the person is using. → `docs/lessons.md`
 
+## Tests share one sandbox and have no per-test timeout
+
+**`run_all.py` gives every test file ONE shared sandbox, not one each.** A test that makes real `chat()` calls or reads logs makes its own folder inside it — `tempfile.mkdtemp(dir=os.environ.get("HEARTHKIN_HOME"))` — or the lines it leaves behind fail an unrelated later test, and only in the full run. **There is no per-test timeout either**: an exception inside a wx event-loop callback does not end `MainLoop`, so a widget test whose callback raises hangs the whole suite. Record the failure and end the loop. → `docs/lessons.md`
+
 ## Leaving a tool behind
 
 **Anything added to `scripts/` gets a line in `scripts/README.md`, in the same change** — what it does, how to run it, and *what it changes* (nothing / writes files / edits config). Say so in the reply too.
@@ -416,7 +424,9 @@ Rules where breaking them still bites. Long-form accounts in `docs/lessons.md`; 
 - **Multi-file layout with static imports.** Never dynamic `importlib.import_module(...)` for project modules — the build won't pick it up.
 - **Stdlib-first dependency policy.** `requirements.txt` lists only what launches the app. Heavier libs go behind `try: import <lib>` with graceful degradation.
 - **All configuration a normal user touches must be UI-reachable.** Non-coders shouldn't edit JSON by hand. JSON-only is acceptable for advanced overrides power users seek out.
-- **Accessibility-first widgets.** `wx.TextCtrl` (read-only when needed) instead of `wx.StaticText` for anything the user must find by tabbing. Numeric inputs use `dialogs._IntField`, **not `wx.SpinCtrl`** (floods NVDA on arrow-holds, and its `ES_NUMBER` rejects pasted commas before wx sees the event). Buttons use `&Letter` mnemonics; **the visible label IS the accessible name** (`SetName` on a button is ignored on wxMSW). **Tab-reachability is mandatory; object-navigation is a workaround, not a fix.**
+- **Accessibility-first widgets.** `wx.TextCtrl` (multiline read-only when needed — see the next bullet) instead of `wx.StaticText` for anything the user must find by tabbing. Numeric inputs use `dialogs._IntField`, **not `wx.SpinCtrl`** (floods NVDA on arrow-holds, and its `ES_NUMBER` rejects pasted commas before wx sees the event). Buttons use `&Letter` mnemonics; **the visible label IS the accessible name** (`SetName` on a button is ignored on wxMSW). **Tab-reachability is mandatory; object-navigation is a workaround, not a fix.**
+- **A single-line read-only `wx.TextCtrl` cannot be reached by Tab.** On wxMSW it is not keyboard-focusable at all, so anything a person must find is `TE_MULTILINE | TE_READONLY` — and a result that arrives while focus is elsewhere is spoken too. The Test connection result in the API providers and Ollama machines windows was unreachable this way; measured on an isolated desktop, the Tab walk skipped it every time. Pinned by `tests/test_test_result_reachable.py`. → `docs/lessons.md`
+- **A menu accelerator beats the focused control.** On wxMSW it is translated before the control sees the key — neither `EVT_KEY_DOWN` nor `EVT_CHAR_HOOK` on the control gets it first (measured). Ctrl+Enter, the default send key, was the accelerator on Chat → Continue room round, so on a fresh install Ctrl+Enter could not send in a one-on-one chat; it now goes through `InputAttachMixin._on_ctrl_enter_menu`. **Before giving a menu item a shortcut, check no text control relies on that key.** Test keys by `PostMessage` to the test's own window with `SetKeyboardState`, on an isolated desktop — **never `SendInput`**, which reaches the person's real foreground. Pinned by `tests/test_ctrl_enter_sends.py`. → `docs/lessons.md`
 - **Plain `wx.TextCtrl` + buddy `&Label:` StaticText for text inputs.** Composite widgets (`wx.SearchCtrl`, `wx.ComboBox`) wrap an internal EDIT child NVDA focuses on, and `SetName` on the outer wrapper doesn't reach it. A StaticText with a mnemonic immediately before the input lets Windows pick it up as the accessible name.
 - **First-letter navigation for lists** with non-searchable display prefixes (`♥♥♥`, `[X]`): intercept `EVT_CHAR` and match against the underlying data. See `ModelBrowserDialog._on_list_char`.
 - **Tolerant decoding for any file we read** — `tools/_io.py:robust_decode` (UTF-8 → cp1252 → UTF-8-replace). Strict UTF-8 silently breaks on Windows-edited files. Atomic writes always go out as UTF-8.
