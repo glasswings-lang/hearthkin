@@ -239,7 +239,9 @@ class RoomEditDialog(wx.Dialog):
         order_hint = wx.TextCtrl(
             panel,
             value="Order in the list = round order. Each round rotates the "
-                  "starting member, so no one is always first.",
+                  "starting member, so no one is always first — except in "
+                  "a room of two, where the order stays fixed so the same "
+                  "kin never speaks twice in a row.",
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_WORDWRAP
             | wx.TE_NO_VSCROLL,
         )

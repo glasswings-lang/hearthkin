@@ -1472,7 +1472,7 @@ class EditKinDialog(wx.Dialog):
                 "Voice (TTS via ElevenLabs). When enabled, this kin's "
                 "replies are spoken aloud sentence-by-sentence as the "
                 "model generates them. Set your ElevenLabs API key under "
-                "Tools → Preferences → Connections first; without it "
+                "File → Preferences → Connections first; without it "
                 "this tab can show voices but can't actually speak."
             ),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP,

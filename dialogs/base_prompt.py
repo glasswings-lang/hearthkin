@@ -47,8 +47,8 @@ class BasePromptDialog(wx.Dialog):
             "Worth a periodic look.\n"
             "Other harness prompts (the tool-use nudge, the roleplay "
             "corrector, the cron wake-up framing, the rolling-window "
-            "marker) are editable too — plain-text files in "
-            "~/.hearthkin/prompts/. Edit them in any text editor; each is "
+            "marker) are editable too, under Tools → Edit prompts…. "
+            "They are plain-text files in ~/.hearthkin/prompts/, each "
             "backed up to prompts/backups/ before an overwrite."
         )
         self.header_field = wx.TextCtrl(

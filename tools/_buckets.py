@@ -3,22 +3,26 @@
 """Tool access buckets for per-user gating in Telegram (and any future
 multi-user surface).
 
-The buckets are named tiers along a single risk axis:
+The buckets are named tiers along a single risk axis (the sets below are
+the source of truth; this is the shape):
   none  — kin can chat, can't trigger any tools
   read  — read-only / informational tools (memory_search, read_file,
-          fetch_url, web_search, list_processes, context_status)
-  write — read + tools that modify files (write_file, edit_file, note)
+          list_directory, fetch_url, web_search, list_processes,
+          context_status, recent_thinking, read_staging, analyze_sound)
+  write — read + tools that modify files or save state (write_file,
+          edit_file, note, use_webcam, archive_staging, tff)
   full  — write + tools that can execute commands (exec, kill_process)
 
-`exec` is still gated by the per-kin `tool_trust` config (untrusted /
-trusted / full) regardless of bucket — the bucket decides whether a
-user can EVER call exec; `tool_trust` decides what gets prompted vs.
-auto-approved when they can. Note that the Telegram surface treats
-`tool_trust=full` as if it were `tool_trust=trusted` (denylist gates
-plus chat approval for any non-allowlisted command); only the desktop
-wrapper honours `full` as "no gating at all". The asymmetry is
-deliberate — the operator's local convenience setting should not
-silently apply to remote multi-user surfaces.
+The bucket decides whether a remote user can EVER call exec. What happens
+when they do is stricter than on the desktop: a denylisted command is
+refused; a command remembered for that user (or surface) runs; otherwise
+it asks — in the chat on Telegram, on the operator's desktop for Discord.
+The kin's `tool_trust` alone never skips that question remotely. It is
+skipped only when the kin is `trusted` or `full` AND `remote_unattended_exec`
+is on (Tool behaviour settings → "Run remote (Telegram/Discord) exec without
+asking"). The desktop wrapper honours `full` as "no gating at all"; the
+asymmetry is deliberate — the operator's local convenience setting should
+not silently apply to requests that arrive over the internet.
 
 Tools not in any bucket above are treated as `none`-equivalent (must be
 explicitly listed in a future bucket if added). Same goes for tools
@@ -114,16 +118,18 @@ BUCKET_EXPLAINER = {
     "none": "Chat only. No tools can be triggered by this user.",
     "read": "Read-only tools: memory_search, read_file, list_directory, "
             "fetch_url, web_search, list_processes, context_status, "
-            "recent_thinking, analyze_sound.",
+            "recent_thinking, read_staging, analyze_sound.",
     "write": "Read tools + write_file, edit_file, note (can modify "
-             "kin files) + use_webcam (capture from host webcam) + "
-             "tff (play the kin's own Time for Family park game). "
-             "use_webcam is additionally gated by a per-user "
-             "permission radio (ask / auto / deny).",
-    "full": "All tools including exec. On Telegram, exec still asks "
-            "for chat approval (or denylist-gates if tool_trust=trusted "
-            "or full). The desktop's tool_trust=full bypass does NOT "
-            "apply over Telegram.",
+             "kin files) + archive_staging + use_webcam (capture from "
+             "host webcam) + tff (play the kin's own Time for Family park "
+             "game). use_webcam is additionally gated by a per-user "
+             "permission setting (ask / auto / deny).",
+    "full": "All tools including exec. A command this person asks for "
+            "still needs approval — in the chat on Telegram, on your "
+            "desktop for Discord — unless you remembered it, or the kin "
+            "is trusted or full AND \"Run remote (Telegram/Discord) exec "
+            "without asking\" is on in Tool behaviour settings. Denylisted "
+            "commands are always refused.",
 }
 
 

@@ -73,9 +73,15 @@ class _MachineEntryDialog(wx.Dialog):
         self.test_btn = wx.Button(self, label="&Test connection")
         self.test_btn.Bind(wx.EVT_BUTTON, self._on_test)
         test_row.Add(self.test_btn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
+        # Multiline, not single-line: a single-line read-only TextCtrl is not
+        # keyboard-focusable on wxMSW, so the result was unreachable by Tab.
+        # Also spoken on arrival (see _on_test_done).
         self.test_result = wx.TextCtrl(
-            self, value="", style=wx.TE_READONLY)
+            self, value="",
+            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
+            | wx.TE_WORDWRAP)
         self.test_result.SetName("Test result")
+        self.test_result.SetMinSize((-1, 44))
         test_row.Add(self.test_result, proportion=1, flag=wx.ALIGN_CENTER_VERTICAL)
         outer.Add(test_row, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
 
@@ -125,6 +131,13 @@ class _MachineEntryDialog(wx.Dialog):
             return
         self.test_result.SetValue(msg)
         self.test_btn.Enable()
+        # Focus stays on the Test button, so nothing else would announce the
+        # answer. Speech failing must never break the dialog.
+        try:
+            from audio import nvda_speak
+            nvda_speak(msg)
+        except Exception:
+            pass
 
     def get_values(self):
         """Return (name, url). URL is trimmed; name is trimmed."""
@@ -159,8 +172,9 @@ class OllamaMachinesDialog(wx.Dialog):
             self,
             value="Machines you can point individual kin at. \"This machine\" "
                   "(your local Ollama) is always available and isn't listed "
-                  "here. Add a machine, then pick it in a kin's "
-                  "Model & generation tab.",
+                  "here. Add a machine, then pick it from the Machine "
+                  "list in the model browser (Kin settings → Model & "
+                  "generation → Change model…).",
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP,
         )
         intro.SetName("About Ollama machines")

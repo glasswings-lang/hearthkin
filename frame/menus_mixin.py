@@ -217,7 +217,11 @@ class MenusMixin:
         self.Bind(wx.EVT_MENU, self._on_regen, self.mnu_regen)
         self.Bind(wx.EVT_MENU, self._on_stop, self.mnu_stop)
         self.Bind(wx.EVT_MENU, self._on_whats_busy, self.mnu_whats_busy)
-        self.Bind(wx.EVT_MENU, self._on_continue, self.mnu_continue)
+        # Not _on_continue directly: this item's Ctrl+Enter accelerator is
+        # also the default send key, and the accelerator wins before the
+        # message box sees it. _on_ctrl_enter_menu sends when you're typing
+        # there, and continues the round otherwise.
+        self.Bind(wx.EVT_MENU, self._on_ctrl_enter_menu, self.mnu_continue)
         self.Bind(wx.EVT_MENU, self._on_edit_message, self.mnu_edit_message)
         self.Bind(wx.EVT_MENU, self._on_search, self.mnu_search)
         self.Bind(wx.EVT_MENU, self._on_play_park, self.mnu_play_park)

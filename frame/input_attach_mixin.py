@@ -92,6 +92,42 @@ class InputAttachMixin:
             return
         event.Skip()
 
+    def _on_ctrl_enter_menu(self, event):
+        """Where Ctrl+Enter actually arrives, so decide here what it means.
+
+        Chat -> Continue room round carries Ctrl+Enter as its accelerator, and
+        on wxMSW a menu accelerator is translated BEFORE the focused control
+        sees the key. Measured on an isolated desktop with the same menu and
+        the same multiline message box: Ctrl+Enter fired the menu item and
+        reached neither the box's EVT_KEY_DOWN (the Ctrl+Enter branch in
+        _on_input_key above never runs) nor an EVT_CHAR_HOOK bound to it.
+
+        Ctrl+Enter is also the DEFAULT send key — enter_sends is off by
+        default — so on a fresh install the keyboard could not send a message
+        in a one-on-one chat at all: the key ran "Continue room round", which
+        does nothing outside a room. Nobody using plain Enter would ever see it.
+
+        So: typing in the message box with something to send means send;
+        anything else is the room command it always was. A click on the menu
+        item with an empty box, or with focus elsewhere, still continues the
+        round.
+        """
+        try:
+            focus_in_box = wx.Window.FindFocus() is self.input_box
+        except Exception:
+            focus_in_box = False
+        try:
+            has_text = bool(self.input_box.GetValue().strip())
+        except Exception:
+            has_text = False
+        has_attachment = (
+            getattr(self, "_pending_attachment", None) is not None
+            or getattr(self, "_pending_attachment_rel", None) is not None)
+        if focus_in_box and (has_text or has_attachment):
+            self._on_send(None)
+            return
+        self._on_continue(event)
+
     def _refresh_attach_button_state(self):
         """Update the Attach Image + Take Photo buttons' enabled state
         to match the active kin's model. Called from _load_agent,

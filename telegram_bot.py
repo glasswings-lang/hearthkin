@@ -2748,9 +2748,10 @@ class TelegramBot:
                 "/help — this message\n"
                 "/whoami — show your Telegram user ID, this chat's ID, "
                 "and chat type (use this to find a group's chat_id)\n\n"
-                "For the full command list and to chat with "
-                f"{self.agent_name}, send messages in a direct "
-                "message instead. Group conversation isn't supported yet."
+                f"To talk with {self.agent_name} here, just write in "
+                "the group. If this group is set to mention-only, "
+                "mention the bot by its @username. The full command "
+                "list works in a direct message."
             )
             return
         msg = (

@@ -119,8 +119,17 @@ class _ProviderEntryDialog(wx.Dialog):
         self.test_btn.Bind(wx.EVT_BUTTON, self._on_test)
         test_row.Add(self.test_btn,
                      flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
-        self.test_result = wx.TextCtrl(self, value="", style=wx.TE_READONLY)
+        # Multiline, not single-line: a single-line read-only TextCtrl is not
+        # keyboard-focusable on wxMSW, so the result of pressing Test was
+        # unreachable by Tab — measured on an isolated desktop, the walk went
+        # Test connection -> Save and skipped it. It is also spoken when it
+        # arrives (see _on_test_done), since that is the moment it matters.
+        self.test_result = wx.TextCtrl(
+            self, value="",
+            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
+            | wx.TE_WORDWRAP)
         self.test_result.SetName("Test result")
+        self.test_result.SetMinSize((-1, 44))
         test_row.Add(self.test_result, proportion=1,
                      flag=wx.ALIGN_CENTER_VERTICAL)
         outer.Add(test_row,
@@ -233,6 +242,13 @@ class _ProviderEntryDialog(wx.Dialog):
             return
         self.test_result.SetValue(msg)
         self.test_btn.Enable()
+        # Focus stays on the Test button, so nothing else would announce the
+        # answer. Speech failing must never break the dialog.
+        try:
+            from audio import nvda_speak
+            nvda_speak(msg)
+        except Exception:
+            pass
 
     def get_values(self):
         """(name, url, key). Name is normalised; key may be blank."""

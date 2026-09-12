@@ -496,7 +496,19 @@ class DiscordBot:
         dcfg = cfg.get("discord") or {}
         soul = self.get_soul() or ""
         memory = self.get_memory() or ""
-        options = self.get_model_options() or {}
+        # The frame's get_model_options returns a (model, options) PAIR, the
+        # same contract Telegram unpacks. This line used to take the pair
+        # itself as the options, so every tool loop died converting a tuple
+        # to a dict, and plain chat quietly dropped the reply cap and the
+        # context window (chat() ignores non-dict options). A bare dict is
+        # still accepted so an older caller can't reintroduce the crash.
+        got = self.get_model_options()
+        if isinstance(got, tuple) and len(got) == 2:
+            options = got[1] or {}
+        else:
+            options = got or {}
+        if not isinstance(options, dict):
+            options = {}
         model = cfg.get("model", "")
         channel_id = message.channel.id
         share = bool(dcfg.get("share_desktop", False))

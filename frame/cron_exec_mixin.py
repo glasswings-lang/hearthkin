@@ -111,9 +111,10 @@ class CronExecMixin:
              (trusted/full) does NOT auto-run a remote exec: the operator's
              local-convenience trust dial must not silently disable approval
              for a request that arrived over the internet (audit A2/B1). An
-             operator who genuinely wants unattended remote exec sets
-             `remote_unattended_exec: true` in the kin config — an explicit,
-             JSON-only opt-in.
+             operator who genuinely wants unattended remote exec turns on
+             `remote_unattended_exec` — Tool behaviour settings → "Run remote
+             (Telegram/Discord) exec without asking" — and it takes effect
+             only while the kin is also trusted or full.
 
         surface_key scopes the remembered-approval list (e.g. "discord")."""
         if "exec" not in executors:

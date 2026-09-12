@@ -645,16 +645,20 @@ class ModelBrowserDialog(wx.Dialog):
 
         # 1. Cogacc explainer at the very top. The next control is a radio
         # button, which uses its own label as its name, so as a StaticText this
-        # reaches nobody — and it is the only place the Ollama/OpenRouter
+        # reaches nobody — and it is the only place the local/online
         # cost-and-privacy tradeoff is stated, which is the whole basis for
-        # choosing a provider. Read-only TextCtrl is tab-reachable.
+        # choosing a provider. Read-only TextCtrl is tab-reachable. It named
+        # only OpenRouter until providers became a list; every online
+        # provider carries the same tradeoff, so the text says so.
         intro = wx.TextCtrl(
             panel,
             value=(
-                "Pick a model. Ollama models are local (free, private); "
-                "OpenRouter models are remote (cost money, content leaves "
-                "your machine). For OpenRouter, warmth ranks how well a "
-                "model holds character without breaking into safety mode."
+                "Pick a model. Ollama models run on your own machines "
+                "(free, private). Models from an online provider — "
+                "OpenRouter, or one you add with Manage providers — run "
+                "somewhere else: they can cost money, and your conversation "
+                "leaves your computer. For OpenRouter, warmth ranks how well "
+                "a model holds character without breaking into safety mode."
             ),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP,
         )

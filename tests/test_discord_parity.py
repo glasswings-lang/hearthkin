@@ -188,6 +188,9 @@ class _Result:
         self.stopped = stopped
 
 
+_SEEN_OPTIONS = []
+
+
 def _fake_chat_collect(model_says, stop_midway=None):
     """Stand in for llm_backend.chat_collect: feed the deltas to on_content
     exactly as the real one does (the surface streams through that callback,
@@ -199,6 +202,7 @@ def _fake_chat_collect(model_says, stop_midway=None):
     REAL flag on the real bot, so what follows is the genuine stop path rather
     than a stubbed answer about it."""
     def _call(model, messages, *, on_content=None, should_stop=None, **kw):
+        _SEEN_OPTIONS.append(kw.get("options"))
         got = []
         for i, delta in enumerate(model_says):
             if should_stop is not None and should_stop():
@@ -225,7 +229,13 @@ def _run_generate(model_says, stop_midway=False):
     b.get_config = lambda: cfg
     b.get_soul = lambda: "Your name is Bracken."
     b.get_memory = lambda: ""
-    b.get_model_options = lambda: {}
+    # The REAL shape: the frame's _model_options_for returns a (model, options)
+    # pair. This stub used to return a bare {}, which is what the bot wrongly
+    # assumed, so the test agreed with the bug and every Discord tool loop
+    # crashed turning a tuple into a dict with nothing here noticing.
+    b.get_model_options = lambda: ("gemma4:31b",
+                                   {"num_ctx": 8192, "num_predict": 900,
+                                    "temperature": 0.8})
     b._loop = object()          # only ever handed to the stub below
 
     msg = _Message(sink=b.sent)
@@ -274,7 +284,15 @@ check("a reply eaten by the name-tag cleanup is caught too",
 
 # (c) an ordinary reply is unaffected -- the guard above must not have
 #     changed the normal path.
+_SEEN_OPTIONS.clear()
 b = _run_generate(["I'm here.", " What's up?"])
+check("the kin's settings reach the model as a settings dict, not the "
+      "(model, options) pair they arrive in",
+      bool(_SEEN_OPTIONS) and isinstance(_SEEN_OPTIONS[-1], dict))
+check("...so the reply cap and context window actually apply on Discord",
+      bool(_SEEN_OPTIONS) and isinstance(_SEEN_OPTIONS[-1], dict)
+      and _SEEN_OPTIONS[-1].get("num_predict") == 900
+      and _SEEN_OPTIONS[-1].get("num_ctx") == 8192)
 check("a normal reply still goes out unchanged",
       any("I'm here. What's up?" in s for s in b.sent))
 check("...and is persisted, once",
