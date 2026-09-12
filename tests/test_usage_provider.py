@@ -18,7 +18,11 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ.setdefault("HEARTHKIN_HOME", tempfile.mkdtemp(prefix="usageprov-"))
+# A fresh folder of its own, not setdefault: run_all gives every test file ONE
+# shared sandbox, and the checks below read usage.log expecting only the lines
+# they wrote. Any earlier test that makes a real chat() call leaves lines there.
+os.environ["HEARTHKIN_HOME"] = tempfile.mkdtemp(
+    prefix="usageprov-", dir=(os.environ.get("HEARTHKIN_HOME") or None))
 
 import kin_persistence as K  # noqa: E402
 import llm_backend as LB  # noqa: E402

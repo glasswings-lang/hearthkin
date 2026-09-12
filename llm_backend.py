@@ -3702,12 +3702,16 @@ def _build_openrouter_payload(model, messages, options, think_effort, tools, cac
         if "num_predict" in options:    payload["max_tokens"] = options["num_predict"]
         if "stop" in options:           payload["stop"] = options["stop"]
     if not is_openrouter:
-        # Other providers get the plain OpenAI field, and only when thinking
-        # was actually asked for. "off" sends nothing: it is the default, so
-        # sending it would put a field on every turn to every provider, and a
-        # model that doesn't reason is already not reasoning.
-        if think_effort in ("low", "medium", "high"):
-            payload["reasoning_effort"] = think_effort
+        # Other providers get the plain OpenAI field instead. "off" is sent
+        # as "none", NOT left out. Leaving it out was the first version, on
+        # the theory that a model that doesn't reason is already not
+        # reasoning — but a model that reasons BY DEFAULT then does, and
+        # checked against a real one (qwen3.6 over Ollama's OpenAI endpoint)
+        # it spent the whole reply budget thinking and returned an empty
+        # reply. With "none" the same request answered at once, no thinking.
+        if think_effort in ("off", "low", "medium", "high"):
+            payload["reasoning_effort"] = (
+                "none" if think_effort == "off" else think_effort)
     elif think_effort == "off":
         payload["reasoning"] = {"enabled": False}
     elif think_effort == "low":
@@ -3843,12 +3847,20 @@ class _HostConnectionCache:
         — long-idle connection that the server already closed
         without notifying us)."""
         parsed = urllib.parse.urlparse(url)
+        # The scheme is part of the key and decides the connection class.
+        # This used to be HTTPS unconditionally, which was right while every
+        # provider was a public https API and quietly wrong once a provider
+        # could be any address: a plain-http server on the local network (an
+        # Ollama or llama.cpp box) failed every NON-streamed call — and so
+        # every tool loop — with an SSL "wrong version number" error, while
+        # streamed replies, which don't come through here, worked fine.
+        scheme = "http" if (parsed.scheme or "").lower() == "http" else "https"
         host = parsed.hostname
-        port = parsed.port or 443
+        port = parsed.port or (80 if scheme == "http" else 443)
         path = parsed.path or "/"
         if parsed.query:
             path = path + "?" + parsed.query
-        key = (host, port)
+        key = (scheme, host, port)
 
         last_err = None
         for attempt in range(2):
@@ -3886,7 +3898,7 @@ class _HostConnectionCache:
         the cache so no other thread can use the same connection
         concurrently. Returns either the previously-cached connection
         (if fresh) or a brand-new one."""
-        host, port = key
+        scheme, host, port = key
         now = time.monotonic()
         with self._lock:
             entry = self._connections.pop(key, None)
@@ -3906,6 +3918,8 @@ class _HostConnectionCache:
                     pass
             else:
                 return conn
+        if scheme == "http":
+            return http.client.HTTPConnection(host, port, timeout=timeout)
         return http.client.HTTPSConnection(host, port, timeout=timeout)
 
     def _mark_used(self, key, conn):

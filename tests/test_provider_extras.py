@@ -25,8 +25,21 @@ Run:  python tests/test_provider_extras.py
 """
 
 import ast
+import json
 import os
 import sys
+import tempfile
+import threading
+
+# The plain-http check below makes real chat() calls, and chat() writes usage
+# and fingerprint logs. Those must land in a folder of this test's OWN: never
+# someone's real kin folder when run directly, and not the sandbox run_all
+# shares between every test file either. The first version used setdefault,
+# which under run_all meant the shared sandbox, and the usage lines it left
+# behind failed test_usage_provider, which reads that log expecting it empty.
+# A fresh folder inside whatever home we were given is gone with that home.
+os.environ["HEARTHKIN_HOME"] = tempfile.mkdtemp(
+    prefix="hk-extras-", dir=(os.environ.get("HEARTHKIN_HOME") or None))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -70,8 +83,10 @@ def _payload(model, effort, show_thinking=True):
 def test_other_provider_gets_no_openrouter_fields():
     p = _payload(FEATHERLESS, "off")
     check("model id sent without our prefix", p["model"] == "Qwen/Qwen3-32B")
-    check("default thinking 'off' sends no reasoning field at all",
-          "reasoning" not in p and "reasoning_effort" not in p)
+    check("default thinking 'off' sends the plain reasoning_effort 'none', "
+          "not OpenRouter's reasoning object (a model that thinks by default "
+          "otherwise spends the whole reply thinking)",
+          p.get("reasoning_effort") == "none" and "reasoning" not in p)
     check("no top-level cache_control (Qwen is on the caching list, so "
           "this used to be sent)", "cache_control" not in p)
     check("no OpenRouter provider-routing block", "provider" not in p)
@@ -154,6 +169,99 @@ def test_keep_alive_skips_hosted_models():
               and calls == [])
     finally:
         urllib.request.urlopen = real
+
+
+def test_connection_class_follows_the_scheme():
+    import http.client
+    cache = lb._HostConnectionCache()
+    plain = cache._acquire(("http", "127.0.0.1", 80), 5)
+    secure = cache._acquire(("https", "example.com", 443), 5)
+    check("an http address gets a plain connection",
+          type(plain) is http.client.HTTPConnection)
+    check("positive control: an https address still gets a secure one",
+          isinstance(secure, http.client.HTTPSConnection))
+    plain.close()
+    secure.close()
+
+
+def test_blocking_call_to_a_plain_http_provider():
+    """End to end, the way it failed: a NON-streamed chat, and the tool loop
+    that runs on it, against a provider at an http:// address — which is
+    what an Ollama or llama.cpp box on the local network is. Before the fix
+    both died with an SSL 'wrong version number' error before sending."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(
+                int(self.headers["Content-Length"])))
+            if body.get("tools") and not any(
+                    m.get("role") == "tool" for m in body["messages"]):
+                msg = {"role": "assistant", "content": "", "tool_calls": [{
+                    "id": "call_1", "type": "function",
+                    "function": {"name": "favourite_number",
+                                 "arguments": "{}"}}]}
+            else:
+                msg = {"role": "assistant", "content": "Hello! Blue."}
+            out = json.dumps({
+                "choices": [{"index": 0, "message": msg,
+                             "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 3,
+                          "total_tokens": 8}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d/v1" % srv.server_address[1]
+    real = lb.api_providers
+
+    def with_plain():
+        provs = real()
+        provs["plainhttp"] = {"base": base, "label": "plainhttp"}
+        return provs
+
+    lb.api_providers = with_plain
+    os.environ["PLAINHTTP_API_KEY"] = "not-needed"
+    model = "plainhttp/test-model"
+    msgs = [{"role": "user", "content": "hi"}]
+    try:
+        try:
+            r = lb.chat(model, list(msgs), stream=False, think_effort="off")
+            got = (getattr(r, "content", "") or "").strip()
+            err = ""
+        except Exception as e:
+            got, err = "", "%s: %s" % (type(e).__name__, e)
+        check("a non-streamed chat reaches a plain-http provider %s"
+              % (("(" + err[:120] + ")") if err else ""),
+              got == "Hello! Blue.")
+        calls = []
+        tools = [{"type": "function", "function": {
+            "name": "favourite_number", "description": "x",
+            "parameters": {"type": "object", "properties": {},
+                           "required": []}}}]
+        try:
+            r = lb.run_tool_loop(
+                model, list(msgs), tools,
+                {"favourite_number": lambda a: calls.append(a) or "42"},
+                think_effort="off")
+            got = (getattr(r, "content", "") or "").strip()
+            err = ""
+        except Exception as e:
+            got, err = "", "%s: %s" % (type(e).__name__, e)
+        check("...and so does the tool loop, which runs the tool %s"
+              % (("(" + err[:120] + ")") if err else ""),
+              got == "Hello! Blue." and len(calls) == 1)
+    finally:
+        lb.api_providers = real
+        os.environ.pop("PLAINHTTP_API_KEY", None)
+        srv.shutdown()
 
 
 # --- structural ratchet ---------------------------------------------------
@@ -251,6 +359,8 @@ def main():
         test_keep_alive_skips_hosted_models()
     finally:
         lb.api_providers = _real_api_providers
+    test_connection_class_follows_the_scheme()
+    test_blocking_call_to_a_plain_http_provider()
     test_detector_positive_control()
     test_no_hand_rolled_hosted_checks()
     if _failures:
