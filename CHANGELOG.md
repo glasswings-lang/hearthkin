@@ -2,6 +2,42 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
+## Unreleased
+
+### Added
+
+- **You can add an online AI service yourself, without anyone changing the code.** Until now Hearthkin knew exactly two places a model could live: your own Ollama, and OpenRouter. Adding a third meant editing Python, which put it out of reach of the person who actually uses the app. A service is now a name, an address and a key. Add one from **Manage providers…** in the model browser, or as a line in `~/.hearthkin/providers.md` written as `name = https://host/v1` — the same shape the Ollama machines list already uses. Its models then appear in the model browser with the name in front, like `featherless/…`, and a kin can be pointed at one exactly as it is pointed at anything else.
+
+  **Nearly every hosted service copies OpenAI's way of talking, which is why this can be a text file at all.** It also means the address does not have to be a company. An Ollama, llama.cpp or LM Studio server on another machine on your network speaks the same shape at its own `/v1` address, and works the same way. This was checked against a real one, including conversations that use tools and with thinking both on and off.
+
+  **The key never goes in the list.** It is saved to its own file in your home folder, or read from an environment variable, because a list of services is exactly the sort of thing someone pastes into a chat when asking for help. The window holds a typed key until you press Save, so Cancel really cancels. **Test connection** asks the service for its model list rather than sending a message, so nobody is charged to find out they typed the address wrong. The name you type is shown live as what it will become (`Featherless AI` is saved as `featherless-ai`), since it turns up again in every model name and in the key's filename.
+
+  **Removing a service only warns when it would break something, and then it says what.** Nothing uses it, which is the usual case, and it is simply removed. If a kin does, the warning names that kin and says the saved key is kept, so putting the service back restores everything. It asks rather than quietly choosing another model because a service's name is part of the model's name. There is nothing to fall back *to*, and picking a replacement silently would change a kin's voice without a word in its model history.
+
+  **A service name that isn't configured fails instead of going somewhere else.** An early version quietly sent a removed or mistyped service's conversations to OpenRouter — a different company than the model named. It now refuses and says so. Matching is always against the list, never "whatever is before the first slash", because local models are routinely called things like `hf.co/…/…` and those must keep going to Ollama.
+
+  In the model browser, every service gets its own choice under Provider, Ollama first and the rest alphabetical, so the order cannot shift under someone moving by keyboard. Each keeps a keyboard shortcut — Ollama and OpenRouter keep the ones they always had — and the choices stay in the same place in the tab order after the providers window closes. **Filters** stays OpenRouter-only, because prices, warmth and capability flags come from OpenRouter's own catalogue. Other services report model names and very little else, so a kin on one of them has no known context window until you set it.
+
+### Fixed
+
+- **A service you add is sent a standard request, not OpenRouter's private extras.** The request builder added three OpenRouter-only fields for every service: a `reasoning` block, a `cache_control` hint, and a provider-routing block. A kin's default thinking setting is "off", and "off" was sent out loud, so the `reasoning` block went with **every** message. Strict services refuse a field they don't recognise, so a service added in the dialog could fail on its very first message for a reason nothing on screen named. Those three now go only to OpenRouter. Kin already on OpenRouter get exactly what they got before.
+
+  Other services get the plain `reasoning_effort` field instead, and **"off" is sent as `none`, not left out.** Leaving it out was tried first, and checked against a real model that thinks by default, it was wrong: the model spent the whole reply thinking and came back empty. With `none` the same request answered at once.
+
+  The sampling settings a kin already has — temperature, top k, min p, the repetition penalty — still go to every service, because they are choices someone made and the open-model hosts use them. **Known gap:** Mistral refuses fields it doesn't know, and may refuse top k and min p. It has not been tried.
+
+- **The rest of the app no longer mistakes another service's model for one on your own computer.** Sixteen places asked whether a model's name began with `openrouter/` when what they meant was "is this online?". With a second service that answer was wrong, and the app asked your *local* Ollama about a model it had never heard of. What that affected: the thinking check, which could switch thinking off with a status line saying the model didn't support it; the compatibility check when you change a kin's model, where a "no" from Ollama could become a false warning that the new model can't use tools; how long a reply waits before being called stuck, and what the message then says; which Ollama-only options appear under Model options; the machine a kin is pinned to after a model change; the image-size estimate; and the note about delays in a room. They all ask one function now, `llm_backend.is_hosted_model`. `tests/test_provider_extras.py` reads the app's real code for any new hand-written prefix check. It proves it can see one on a sample before trusting a clean result, and it asserts it actually opened the app's files — its first version skipped the whole tree and passed on the very code it was written to catch.
+
+- **A service at a plain `http://` address works for replies that don't stream, and so for conversations with tools.** Those went through a connection cache that always opened a secure connection, so a server on your own network failed before sending anything, with an SSL "wrong version number" error. Streamed replies take a different route and had worked all along, which made it look intermittent. Online services all use `https://` and were never affected.
+
+### For contributors
+
+- **The private-string guard runs as git hooks, and fails closed.** Before, it had to be remembered, and it passed when its list was missing. That meant it could not tell a fork apart from this repository with the guard switched off, and the public working copy sat in exactly that state, reporting ALL PASS while watching nothing. Now `pre-commit` scans every tracked file and `commit-msg` scans the message, since a message is the one thing a file scan can't see. One line arms a fresh clone: `git config core.hooksPath githooks`. It can't be committed for you, because git refuses to let a repository run its own code on clone. A checkout without `docs/private/` prints a DISARMED banner and passes, so a contributor is never blocked by a file they cannot have. `CONTRIBUTING.md` says all of this where someone setting up would look.
+
+- **`run_all.py` gives every test file one shared sandbox, not one each.** A test that makes a real `chat()` call writes usage and fingerprint logs there, and the next test to read those logs sees lines it didn't write. That happened once, and a test failed only inside the full run. A test that calls a model should make its own folder inside the home it was given, as `tests/test_provider_extras.py` and `tests/test_usage_provider.py` now do.
+
+- The working notes and old audits moved from the repository root into `docs/`, and the 2026-06-11 security audit now says it is a list that was worked through, not a live map of open holes.
+
 ## v0.10.0 — 2026-08-31
 
 ### Added
