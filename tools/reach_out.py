@@ -3,10 +3,13 @@
 """reach_out — a kin messages its operator on its own initiative.
 
 This is the gate that keeps proactive contact from being spammy: a kin only
-reaches out by *calling* this tool. Not calling it is the default and costs
-nothing — silence leaves no trace. Paired with the quiet heartbeat wake (see
+reaches out by *calling* this tool. Not calling it is the default and sends
+nothing. Paired with the quiet heartbeat wake (see
 hearthkin_cron.run_heartbeat), which gives a kin the *chance* to reach out
-without ever requiring it to say anything."""
+without ever requiring it to say anything. Not calling it is not always
+traceless, though: a substantial reply written without calling it is asked
+about once, and words never asked about are kept in heartbeat_unsent.log (see
+turn_steering.log_unsent_reach for which case keeps the text)."""
 
 import datetime
 

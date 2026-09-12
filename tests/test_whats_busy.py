@@ -62,8 +62,13 @@ class _Frame:
             raise self._busy
         return self._busy
 
-    def SetStatusText(self, text):
+    def _set_status(self, text, speak=False):
         self.status.append(text)
+
+    def SetStatusText(self, text):
+        # The real frame has no status bar, so this raises there. Recording
+        # it here would let a handler that writes only to a status bar pass.
+        raise RuntimeError("this frame has no status bar")
 
 
 def ask(busy):
@@ -77,7 +82,8 @@ def ask(busy):
 # Silence would be indistinguishable from the key not working.
 f, said = ask([])
 check("idle says so out loud", said == "Nothing is running. It's idle.")
-check("...and puts the same words in the status bar", f.status == [said])
+check("...and puts the same words in the Activity field, where they can be "
+      "re-read", f.status == [said])
 
 # --- one thing ----------------------------------------------------------
 f, said = ask(["Alder is saving notes to its memory"])
@@ -108,18 +114,18 @@ check("...and says it can't tell, rather than claiming idle",
       said == "I can't tell what's running just now.")
 
 
-class _NoStatusBar(_Frame):
-    def SetStatusText(self, text):
-        raise RuntimeError("no status bar yet")
+class _BrokenActivity(_Frame):
+    def _set_status(self, text, speak=False):
+        raise RuntimeError("activity field not built yet")
 
 
 _said.clear()
 _raised = None
 try:
-    _NoStatusBar(["X is busy"])._on_whats_busy(None)
+    _BrokenActivity(["X is busy"])._on_whats_busy(None)
 except Exception as e:                                    # pragma: no cover
     _raised = e
-check("a failing status bar doesn't swallow the spoken answer",
+check("a failing Activity field doesn't swallow the spoken answer",
       _raised is None and _said == ["X is busy."])
 
 

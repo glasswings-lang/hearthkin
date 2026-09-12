@@ -118,6 +118,68 @@ accels = [r.GetLabel().split("&", 1)[1][:1].lower()
 check("no two radios claim the same accelerator: %r" % (accels,),
       len(set(accels)) == len(accels))
 
+
+def _all_descendants(win):
+    for c in win.GetChildren():
+        yield c
+        yield from _all_descendants(c)
+
+
+# ...and none of them may take a letter another control in the dialog already
+# answers to. Only Ollama's "o" used to be reserved, so a provider named
+# featherless got Alt+F — the Filters button's letter — and a duplicated Alt
+# letter on Windows cycles focus instead of pressing anything.
+radio_set = set(radios)
+others = set()
+for c in _all_descendants(dlg):
+    if c in radio_set:
+        continue
+    lab = c.GetLabel() if hasattr(c, "GetLabel") else ""
+    lab = (lab or "").replace("&&", "")
+    if "&" in lab:
+        others.add(lab.split("&", 1)[1][:1].lower())
+others.add("l")                     # the dialog's Alt+L jump to the list
+clashes = sorted(set(accels) & others)
+check("no provider radio shares an Alt letter with another control: %r"
+      % (clashes,), not clashes)
+# Positive control: the old seed ({"o"} only) must clash for featherless, or
+# this check can't see the thing it exists for.
+old_letter = ModelBrowserDialog._accelerator_for(
+    "featherless (remote)", {"o"}).split("&", 1)[1][:1].lower()
+check("control: the old reservation would have given featherless a clashing "
+      "letter (%r)" % old_letter, old_letter in others)
+
+# --- OpenRouter's filters must not empty another provider's list ---------
+# Filters set while on OpenRouter stayed in _filter_state after switching, and
+# every non-Ollama provider was run through them. A plain /models list has no
+# capability fields, so a "Tool-use" filter removed every model — with the
+# Filters button hidden for that provider, so nothing on screen could clear it.
+_real_populate = dlg._populate_list
+dlg._populate_list = lambda: None
+_saved = (dlg._provider, dict(dlg._filter_state), list(dlg._models))
+try:
+    dlg._filter_state = dict(dlg._default_filter_state(), tools=True)
+    dlg._models = [{"id": "Qwen/Qwen3-32B"}, {"id": "some/other-model"}]
+    dlg.search_ctrl.SetValue("")
+    dlg._provider = "featherless"
+    dlg._apply_filters()
+    check("an added provider's list ignores OpenRouter-only filters",
+          len(dlg._filtered) == 2)
+    dlg.search_ctrl.SetValue("qwen")
+    dlg._apply_filters()
+    check("...while search still narrows it",
+          [m["id"] for m in dlg._filtered] == ["Qwen/Qwen3-32B"])
+    dlg.search_ctrl.SetValue("")
+    dlg._provider = "openrouter"
+    dlg._apply_filters()
+    check("control: on OpenRouter the same Tool-use filter does remove models "
+          "with no reported capabilities", len(dlg._filtered) == 0)
+finally:
+    dlg._provider, dlg._filter_state, dlg._models = (
+        _saved[0], _saved[1], _saved[2])
+    dlg.search_ctrl.SetValue("")
+    dlg._populate_list = _real_populate
+
 # --- a removed provider must not leave an unset group -------------------
 dlg._provider = "featherless"
 kp.save_api_providers([("openrouter", "https://openrouter.ai/api/v1")])

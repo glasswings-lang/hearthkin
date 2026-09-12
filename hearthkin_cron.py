@@ -1216,10 +1216,12 @@ def _log_heartbeat(kin, outcome):
 def run_heartbeat(kin, cfg, should_stop=None):
     """Fire one quiet heartbeat: give the kin a moment and the chance to reach
     out (via the reach_out tool). If it calls reach_out, that tool delivers +
-    records the message. If it doesn't, NOTHING is recorded or sent — the
-    heartbeat prompt and the kin's (non-reaching) reply are dropped, so silence
-    leaves no trace: no journal, no conversation turn, no 'HEARTBEAT_OK'.
-    Returns True if the kin reached out.
+    records the message. If it doesn't, nothing is sent and nothing enters the
+    kin's history — no journal, no conversation turn, no 'HEARTBEAT_OK'. A
+    substantial reply written without calling reach_out is asked about once
+    (turn_steering.unsent_reach_note); words the kin was never asked about are
+    kept in heartbeat_unsent.log, while a considered refusal records only the
+    fact. Returns True if the kin reached out.
 
     Runs an LLM call every time regardless of outcome — that's the cost of
     giving the kin a genuine chance to speak. The caller (the app's heartbeat
@@ -1367,7 +1369,8 @@ def run_heartbeat(kin, cfg, should_stop=None):
             except Exception as e:
                 _log_heartbeat(kin, f"nudge-failed={type(e).__name__}:{e}")
 
-    # Silence is free and leaves NO trace in the kin's history: we deliberately
+    # Silence leaves nothing in the kin's HISTORY (it may leave a log line —
+    # see below): we deliberately
     # do NOT persist the heartbeat prompt or the kin's reply to
     # conversation.jsonl. Only reach_out (if it fired) recorded anything — the
     # message the kin chose to send. What IS recorded now is a message that

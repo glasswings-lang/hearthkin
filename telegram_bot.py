@@ -6369,8 +6369,19 @@ class TelegramBot:
             import authoring_bridge
             writes = authoring_bridge.extract_authoring_writes(content)
             if writes:
+                # Same confinement as this surface's file tools (see
+                # load_tools confine_paths above): a fence must not reach
+                # where write_file was deliberately stopped from reaching.
+                # Read from the kin config, never from anything the model sets.
+                try:
+                    from kin_persistence import load_agent_config
+                    _bridge_cfg = load_agent_config(self.agent_name) or {}
+                except Exception:
+                    _bridge_cfg = {}
+                _bridge_confine = not bool(
+                    _bridge_cfg.get("remote_unconfined_files"))
                 results = authoring_bridge.commit_authoring_writes(
-                    self.agent_name, writes)
+                    self.agent_name, writes, confine=_bridge_confine)
                 oks = [(p, d) for (p, ok, d) in results if ok]
                 errs = [(p, d) for (p, ok, d) in results if not ok]
                 # Kin-facing note: full paths (its own files).

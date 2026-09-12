@@ -288,18 +288,27 @@ def looks_like_write_gesture(reply_text, extra_verbs=None):
     return None
 
 
-def commit_authoring_writes(agent_name, writes, *, max_bytes=512 * 1024):
+def commit_authoring_writes(agent_name, writes, *, max_bytes=512 * 1024,
+                            confine=False):
     """Write each ``AuthoringWrite`` to disk, kin-scoped exactly like the
     ``write_file`` tool (relative → inside the kin's dir; absolute → as-is;
     ``..`` traversal rejected by ``resolve_kin_path``). Missing parent dirs
     are created so a fresh game-asset path works on first write.
+
+    ``confine=True`` is the remote-surface rule the file tools already follow
+    there: absolute paths are refused and the target must resolve inside the
+    kin's folder. A remote caller MUST pass the same value it gives
+    ``load_tools(confine_paths=...)``. Before this existed, Telegram's file
+    tools were confined by default while a fenced block from the same kin
+    went through here unconfined — so the fence could write anywhere on the
+    host that the tools were deliberately stopped from reaching.
 
     Returns a list of ``(display_path, ok, detail)`` — ``detail`` is the
     byte count on success or an error string on failure. Never raises; a
     per-write failure is captured in its tuple so one bad write can't sink
     the batch or the surrounding reply.
     """
-    from tools._io import resolve_kin_path, atomic_write_text
+    from tools._io import resolve_kin_path, atomic_write_text, path_within_kin
 
     results = []
     for w in writes:
@@ -321,9 +330,15 @@ def commit_authoring_writes(agent_name, writes, *, max_bytes=512 * 1024):
             # resolve_kin_path returns (Path, None) or (None, error_message):
             # relative → inside the kin dir, absolute → as-is, traversal
             # rejected. atomic_write_text creates missing parent dirs.
-            target, err = resolve_kin_path(w.path, agent_name)
+            target, err = resolve_kin_path(w.path, agent_name, confine=confine)
             if err:
                 results.append((w.path, False, err))
+                continue
+            # Re-assert containment on a confined surface, as write_file does:
+            # a symlink already inside the kin folder could point out of it.
+            if confine and not path_within_kin(target, agent_name):
+                results.append((w.path, False,
+                                "that path resolves outside your kin folder."))
                 continue
             if w.form == "append":
                 # Read-modify-write rather than open("a"): atomic_write_text is

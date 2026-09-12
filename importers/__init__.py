@@ -85,6 +85,13 @@ def parse_history(source_path, kin_display_name, **opts):
     # off to skype_json directly. Same for .json files (Skype export or
     # an OpenClaw sessions.json index sitting beside the session files).
     lower = source_path.lower()
+    # A claude.ai export arrives as a .zip. claude_json reads the zip itself,
+    # but this dispatcher is what File -> Import history calls, and it used to
+    # hand a .zip to the text sniffers below as raw bytes — so the download
+    # failed with "No messages parsed … Detected format: plain" while the same
+    # conversations.json, extracted by hand, imported fine.
+    if lower.endswith(".zip") and claude_json.detect_path(source_path):
+        return claude_json.parse(source_path, kin_display_name, **opts)
     if lower.endswith(".tar") or lower.endswith(".json"):
         if skype_json.detect_path(source_path):
             return skype_json.parse(source_path, kin_display_name, **opts)

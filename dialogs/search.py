@@ -262,7 +262,13 @@ class SearchDialog(wx.Dialog):
             return
         r = self._results[idx]
         kind = "room" if r["source"] == "room" else "kin"
-        self.on_open_target(kind, r["kin"])
+        # Pass where the match was, so the frame can open Settings only for a
+        # soul or memory match. Without it every kin result opened Settings,
+        # including a match in a conversation, which lives in the chat.
+        try:
+            self.on_open_target(kind, r["kin"], r["source"])
+        except TypeError:
+            self.on_open_target(kind, r["kin"])
 
     @staticmethod
     def _make_snippet(text, query, context_chars=200):

@@ -457,9 +457,14 @@ class ImportHistoryDialog(wx.Dialog):
         with wx.FileDialog(
             self,
             "Pick one or more chat log files",
+            # Claude's download is a .zip, and it was in no filter but All
+            # files — so the one file people actually have was hidden unless
+            # they knew to switch. OpenClaw sessions are .jsonl.
             wildcard=(
                 "Text and markdown logs (*.txt;*.md)|*.txt;*.md|"
+                "Claude export (*.zip;*.json)|*.zip;*.json|"
                 "Skype JSON / .tar exports (*.json;*.tar)|*.json;*.tar|"
+                "OpenClaw session files (*.jsonl)|*.jsonl|"
                 "All files (*.*)|*.*"
             ),
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE,

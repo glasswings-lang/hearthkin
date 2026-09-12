@@ -66,7 +66,10 @@ _PATTERNS = (
 )
 
 written = {}
-for path in sorted(ROOT.rglob("*.py")):
+# .pyw too: hearthkin.pyw writes tray_failures.log, and a scan of *.py alone
+# never saw it, so that log went untrimmed while this test reported full
+# coverage.
+for path in sorted(list(ROOT.rglob("*.py")) + list(ROOT.rglob("*.pyw"))):
     parts = set(path.parts)
     if ".git" in parts or "tests" in parts or "__pycache__" in parts:
         continue

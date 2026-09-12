@@ -1055,9 +1055,10 @@ DEFAULT_AGENT_CONFIG = {
     "cron_inject_when_running": True,
     # Proactive heartbeat: a gentle recurring wake (while Hearthkin is running)
     # that gives the kin a *chance* to reach out on its own via the reach_out
-    # tool — it never has to, and staying silent leaves no trace. Off by
+    # tool — it never has to, and staying silent sends nothing (words it wrote
+    # but was never asked about are kept in heartbeat_unsent.log). Off by
     # default. It runs an LLM call each time it fires even when the kin stays
-    # silent, so keep the interval conservative on paid (OpenRouter) models; on
+    # silent, so keep the interval conservative on paid online providers; on
     # a local Ollama kin the cost is just compute. See hearthkin_cron.run_heartbeat.
     "heartbeat": {
         "enabled": False,
@@ -2430,6 +2431,9 @@ ALWAYS_ON_LOGS = (
     "park_unreachable.log", "prompt_fingerprint.log", "recall.log",
     "telegram_stream.log", "migration.log", "distill_triggers.log",
     "heartbeat_unsent.log",
+    # Written from hearthkin.pyw, which the trim test's scan of *.py never
+    # read — so this one grew unbounded while the test reported full coverage.
+    "tray_failures.log",
 )
 for _log_name in ALWAYS_ON_LOGS:
     trim_log_file(LOGS_DIR / _log_name)
@@ -4850,8 +4854,10 @@ APP_PROMPT_REGISTRY = {
         "title": "Heartbeat (quiet proactive check-in)",
         "desc": "The framing for a heartbeat wake — gives the kin a moment to "
                 "itself and the chance to reach out via the reach_out tool. "
-                "Silence leaves no trace, so heartbeats never become "
-                "'HEARTBEAT_OK'-style acknowledgment spam. v2 keeps that "
+                "Staying quiet sends nothing and adds nothing to the kin's "
+                "history, so heartbeats never become 'HEARTBEAT_OK'-style "
+                "acknowledgment spam. (Words it wrote but was never asked "
+                "about are kept in heartbeat_unsent.log.) v2 keeps that "
                 "restraint but names the two unwanted messages as content "
                 "(a status update, a repeat) instead of asking the kin to "
                 "second-guess whether its own impulse is genuine.",

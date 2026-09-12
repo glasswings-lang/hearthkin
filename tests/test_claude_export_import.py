@@ -116,6 +116,30 @@ check(from_zip == from_json,
       "parsing the zip gives exactly what parsing the json gives")
 check(fmt_z == "claude_json", "and reports the same format")
 
+# The checks above call the Claude reader directly. File -> Import history
+# does not: it calls importers.parse_history, which used to hand a .zip to the
+# plain-text sniffers as raw bytes and fail with "No messages parsed ...
+# Detected format: plain". So the promise "point the window at the download"
+# was broken exactly where people use it, while every check here stayed green.
+import importers  # noqa: E402
+try:
+    via_window, _, fmt_w = importers.parse_history(str(zip_path), "Claude")
+    _window_err = None
+except Exception as e:  # noqa: BLE001
+    via_window, fmt_w, _window_err = None, None, e
+check(_window_err is None and fmt_w == "claude_json" and via_window == from_zip,
+      "the Import window's own reader takes the .zip too (%s)"
+      % (_window_err or "ok"))
+# ...and the new route must not swallow any zip: one that isn't an export
+# still goes nowhere near the Claude reader.
+try:
+    _, _, fmt_decoy = importers.parse_history(str(decoy), "Claude")
+except Exception:  # noqa: BLE001 — refusing it outright is also correct
+    fmt_decoy = None
+check(fmt_decoy != "claude_json",
+      "...but a zip that isn't an export is not read as one (got %r)"
+      % (fmt_decoy,))
+
 print("\n-- what comes through, and what honestly cannot --")
 
 roles = [m["role"] for m in from_zip]

@@ -50,8 +50,11 @@ class LifecycleMixin:
             # a list someone is expected to scan.
             message = ", ".join(busy[:-1]) + f", and {busy[-1]}."
 
+        # The Activity field, not SetStatusText: this frame has no status bar,
+        # so SetStatusText raised, was swallowed, and the answer was only ever
+        # spoken — nothing on screen, and nothing to re-read afterwards.
         try:
-            self.SetStatusText(message)
+            self._set_status(message)
         except Exception:
             pass
         try:
@@ -1061,7 +1064,7 @@ class LifecycleMixin:
         dlg.ShowModal()
         dlg.Destroy()
 
-    def _open_search_target(self, kind, name):
+    def _open_search_target(self, kind, name, source=None):
         """Callback from SearchDialog when the user picks a result."""
         if kind == "room":
             if name in list_rooms():
@@ -1070,5 +1073,9 @@ class LifecycleMixin:
             if name in list_agents():
                 self._load_agent(name)
                 # If the search hit the kin's soul or memory, open the Settings
-                # dialog so the user lands where the match lives.
-                self._on_edit_kin(None)
+                # dialog so the user lands where the match lives. A match in a
+                # conversation lives in the chat that just loaded — this used
+                # to open Settings for every kin result, because the source of
+                # the match was never passed through.
+                if source in (None, "soul", "memory"):
+                    self._on_edit_kin(None)

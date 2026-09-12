@@ -819,6 +819,12 @@ class ModelBrowserDialog(wx.Dialog):
 
     # ─── Model loading ───────────────────────────────────────────────────────
 
+    # Alt letters used by this dialog's own controls: &Ollama, Manage
+    # pro&viders…, &Machine, Mana&ge machines…, &Search, &Clear search,
+    # &Filters…, &Detail, &Refresh list, C&ancel, &Use this model, and the
+    # Alt+L jump to the list.
+    _RESERVED_MNEMONICS = frozenset("ovmgscfdraul")
+
     @staticmethod
     def _accelerator_for(label, taken):
         """Put an `&` before the first letter of `label` not already claimed,
@@ -869,7 +875,15 @@ class ModelBrowserDialog(wx.Dialog):
             names = ["openrouter"]
 
         entries = [("ollama", "&Ollama (local)")]
-        taken = {"o"}
+        # Every letter another control in this dialog already answers to, not
+        # just Ollama's. With only "o" reserved, a provider named featherless
+        # took Alt+F from Filters…, groq took Alt+G from Manage machines…,
+        # mistral took Alt+M from Machine. A duplicated Alt letter on Windows
+        # cycles between controls instead of pressing one, which reads as the
+        # shortcut being broken. Keep in step with the labels in _build_ui;
+        # tests/test_provider_radio_order.py builds the dialog and fails if any
+        # two controls here share a letter.
+        taken = set(self._RESERVED_MNEMONICS)
         for name in names:
             entries.append((name, self._accelerator_for(name + " (remote)", taken)))
 
@@ -1145,9 +1159,15 @@ class ModelBrowserDialog(wx.Dialog):
     def _apply_filters(self):
         query = (self.search_ctrl.GetValue() or "").strip().lower()
 
-        # Ollama path: short list, no priced/warmth/capability filters apply.
-        # Search is the only filter that does meaningful work locally.
-        if self._provider == "ollama":
+        # Everything but OpenRouter: search only. The priced/warmth/capability
+        # filters read OpenRouter's catalogue, and a plain /models list from
+        # any other provider carries none of those fields. This used to test
+        # `== "ollama"`, so an added provider fell through to the OpenRouter
+        # path — and filters set earlier on OpenRouter, still in
+        # _filter_state, hid its whole list (no capabilities means every model
+        # fails a "Tool-use" filter) while the Filters button that could clear
+        # them was hidden for that provider.
+        if self._provider != "openrouter":
             filtered = []
             for m in self._models:
                 if query:
