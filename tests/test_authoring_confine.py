@@ -84,6 +84,40 @@ check("...and every call passes confine=",
       bool(calls) and all(any(k.arg == "confine" for k in c.keywords)
                           for c in calls))
 
+# --- end to end: Telegram's real fence path follows the SAME checkbox ------
+# The kin Settings checkbox "Let remote (Telegram/Discord) file tools reach
+# outside the kin folder" saves remote_unconfined_files (dialogs/tool_settings.py).
+# A fence save must obey that one checkbox, not a switch of its own. So this
+# drives TelegramBot._run_authoring_bridge_telegram — the method a real
+# Telegram reply goes through — with the setting off and then on.
+from kin_persistence import DEFAULT_AGENT_CONFIG, save_agent_config  # noqa: E402
+from telegram_bot import TelegramBot  # noqa: E402
+
+bot = TelegramBot.__new__(TelegramBot)   # no network, no threads: just the method
+bot.agent_name = KIN
+
+
+def _fence_save_through_telegram(target, checkbox_on):
+    cfg = dict(DEFAULT_AGENT_CONFIG)
+    cfg["remote_unconfined_files"] = checkbox_on
+    save_agent_config(KIN, cfg)
+    reply = "Here it is.\n```write:%s\nfrom telegram\n```\n" % target.as_posix()
+    return bot._run_authoring_bridge_telegram(
+        reply, ["write_file", "edit_file"], [])
+
+
+tg_off = outside / "via-telegram-checkbox-off.txt"
+note_off, _chat_off = _fence_save_through_telegram(tg_off, checkbox_on=False)
+check("Telegram, checkbox OFF: a fence to a path outside the kin folder is "
+      "refused", not tg_off.exists())
+check("...and the kin is told it could not save", bool(note_off)
+      and "could NOT save" in note_off)
+
+tg_on = outside / "via-telegram-checkbox-on.txt"
+note_on, _chat_on = _fence_save_through_telegram(tg_on, checkbox_on=True)
+check("Telegram, checkbox ON: the same kind of fence save lands outside, "
+      "exactly as the file tools would", tg_on.exists())
+
 # Control for the syntax check: a call without the keyword must be seen as
 # missing it, or the check above proves nothing.
 probe = ast.parse("authoring_bridge.commit_authoring_writes(kin, writes)")
