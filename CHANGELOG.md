@@ -20,6 +20,8 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Fixed
 
+- **Telegram messages from deleted accounts are no longer stuck onto the message before them.** A Telegram text export writes a message from an account that has since been deleted with an empty name: just the time, then a colon. The importer didn't recognise that as a new message, so it folded the whole line, time and all, into whatever the previous person had said, and the deleted account's words were credited to someone else. Those lines now come in as their own messages from **Unknown sender**, at their own time. The export doesn't record who the account was, so Hearthkin doesn't guess.
+
 - **A service you add is sent a standard request, not OpenRouter's private extras.** The request builder added three OpenRouter-only fields for every service: a `reasoning` block, a `cache_control` hint, and a provider-routing block. A kin's default thinking setting is "off", and "off" was sent out loud, so the `reasoning` block went with **every** message. Strict services refuse a field they don't recognise, so a service added in the dialog could fail on its very first message for a reason nothing on screen named. Those three now go only to OpenRouter. Kin already on OpenRouter get exactly what they got before.
 
   Other services get the plain `reasoning_effort` field instead, and **"off" is sent as `none`, not left out.** Leaving it out was tried first, and checked against a real model that thinks by default, it was wrong: the model spent the whole reply thinking and came back empty. With `none` the same request answered at once.

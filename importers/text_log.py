@@ -6,7 +6,10 @@ Text-log parser. Handles two shapes through one entry point:
   1. Telegram .txt exports — bracket timestamps, e.g.
        [15-01-2024 10:00:00] SpeakerFive: The parcel arrived this morning.
      with continuation lines (no bracket prefix) folded into the
-     previous message.
+     previous message. A line whose name is empty, e.g.
+       [01-15-2024 10:01:00] : Thanks for the parcel.
+     is how the export writes a message from an account that has since
+     been deleted. It becomes its own message from UNKNOWN_SENDER.
 
   2. Hand-authored — date headers + Name: lines, e.g.
        # 2024-01-15
@@ -37,8 +40,17 @@ from tools._io import robust_read_text
 # ─── Detection ────────────────────────────────────────────────────── #
 
 _TELEGRAM_PREFIX = re.compile(
-    r"^\[(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2}):(\d{2})\] ([^:]+?): "
+    # The name may be EMPTY: "[date time] : text" is how a Telegram .txt
+    # export writes a message from a deleted account. Requiring a name here
+    # made those lines look like continuation text, so each one was glued,
+    # timestamp and all, onto the previous speaker's message.
+    r"^\[(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2}):(\d{2})\] ([^:]*?): "
 )
+
+# What an empty-name line is filed under. The export carries no name and no
+# id for these, so nothing better can be recovered; this at least keeps the
+# message whole, at its own time, and plainly marked as not knowing who.
+UNKNOWN_SENDER = "Unknown sender"
 _DATE_HEADER = re.compile(
     r"^#\s+(\d{4})-(\d{2})-(\d{2})(?:\s+(.+))?\s*$"
 )
@@ -184,7 +196,7 @@ def _parse_telegram(text, kin_display_name):
             mo, da, yr, hh, mm, ss, speaker = m.groups()
             ts = _safe_iso(int(yr), int(mo), int(da),
                            int(hh), int(mm), int(ss))
-            speaker = speaker.strip()
+            speaker = speaker.strip() or UNKNOWN_SENDER
             # Strip the matched prefix to get the rest of the line.
             rest = line[m.end():]
             current = {
