@@ -4036,6 +4036,20 @@ DEFAULT_HEARTBEAT_FRAME = (
     "else is welcome."
 )
 
+# The first line of any room whose conversation a KIN began ("Let them
+# begin", or auto-continue ticked in an empty room). Without it the opening
+# kin was sent a system prompt and nothing else -- no turn at all to answer --
+# which some models handle, some answer strangely, and some providers refuse.
+# It is not stored: the room history builder puts it at the top whenever the
+# stored conversation starts with a kin's turn, so the front of every kin's
+# prompt stays the same from turn to turn (see "The prompt must be
+# append-only" in CLAUDE.md). Worded as the room's state rather than an order,
+# and for whoever reads it, since every kin in the room sees it at the top.
+DEFAULT_ROOM_OPENING_FRAME = (
+    "[The room is quiet. Nothing has been said yet; whoever speaks first can "
+    "begin however they like.]"
+)
+
 # Operator-extendable word lists for the reading-gesture detector
 # (reading_bridge.looks_like_read_gesture). Purely ADDITIVE, exactly like
 # gesture_messages: the built-in baseline is unchanged and anything added here
@@ -4861,6 +4875,17 @@ APP_PROMPT_REGISTRY = {
                 "restraint but names the two unwanted messages as content "
                 "(a status update, a repeat) instead of asking the kin to "
                 "second-guess whether its own impulse is genuine.",
+    },
+    "room_opening_frame": {
+        "default": DEFAULT_ROOM_OPENING_FRAME,
+        "version": 1,
+        "placeholders": [],
+        "title": "Room opening (a kin speaks first)",
+        "desc": "The first line of a room whose conversation a kin began, "
+                "with Let them begin or auto-continue in an empty room. "
+                "Before it existed the opening kin was sent no turn at all. "
+                "Every kin in the room sees it at the top, so it describes "
+                "the room rather than instructing one kin.",
     },
     "rolling_window_marker": {
         "default": DEFAULT_ROLLING_WINDOW_MARKER,

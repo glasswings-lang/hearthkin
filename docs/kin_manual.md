@@ -268,6 +268,7 @@ Every editable harness prompt is listed here by the name its file goes by (`prom
 
 - `wake_up_frame` — the opening of a scheduled wake-up: the time, the day, and that your scheduler fired rather than a person writing.
 - `heartbeat_frame` — the quiet moment on a heartbeat, with the chance to use `reach_out` and no obligation to.
+- `room_opening_frame` — the first line of a room the kin began, before anyone had spoken: the room was quiet, and whoever went first could begin however they liked. Every kin in that room sees it at the top.
 - `heartbeat_unsent_nudge` — on a heartbeat, after you wrote something substantial without sending it: nobody reads a heartbeat reply, so call `reach_out` if you meant it for them, or say nothing and the moment stays yours. Asked once only.
 - `tool_use_hint` — added when you have tools, naming them and asking you to call them for real rather than describe the call.
 - `tool_use_hint_no_tools` — added when you have no tools: name what's missing and ask rather than act it out, and use a fenced block to keep memory.

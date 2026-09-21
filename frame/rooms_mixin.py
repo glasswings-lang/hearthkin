@@ -65,7 +65,7 @@ class RoomsMixin:
             # just wasn't being called from this path.
             self._refresh_load_older_button()
             self.continue_btn.Show()
-            self.continue_btn.Enable(False)  # nothing to continue until a round happens
+            self._refresh_continue_button()
             self.regen_btn.Disable()  # regen is a single-kin concept
 
             # Visually clear and re-render existing transcript
@@ -412,6 +412,36 @@ class RoomsMixin:
         self.continue_btn.Enable(False)
         self._run_next_kin_in_round()
 
+    # The same button, and the same Alt+N, in both states. In an empty room it
+    # used to sit disabled ("nothing to continue until a round happens"), so
+    # the only way to let the kin open a room was ticking auto-continue, which
+    # started a round as a side effect. Letting them begin is now a thing the
+    # room offers on purpose.
+    LET_THEM_BEGIN_LABEL = "Let them begi&n"
+    CONTINUE_LABEL = "Co&ntinue round"
+
+    def _continue_button_state(self):
+        """(label, enabled) for the Continue button, from the room's state."""
+        empty = not any(m.get("role") in ("user", "assistant")
+                        for m in self.room_conversation)
+        idle = (self._room_paused and not self._room_active
+                and bool(self._room_round_order))
+        if empty:
+            return self.LET_THEM_BEGIN_LABEL, idle
+        return self.CONTINUE_LABEL, idle and self._room_round_count > 0
+
+    def _refresh_continue_button(self):
+        if self.current_room is None:
+            return
+        label, enabled = self._continue_button_state()
+        if self.continue_btn.GetLabel() != label:
+            self.continue_btn.SetLabel(label)
+            try:
+                self.continue_btn.GetParent().Layout()
+            except Exception:
+                pass
+        self.continue_btn.Enable(enabled)
+
     def _on_auto_toggle(self, event):
         if self.current_room is None:
             return
@@ -493,66 +523,17 @@ class RoomsMixin:
         kin_name = self._room_active_order[self._room_round_index]
         self._stream_one_kin_in_room(kin_name)
 
-    def _stream_one_kin_in_room(self, kin_name):
-        if ollama is None:
-            self._set_status("Error: ollama library not installed.")
-            self._finish_round()
-            return
+    def _room_history_for(self, kin_name):
+        """The room transcript as kin_name should see it: its own turns as
+        `assistant`, everyone else's as tagged `user` turns.
 
-        cfg = load_agent_config(kin_name)
-        model = strip_model_annotation(cfg.get("model", "qwen2.5:7b-instruct"))
-        if not model or model.startswith("("):
-            self._append_block_plain(f"[skipped {kin_name}: no valid model]")
-            self._room_round_index += 1
-            wx.CallAfter(self._run_next_kin_in_round)
-            return
-
-        soul = load_soul(kin_name)
-        # for_prompt: a room turn doesn't go through the desktop send path
-        # either, so a kin met only in rooms had the same silent gap.
-        memory = load_memory_for_prompt(kin_name)
-        ctx_note = self.room_cfg.get("context_note", "").strip()
-        other_names = [m for m in self._room_active_order if m != kin_name]
-        # The history builder now delivers BOTH the human and the other kin
-        # in the `user` channel, each tagged "[Name] " (see the long note
-        # there). So this block must not (a) claim they arrive any other way,
-        # or (b) demonstrate the "[Name]: " shape — the old text did both,
-        # and spelling the attractor out in the system prompt is just handing
-        # the model the pattern we removed from the history. It must also say
-        # which bracket name is the human, since "the user" is no longer a
-        # channel the human uniquely occupies.
-        room_human = (self.config.get("user_name", "") or "").strip()
-        room_block = (
-            f"You are in a room with {', '.join(other_names) or 'no one else'}. "
-            "Every turn but your own arrives tagged with the speaker's name in "
-            "brackets at the start of the line; your own words are never "
-            "tagged. Go by the bracket to tell who said what, and speak only "
-            "in your own voice, never theirs.\n"
-            "\n"
-            "Format rules — these are critical:\n"
-            f"- Do NOT prefix your reply with your own name. The chat system labels you as [{kin_name}] automatically.\n"
-            "- Do NOT write replies for other people in the room. Only your own next turn.\n"
-            "- Do NOT write a multi-character scene. One reply, in your voice, addressed to whoever you're addressing.\n"
-            "- If a prior turn from someone else looks cut off (mid-sentence, unclosed quote, trailing comma, etc.), that's just their generation hitting its length cap — do NOT finish their thought, close their quote, or continue in their voice. Start your own reply from your own perspective.\n"
-            + (
-                f"- [{room_human}] is the human in the room. "
-                f"{', '.join(other_names)} are kin like you. Treat the human as such.\n"
-                if room_human and other_names
-                else "- The user is in the room. They are the human; treat them as such.\n"
-            )
-        )
-        if ctx_note:
-            room_block += "\n\n" + ctx_note
-
-        # Resolve this kin's enabled tools first so the base prompt's
-        # tool/memory scaffolding is fenced to what's on (same list picks
-        # the streaming-vs-tool-loop worker below).
-        enabled_tool_names = load_kin_tools(kin_name)
-        sys_prompt = build_system_prompt(
-            soul, memory, room_block=room_block, enabled_tools=enabled_tool_names,
-            kin_name=kin_name
-        )
-
+        If a kin began the conversation (Let them begin, or auto-continue in
+        an empty room), the first line is the room-opening note. Without it
+        the opening kin was sent a system prompt and no turn at all. The note
+        is never stored; it is put back at the top whenever the stored
+        conversation starts with a kin, so every later turn's prompt starts
+        exactly the same way (the prompt must be append-only).
+        """
         # Operator's display name — inlined as "[name] " on every
         # user turn so kin in the room can tell who the human is
         # (same way they see each other tagged with [KinName]:).
@@ -618,6 +599,83 @@ class RoomsMixin:
                     if m_thinking:
                         own_msg["thinking"] = m_thinking
                     history.append(own_msg)
+
+        if self._room_opened_by_kin():
+            history.insert(0, {"role": "user",
+                               "content": load_app_prompt("room_opening_frame", kin_name)})
+        return history
+
+    def _room_opened_by_kin(self):
+        """True when the room is empty (so a kin would be first) or its
+        stored conversation starts with a kin's turn."""
+        for m in self.room_conversation:
+            if m.get("role") == "user":
+                return False
+            if m.get("role") == "assistant":
+                return True
+        return True
+
+    def _stream_one_kin_in_room(self, kin_name):
+        if ollama is None:
+            self._set_status("Error: ollama library not installed.")
+            self._finish_round()
+            return
+
+        cfg = load_agent_config(kin_name)
+        model = strip_model_annotation(cfg.get("model", "qwen2.5:7b-instruct"))
+        if not model or model.startswith("("):
+            self._append_block_plain(f"[skipped {kin_name}: no valid model]")
+            self._room_round_index += 1
+            wx.CallAfter(self._run_next_kin_in_round)
+            return
+
+        soul = load_soul(kin_name)
+        # for_prompt: a room turn doesn't go through the desktop send path
+        # either, so a kin met only in rooms had the same silent gap.
+        memory = load_memory_for_prompt(kin_name)
+        ctx_note = self.room_cfg.get("context_note", "").strip()
+        other_names = [m for m in self._room_active_order if m != kin_name]
+        # The history builder now delivers BOTH the human and the other kin
+        # in the `user` channel, each tagged "[Name] " (see the long note
+        # there). So this block must not (a) claim they arrive any other way,
+        # or (b) demonstrate the "[Name]: " shape — the old text did both,
+        # and spelling the attractor out in the system prompt is just handing
+        # the model the pattern we removed from the history. It must also say
+        # which bracket name is the human, since "the user" is no longer a
+        # channel the human uniquely occupies.
+        room_human = (self.config.get("user_name", "") or "").strip()
+        room_block = (
+            f"You are in a room with {', '.join(other_names) or 'no one else'}. "
+            "Every turn but your own arrives tagged with the speaker's name in "
+            "brackets at the start of the line; your own words are never "
+            "tagged. Go by the bracket to tell who said what, and speak only "
+            "in your own voice, never theirs.\n"
+            "\n"
+            "Format rules — these are critical:\n"
+            f"- Do NOT prefix your reply with your own name. The chat system labels you as [{kin_name}] automatically.\n"
+            "- Do NOT write replies for other people in the room. Only your own next turn.\n"
+            "- Do NOT write a multi-character scene. One reply, in your voice, addressed to whoever you're addressing.\n"
+            "- If a prior turn from someone else looks cut off (mid-sentence, unclosed quote, trailing comma, etc.), that's just their generation hitting its length cap — do NOT finish their thought, close their quote, or continue in their voice. Start your own reply from your own perspective.\n"
+            + (
+                f"- [{room_human}] is the human in the room. "
+                f"{', '.join(other_names)} are kin like you. Treat the human as such.\n"
+                if room_human and other_names
+                else "- The user is in the room. They are the human; treat them as such.\n"
+            )
+        )
+        if ctx_note:
+            room_block += "\n\n" + ctx_note
+
+        # Resolve this kin's enabled tools first so the base prompt's
+        # tool/memory scaffolding is fenced to what's on (same list picks
+        # the streaming-vs-tool-loop worker below).
+        enabled_tool_names = load_kin_tools(kin_name)
+        sys_prompt = build_system_prompt(
+            soul, memory, room_block=room_block, enabled_tools=enabled_tool_names,
+            kin_name=kin_name
+        )
+
+        history = self._room_history_for(kin_name)
 
         messages = [{"role": "system", "content": sys_prompt}] + history
 
@@ -1185,6 +1243,7 @@ class RoomsMixin:
         self.send_btn.Enable()
         self.stop_btn.Disable()
         self.continue_btn.Enable(True)
+        self._refresh_continue_button()
         self._update_round_label()
 
         cap = self.room_cfg.get("max_auto_rounds", 10)

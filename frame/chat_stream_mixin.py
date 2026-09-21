@@ -1565,6 +1565,8 @@ class ChatStreamMixin:
                 )
             self.chat_display.Clear()
             self._update_round_label()
+            # Empty again, so the kin can be let to begin.
+            self._refresh_continue_button()
             self._set_status(f"Room '{self.current_room}' history cleared.")
             return
         if self.conversation:

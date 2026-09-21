@@ -264,7 +264,7 @@ python hearthkin.pyw</code></pre>
   <li><strong>Keys</strong> — reminds you which key sends and which makes a new line.</li>
   <li><strong>Attach image…</strong> (<kbd>Alt</kbd>+<kbd>I</kbd>), <strong>Take photo</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) and <strong>Remove image</strong> (<kbd>Alt</kbd>+<kbd>M</kbd>) — see <a href="#images">Sending images</a>.</li>
   <li><strong>Send</strong> (<kbd>Alt</kbd>+<kbd>S</kbd>), <strong>Stop</strong> (<kbd>Alt</kbd>+<kbd>P</kbd>), <strong>Regenerate</strong> (<kbd>Alt</kbd>+<kbd>G</kbd>), <strong>Clear chat</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) and <strong>Talk</strong> (dictation — it has no shortcut, so reach it with <kbd>Tab</kbd>).</li>
-  <li>In room mode only: <strong>Continue round</strong> (between Stop and Regenerate), then <strong>Auto-continue rounds</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) and the <strong>Rounds</strong> field.</li>
+  <li>In room mode only: <strong>Continue round</strong> (between Stop and Regenerate; <strong>Let them begin</strong> while the room is empty), then <strong>Auto-continue rounds</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) and the <strong>Rounds</strong> field.</li>
 </ul>
 
 <h3 id="sending">Sending a message</h3>
@@ -1196,6 +1196,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li>The first speaker rotates each round, so no one is always first.</li>
   <li>A room with exactly two kin keeps a fixed order instead: the same kin always goes first.</li>
   <li><strong>Continue round</strong> in the main window, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> with the message box empty, runs another round without you saying anything.</li>
+  <li><strong>In an empty room the same button reads Let them begin</strong> (still <kbd>Alt</kbd>+<kbd>N</kbd>), and the kin start the conversation without you. The first line every kin in that room sees is a short note that the room was quiet and whoever spoke first could begin however they liked; it isn't shown in the chat, and you can reword it as the <code>room_opening_frame</code> prompt.</li>
   <li><strong>Stop</strong> ends the whole round, not just the kin speaking, and turns Auto-continue off.</li>
   <li>A kin's tool calls in a room are shown in the chat, but they aren't kept for that kin's next turn.</li>
 </ul>
@@ -2036,6 +2037,7 @@ understood, exactly as it does for you at the console.</p>
   <li><code>wake_up_frame</code> — the framing on a scheduled wake-up.</li>
   <li><code>heartbeat_frame</code> — the framing on a heartbeat.</li>
   <li><code>heartbeat_unsent_nudge</code> — asks a kin whether a message it wrote on a heartbeat was meant for you.</li>
+  <li><code>room_opening_frame</code> — the first line of a room the kin began themselves, with Let them begin.</li>
 </ul>
 
 <h4>The park</h4>
