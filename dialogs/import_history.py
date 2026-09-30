@@ -464,7 +464,8 @@ class ImportHistoryDialog(wx.Dialog):
                 "Text and markdown logs (*.txt;*.md)|*.txt;*.md|"
                 "Claude export (*.zip;*.json)|*.zip;*.json|"
                 "Skype JSON / .tar exports (*.json;*.tar)|*.json;*.tar|"
-                "OpenClaw session files (*.jsonl)|*.jsonl|"
+                "Kindroid API archive / OpenClaw sessions (*.jsonl)"
+                "|*.jsonl|"
                 "All files (*.*)|*.*"
             ),
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE,
@@ -1014,7 +1015,8 @@ def _format_label(fmt):
         "telegram": "Telegram .txt export",
         "hand_authored": "Hand-authored text",
         "plain": "Plain sequential (no timestamps detected)",
-        "kindroid": "Kindroid chat export",
+        "kindroid": "Kindroid chat export (text, lossy)",
+        "kindroid-api": "Kindroid archive from their API (real timestamps)",
         "skype_json": "Skype JSON / .tar export (Microsoft official)",
         "skype_txt": "Skype text export (SkypeParser .txt)",
         "openclaw": "OpenClaw session store (whole-life folder)",
@@ -1028,6 +1030,14 @@ def _describe_source(filename, kin_display_name, fmt):
     kin reads. Honest and brief."""
     if fmt == "hand_authored":
         return "hand-authored seed history"
+    if fmt == "kindroid-api":
+        # Said differently from the text export on purpose. This one has
+        # real timestamps and stated speakers in it, and a kin reading the
+        # marker later should be able to tell which of the two it got.
+        if kin_display_name:
+            return (f"a Kindroid history with {kin_display_name}, archived "
+                    f"through their API")
+        return f"a Kindroid history archived through their API ({filename})"
     if fmt == "kindroid":
         # Voice Call Transcript files name themselves at the top of
         # the filename; otherwise it's a regular text chat.
