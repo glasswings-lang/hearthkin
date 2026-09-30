@@ -37,7 +37,7 @@ from ._canonical import (  # noqa: F401
 from tools._io import robust_read_text
 
 from . import (claude_json, claude_markdown, hearthkin_jsonl, kindroid,
-               openclaw, skype_json, skype_txt, text_log)
+               kindroid_api, openclaw, skype_json, skype_txt, text_log)
 
 
 # Dispatch order: most specific format first, text_log last (it owns
@@ -63,6 +63,10 @@ _PARSERS = (
     # conversation into two `user` turns and dropped every reply, which is
     # the silent kind of wrong.
     (claude_markdown.detect, claude_markdown.parse),
+    # Before kindroid: an API archive is JSON-per-line, and the text
+    # parser cannot see that. Handed to it, every line would read as
+    # one long unattributed message.
+    (kindroid_api.detect, kindroid_api.parse),
     (kindroid.detect, kindroid.parse),
 )
 
