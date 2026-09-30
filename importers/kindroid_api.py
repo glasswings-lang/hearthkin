@@ -34,6 +34,7 @@ export is lossy. Any file of the same rows imports the same way.
 
 import datetime
 import json
+import re
 
 from tools._io import robust_read_text
 
@@ -235,3 +236,100 @@ def parse(source_path, kin_display_name, **_opts):
     # having lost its mind.
     messages.sort(key=lambda m: m.get("ts") or "")
     return messages, "kindroid", "kindroid-api"
+
+
+# ============================================================================
+# The readable copy
+# ============================================================================
+#
+# The archiver writes two files per month: the .jsonl above, and a Markdown
+# view of it. The Markdown is the one a person actually opens, so it is the
+# one they reach for in a file picker -- and picking it used to fail with
+# "No messages parsed. Detected format: plain", which is a true sentence
+# that helps nobody.
+#
+# It is worth reading properly rather than refusing, because unlike
+# Kindroid's own text export this one has the times and the speakers written
+# into its headings. Nothing has to be guessed here either.
+#
+#     # 2026-09
+#
+#     ## 2026-09-01 14:11 - SpeakerFifteen
+#
+#     the message
+#
+#     *Image: a kettle on a windowsill*
+#
+# The .jsonl remains the better source -- it keeps the ids and the exact
+# fields -- but "the file I have" beating "the file I should have" is the
+# difference between importing a history and giving up on it.
+
+_MD_HEADING = re.compile(
+    r"^##\s+(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s+-\s+(.+?)\s*$")
+
+
+def detect_markdown(text):
+    """True when this is the archiver's readable copy.
+
+    Two headings of the exact shape is enough: a date, a time, a dash and a
+    name. Claude's saved conversations use bold speaker lines and Kindroid's
+    own export has no headings at all, so neither can be mistaken for this.
+    """
+    hits = 0
+    for line in text.splitlines():
+        if _MD_HEADING.match(line):
+            hits += 1
+            if hits >= 2:
+                return True
+    return False
+
+
+def parse_markdown(source_path, kin_display_name, **_opts):
+    """Read the readable copy. Same output as `parse`, same rules about whose
+    turns are whose -- including the fallback when no name matches, because a
+    renamed kin should not lose every reply.
+    """
+    lines = robust_read_text(source_path).splitlines()
+    wanted = (kin_display_name or "").strip().lower()
+
+    blocks = []                     # (speaker, iso, [body lines])
+    for line in lines:
+        found = _MD_HEADING.match(line)
+        if found:
+            year, month, day, hour, minute, second, speaker = found.groups()
+            stamp = "%s-%s-%sT%02d:%02d:%02d" % (
+                year, month, day, int(hour), int(minute), int(second or 0))
+            blocks.append((speaker.strip(), stamp, []))
+            continue
+        if blocks:
+            blocks[-1][2].append(line.rstrip())
+
+    # Whose turns are the kin's. The readable copy does not say which
+    # speakers are AI, so the kin is identified by name -- and when the name
+    # matches nothing, everybody who is not the most frequent OTHER speaker
+    # would be a guess, so the safer reading is to take no turns as the
+    # kin's and let the preview show it. That is the opposite of the .jsonl
+    # rule, and it is deliberate: there, "ai" is stated, so a non-matching
+    # name is a naming problem. Here there is nothing to fall back ON.
+    names = {speaker.lower() for speaker, _stamp, _body in blocks}
+    matched = wanted in names
+
+    messages = []
+    for speaker, stamp, body in blocks:
+        content = "\n".join(body).strip()
+        if not content:
+            continue
+        mine = matched and speaker.lower() == wanted
+        message = {
+            "role": "assistant" if mine else "user",
+            "content": content,
+            "ts": stamp,
+            "speaker": speaker,
+            "source": "import:kindroid",
+        }
+        if not mine:
+            message["sender_attribution"] = speaker
+        messages.append(message)
+
+    messages.sort(key=lambda m: m.get("ts") or "")
+    return messages, "kindroid", "kindroid-archive-md"

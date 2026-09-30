@@ -57,6 +57,12 @@ _PARSERS = (
     (claude_json.detect, claude_json.parse),
     (skype_json.detect, skype_json.parse),
     (skype_txt.detect, skype_txt.parse),
+    # Before claude_markdown: both are .md. The archiver's readable copy has
+    # dated "## time - speaker" headings; Claude's has bold speaker lines.
+    # The readable copy is the file people reach for in a picker, because it
+    # is the one they actually open, and picking it used to fail with "No
+    # messages parsed. Detected format: plain" -- true, and no help at all.
+    (kindroid_api.detect_markdown, kindroid_api.parse_markdown),
     # Before kindroid and text_log: an extracted Claude conversation is a
     # .md whose speakers are bold lines, and neither of those parsers can
     # see that. Handed to text_log it did not fail -- it merged a whole

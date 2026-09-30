@@ -461,6 +461,12 @@ class ImportHistoryDialog(wx.Dialog):
             # files — so the one file people actually have was hidden unless
             # they knew to switch. OpenClaw sessions are .jsonl.
             wildcard=(
+                # Everything supported, FIRST, because the first entry is the
+                # one the dialog opens on -- and a Kindroid archive sitting in
+                # the chosen folder was invisible until you knew to change the
+                # filter. A file you cannot see is a file you cannot import.
+                "All supported logs|"
+                "*.txt;*.md;*.jsonl;*.json;*.zip;*.tar|"
                 "Text and markdown logs (*.txt;*.md)|*.txt;*.md|"
                 "Claude export (*.zip;*.json)|*.zip;*.json|"
                 "Skype JSON / .tar exports (*.json;*.tar)|*.json;*.tar|"
@@ -1017,6 +1023,7 @@ def _format_label(fmt):
         "plain": "Plain sequential (no timestamps detected)",
         "kindroid": "Kindroid chat export (text, lossy)",
         "kindroid-api": "Kindroid archive from their API (real timestamps)",
+        "kindroid-archive-md": "Kindroid archive, the readable copy",
         "skype_json": "Skype JSON / .tar export (Microsoft official)",
         "skype_txt": "Skype text export (SkypeParser .txt)",
         "openclaw": "OpenClaw session store (whole-life folder)",
@@ -1030,6 +1037,14 @@ def _describe_source(filename, kin_display_name, fmt):
     kin reads. Honest and brief."""
     if fmt == "hand_authored":
         return "hand-authored seed history"
+    if fmt == "kindroid-archive-md":
+        # The readable half of the same archive. Said as its own thing so a
+        # kin can tell which file it was given, since the record beside it
+        # keeps more than this one does.
+        if kin_display_name:
+            return (f"a Kindroid history with {kin_display_name}, from the "
+                    f"readable copy of an archive")
+        return f"a Kindroid archive, readable copy ({filename})"
     if fmt == "kindroid-api":
         # Said differently from the text export on purpose. This one has
         # real timestamps and stated speakers in it, and a kin reading the
