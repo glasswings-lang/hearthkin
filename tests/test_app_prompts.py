@@ -5,8 +5,10 @@ file-wins template changed NOTHING the model sees. Each externalized prompt
 is asserted to reproduce — byte for byte — the exact text the old code
 produced, so a future edit to a default can't silently change kin behavior.
 
-The single intentional exception is the tool-roleplay corrective, which is
-deliberately reworded (see its own golden, which encodes the NEW phrasing).
+Two intentional exceptions, each documented on its own golden: the
+tool-roleplay corrective, which was deliberately reworded, and the
+with-tools nudge, cut to four sentences in v2 after measuring that the
+rest of it changed nothing on the models actually in use.
 
 No pytest dependency: plain asserts + a summary line, exit 1 on any failure.
 Run:  python tests/test_app_prompts.py
@@ -41,31 +43,38 @@ def check(name, cond):
 # default, the mismatch surfaces here instead of in production.
 
 def golden_tool_use_hint(tool_names):
-    """The desktop _inject_tool_use_hint with-tools branch, verbatim."""
+    """The with-tools nudge as it stands after v2, verbatim.
+
+    The SECOND intentional exception to this file's byte-for-byte rule, and
+    the reason is measurement rather than taste. v1 also listed examples,
+    said the tools were real and ran on the user's machine, and reassured
+    the model that "the user already approved each tool for this kin;
+    calling them is expected, not intrusive" — written in May 2026 against
+    a Gemma build that refused with "I don't have the capability to
+    directly access local file systems" even with the schemas supplied.
+
+    Re-measured 30 September 2026 on the models in use (a Muse Glimmer 30B
+    fine-tune and the current gemma4): a file read was called 3/3 with no
+    hint at all, and a file write was issued 3/3 with no narration, with a
+    real ~10k-character kin prompt as well as a short persona. The refusal
+    is gone and the words were costing ~1,100 characters in the LAST
+    position of every prompt, in helpdesk register — the most
+    assistant-shaped text in a kin's context, sitting closest to the
+    conversation.
+
+    What survives is the part with a mechanism under it: a typed-out call
+    is silent, and a kin that believes it wrote a file nobody wrote is a
+    failure the person cannot see.
+    """
     return (
         "\n\n--- Tool use ---\n"
-        "Tools available to you this turn: "
+        "Tools this turn: "
         + ", ".join(tool_names)
-        + ". When a question fits one of these, call the tool — don't "
-        "fall back to 'I'm a language model, I can't do that' "
-        "boilerplate. The tools are real, run on the user's machine, "
-        "and return actual results. Examples: call read_file when "
-        "asked for a file's contents, memory_search when asked what "
-        "you remember about a topic, note when you want to record "
-        "something for later. The user already approved each tool "
-        "for this kin; calling them is expected, not intrusive."
-        "\n\n"
-        "IMPORTANT: when you decide to use a tool, INVOKE it via "
-        "your structured tool interface — the same channel you "
-        "use for any tool call. DO NOT write 'call_X', 'X()', "
-        "'<call: X>', or any other text description of the call. "
-        "Text patterns that look like tool calls do NOTHING — "
-        "they don't reach the tool runner, the tool doesn't run, "
-        "and you'll proceed as if you got a result when you "
-        "didn't. Only the structured invocation actually executes "
-        "the tool and brings real output back to you. If you "
-        "find yourself typing the tool's name as text, stop and "
-        "issue the structured call instead."
+        + ". A tool only runs when it is invoked through "
+        "the structured tool interface. Writing its name as text — call_X, "
+        "X(), <call: X> — does nothing at all: nothing runs, nothing comes "
+        "back, and continuing as though it had is the one failure nobody can "
+        "see from the outside. So issue the call, or say you have not."
     )
 
 

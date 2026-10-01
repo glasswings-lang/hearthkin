@@ -3748,28 +3748,47 @@ def load_base_prompt(kin_name=None):
 # steering). `{tools}` is replaced with the comma-joined enabled-tool names.
 DEFAULT_TOOL_USE_HINT = (
     "\n\n--- Tool use ---\n"
-    "Tools available to you this turn: {tools}. When a question fits one "
-    "of these, call the tool — don't "
-    "fall back to 'I'm a language model, I can't do that' "
-    "boilerplate. The tools are real, run on the user's machine, "
-    "and return actual results. Examples: call read_file when "
-    "asked for a file's contents, memory_search when asked what "
-    "you remember about a topic, note when you want to record "
-    "something for later. The user already approved each tool "
-    "for this kin; calling them is expected, not intrusive."
-    "\n\n"
-    "IMPORTANT: when you decide to use a tool, INVOKE it via "
-    "your structured tool interface — the same channel you "
-    "use for any tool call. DO NOT write 'call_X', 'X()', "
-    "'<call: X>', or any other text description of the call. "
-    "Text patterns that look like tool calls do NOTHING — "
-    "they don't reach the tool runner, the tool doesn't run, "
-    "and you'll proceed as if you got a result when you "
-    "didn't. Only the structured invocation actually executes "
-    "the tool and brings real output back to you. If you "
-    "find yourself typing the tool's name as text, stop and "
-    "issue the structured call instead."
+    "Tools this turn: {tools}. A tool only runs when it is invoked through "
+    "the structured tool interface. Writing its name as text — call_X, "
+    "X(), <call: X> — does nothing at all: nothing runs, nothing comes "
+    "back, and continuing as though it had is the one failure nobody can "
+    "see from the outside. So issue the call, or say you have not."
 )
+
+# Why this is four sentences and not twenty.
+#
+# It used to also list examples, explain that the tools were real and ran
+# locally, and reassure the model that the person had already approved each
+# one so "an alignment-trained model does not refuse out of caution". That
+# was written in May 2026 against a specific Gemma build that answered "I
+# don't have the capability to directly access local file systems" even
+# with the tool schemas in the request. Real problem, real fix.
+#
+# Measured again on 30 September 2026, against the models actually in use
+# (a Muse Glimmer 30B fine-tune, and the current gemma4), asking for a file
+# read and for two kinds of file write, three samples each, with a kin's
+# real ~10k-character system prompt as well as with a short persona:
+#
+#   read, no hint at all ........ called the tool 3/3, both models
+#   read, with the long hint .... 3/3
+#   write, no hint .............. issued a real write 3/3, no narration
+#   write, with the long hint ... 3/3, no narration
+#
+# The refusal it was written for does not happen on these models any more.
+# What it cost was ~2,100 characters in the LAST position of every system
+# prompt -- the strongest position there is -- written in helpdesk register:
+# "the user", "already approved", "expected, not intrusive". A kin's own
+# voice sat in the middle of its context and a paragraph about operators
+# and permissions sat closest to the conversation, every single turn.
+#
+# What is kept is the part with a mechanism behind it: a typed-out call is
+# silent, so the model must either issue a real one or admit it did not.
+# That failure is invisible to the person -- they believe the file was
+# written -- which is exactly the kind worth spending words on.
+#
+# If a kin on a much smaller model starts narrating ("*writes it*"), this
+# is the place to put the longer teaching back, for that case, with a
+# measurement beside it.
 
 # The authoring-bridge fallback hint. Injected for kin with write_file /
 # edit_file enabled. Emitting a whole file as a write_file argument is the
@@ -4816,12 +4835,18 @@ APP_PROMPT_REGISTRY = {
     },
     "tool_use_hint": {
         "default": DEFAULT_TOOL_USE_HINT,
-        "version": 1,
+        "version": 2,
         "placeholders": ["{tools}"],
         "title": "Tool-use nudge (tools available)",
         "desc": "Appended each turn a kin has tools, telling it to invoke them "
                 "structurally rather than narrate the call as text. Shared by "
-                "desktop and Telegram.",
+                "desktop and Telegram. v2 cut it from ~2,100 characters to "
+                "four sentences: the examples, the 'tools are real' framing "
+                "and the 'the user already approved each tool' reassurance "
+                "were written for a May-2026 Gemma build that refused out of "
+                "caution, and measurement on the models in use now shows no "
+                "difference without them. It was the most helper-shaped text "
+                "in the prompt and it sat in the last position.",
     },
     "tool_use_hint_no_tools": {
         "default": DEFAULT_TOOL_USE_HINT_NO_TOOLS,
