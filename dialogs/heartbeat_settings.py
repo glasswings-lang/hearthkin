@@ -12,6 +12,7 @@ get_heartbeat(); the caller persists it with the parent's _save_param."""
 import re
 
 import wx
+from ._shared import TickList
 
 
 class HeartbeatSettingsDialog(wx.Dialog):
@@ -141,7 +142,7 @@ class HeartbeatSettingsDialog(wx.Dialog):
         # never announced (this list has its own SetName, which wins), so the
         # one instruction telling you HOW to tick a place reached sighted
         # users only — on a list whose entire purpose is ticking.
-        self.allow_list = wx.CheckListBox(self, choices=choices[1:])
+        self.allow_list = TickList(self, "Places", choices[1:])
         self.allow_list.SetName("Other places it may write to (Space toggles)")
         self.allow_list.SetMinSize((-1, 100))
         cur_allowed = {

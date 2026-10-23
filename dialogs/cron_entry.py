@@ -5,6 +5,7 @@
 import re
 
 import wx
+from ._shared import TickList
 
 
 class CronEntryDialog(wx.Dialog):
@@ -155,7 +156,7 @@ class CronEntryDialog(wx.Dialog):
         # position wxMSW will take a label from. Still added to the sizer above
         # the explainer, so nothing moves on screen.
         dest_label = wx.StaticText(self, label="Send this message &to:")
-        self.dest_list = wx.CheckListBox(self, choices=choices)
+        self.dest_list = TickList(self, "Send to", choices)
         self.dest_list.SetMinSize((-1, 110))
         _existing = {
             (d.get("surface"), str(d.get("id", "")))

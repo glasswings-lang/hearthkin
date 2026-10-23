@@ -17,11 +17,99 @@ Currently:
     integer position ("45"). Used by any dialog with scaled float
     sliders (the per-kin sampling settings).
 
+  - `TickList`: a list with a tick box beside each item that NVDA
+    actually reads. Use it instead of wx.CheckListBox, always.
+
 Kept in a leaf module so every dialog can `from ._shared import ...`
 without circular pain.
 """
 
 import wx
+
+
+class TickList(wx.ListCtrl):
+    """A list of names with a tick box beside each, that NVDA reads.
+
+    wx.CheckListBox draws its own ticks, so a screen reader hears the names
+    but never whether they're ticked — the "inconsistent announce" every
+    workaround in this app was built around. It was never inconsistent: it
+    was never there. This is the ordinary Windows list with checkboxes
+    switched on, which says "checked" / "not checked" on every item and
+    when Space flips one. Proven through MSAA and by ear, 23 October 2026.
+
+    It takes the CheckListBox calls the dialogs already use, and sends the
+    same EVT_CHECKLISTBOX (index in GetInt / GetSelection) when a PERSON
+    ticks or unticks. Ticks the program makes send nothing, matching
+    CheckListBox, so a dialog setting its initial ticks can't trip its own
+    handlers."""
+
+    def __init__(self, parent, title, choices=()):
+        super().__init__(parent, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_NO_HEADER)
+        self.InsertColumn(0, title)
+        self.EnableCheckBoxes(True)
+        self._quiet = False
+        self.Bind(wx.EVT_LIST_ITEM_CHECKED, self._on_tick)
+        self.Bind(wx.EVT_LIST_ITEM_UNCHECKED, self._on_tick)
+        self.Bind(wx.EVT_SIZE, self._on_size)
+        self.Set(list(choices))
+
+    def _on_size(self, event):
+        self.SetColumnWidth(0, max(self.GetClientSize().width - 4, 50))
+        event.Skip()
+
+    def _on_tick(self, event):
+        if self._quiet:
+            return
+        out = wx.CommandEvent(wx.wxEVT_CHECKLISTBOX, self.GetId())
+        out.SetEventObject(self)
+        out.SetInt(event.GetIndex())
+        self.GetEventHandler().ProcessEvent(out)
+
+    def Set(self, names):
+        """Replace every item. Ticks are cleared, as with CheckListBox."""
+        self.Freeze()
+        try:
+            self.DeleteAllItems()
+            for i, name in enumerate(names):
+                self.InsertItem(i, str(name))
+        finally:
+            self.Thaw()
+        # Something focused, so tabbing in says where you are.
+        if names:
+            self.SetSelection(0)
+
+    SetItems = Set
+
+    def GetItems(self):
+        return [self.GetItemText(i) for i in range(self.GetItemCount())]
+
+    def Clear(self):
+        self.DeleteAllItems()
+
+    def GetCount(self):
+        return self.GetItemCount()
+
+    def GetString(self, i):
+        return self.GetItemText(i)
+
+    def GetSelection(self):
+        return self.GetFirstSelected()
+
+    def SetSelection(self, i):
+        self.Select(i)
+        self.Focus(i)
+
+    def IsChecked(self, i):
+        return self.IsItemChecked(i)
+
+    def Check(self, i, ticked=True):
+        if self.IsItemChecked(i) == ticked:
+            return
+        self._quiet = True
+        try:
+            self.CheckItem(i, ticked)
+        finally:
+            self._quiet = False
 
 
 class _SliderValueAccessible(wx.Accessible):

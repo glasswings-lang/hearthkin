@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 
 import wx
+from dialogs._shared import TickList
 
 from llm_backend import (
     _ollama_show_raw,
@@ -447,8 +448,8 @@ class _ModelFilterDialog(wx.Dialog):
             makers_sizer.Add(makers_hint,
                              flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.BOTTOM,
                              border=4)
-            self.makers_list = wx.CheckListBox(
-                makers_box, choices=self._all_makers,
+            self.makers_list = TickList(
+                makers_box, "Makers", self._all_makers,
             )
             # Pre-check whatever was in the state.
             saved_makers = set(state.get("makers") or [])

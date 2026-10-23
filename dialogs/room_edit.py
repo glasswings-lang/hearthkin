@@ -9,7 +9,7 @@ from kin_persistence import (
     load_agent_config,
     load_room_conversation,
 )
-from ._shared import _IntField
+from ._shared import _IntField, TickList
 
 
 def members_without_auto_distill(members):
@@ -107,17 +107,10 @@ def _and_list(names):
 class RoomEditDialog(wx.Dialog):
     """Create or edit a Room. Room name field is locked on edit.
 
-    Member selection uses a CheckListBox: tab into it once, arrow keys
-    navigate, Space toggles. NVDA's announcement of checked/unchecked
-    state on wxMSW's native LISTBOX-with-checkmarks is inconsistent
-    (sometimes spoken, often not). Two accessibility safeguards are
-    layered on top:
-      - A read-only "Currently in this room (N): name1, name2" display
-        below the list, tab-reachable, so the user can always read
-        the current roster.
-      - On every Space-toggle, `nvda_speak(\"X added to room\" /
-        \"X removed from room\")` fires explicitly so the action is
-        confirmed audibly regardless of native announce behavior."""
+    Member selection is a TickList: tab into it once, arrow keys
+    navigate, Space toggles, and NVDA says "checked" / "not checked"
+    itself. Below it, a read-only "Currently in this room (N): name1,
+    name2" line gives the whole roster in speaking order in one breath."""
 
     def __init__(self, parent, title="New room", initial_name="", initial_cfg=None,
                  available_kin=None, name_locked=False):
@@ -159,7 +152,7 @@ class RoomEditDialog(wx.Dialog):
         ordered_kin = initial_members + non_members
 
         if ordered_kin:
-            self.kin_check = wx.CheckListBox(panel, choices=ordered_kin)
+            self.kin_check = TickList(panel, "Members", ordered_kin)
             for i, name in enumerate(ordered_kin):
                 if name in initial_members:
                     self.kin_check.Check(i, True)
@@ -170,10 +163,8 @@ class RoomEditDialog(wx.Dialog):
         else:
             self.kin_check = None
 
-        # Roster display: a read-only mirror of the checklist that NVDA
-        # can always read reliably (the CheckListBox itself often won't
-        # announce check state on wxMSW). Updated by _refresh_roster
-        # whenever the membership changes.
+        # Roster display: the whole membership in speaking order, in one
+        # breath. Updated by _refresh_roster whenever the membership changes.
         self.roster_display = wx.TextCtrl(
             panel,
             value=self._format_roster(initial_members),
@@ -182,9 +173,8 @@ class RoomEditDialog(wx.Dialog):
         # Name says WHY this exists, because landing on a read-only echo of
         # the list you just tabbed through reads as a duplicate control --
         # "I'd wonder if I'd tabbed into the same control twice." It isn't a
-        # duplicate: it's the reliable read of check state (wxMSW's native
-        # checklist announce is inconsistent), and it's the only place the
-        # speaking ORDER is stated in one breath rather than item by item.
+        # duplicate: it's the only place the speaking ORDER is stated in one
+        # breath rather than item by item.
         self.roster_display.SetName(
             "Room members in speaking order — read-only summary of the list above")
         self.roster_display.SetMinSize((-1, 50))
@@ -448,18 +438,10 @@ class RoomEditDialog(wx.Dialog):
             pass
 
     def _on_check_toggle(self, event):
-        # Fires on Space-toggle (or mouse-click on the check). Refresh
-        # the roster mirror and speak the change explicitly so the
-        # user hears confirmation even when wxMSW's native CheckListBox
-        # announce is silent.
-        idx = event.GetSelection()
-        if idx is None or idx < 0 or self.kin_check is None:
-            self._refresh_roster()
-            return
-        name = self.kin_check.GetString(idx)
-        is_checked = self.kin_check.IsChecked(idx)
+        # Fires on Space-toggle (or mouse-click on the check). NVDA already
+        # says "checked" / "not checked" from the list itself, so nothing
+        # extra is spoken here -- that would say everything twice.
         self._refresh_roster()
-        self._speak(f"{name} added to room" if is_checked else f"{name} removed from room")
 
     def _on_check_all(self, event):
         if self.kin_check is None:
