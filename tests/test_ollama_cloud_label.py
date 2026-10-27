@@ -131,10 +131,33 @@ def test_labels_and_card():
     check("cloud card states it too", "Max context:" in text)
 
 
+def test_added_provider_price_is_unknown_not_free():
+    """The same cloud models reached with an API key arrive as an added
+    provider, through a different path, and a missing price read as free."""
+    stand = _Stand()
+    stand._overrides = {}
+    fmt = mb.ModelBrowserDialog._format_entry
+    card = mb.ModelBrowserDialog._render_detail
+
+    added = {"id": "ollama-cloud/glm-5.2"}
+    line = fmt(stand, added)
+    check("added provider: list says price unknown", "price unknown" in line)
+    check("added provider: list never says free", "free" not in line)
+    text = card(stand, added)
+    check("added provider: card says pricing unknown", "Pricing:     unknown" in text)
+
+    # Positive controls: OpenRouter's real prices, including a real zero.
+    paid = {"id": "openrouter/x/paid", "pricing": {"prompt": "0.000001", "completion": "0.000002"}}
+    free = {"id": "openrouter/x/free", "pricing": {"prompt": "0", "completion": "0"}}
+    check("openrouter priced model keeps its price", "in $1.00/M, out $2.00/M" in fmt(stand, paid))
+    check("openrouter free model still says free", "in free, out free" in fmt(stand, free))
+
+
 def main():
     test_name_rule()
     test_list_entries()
     test_labels_and_card()
+    test_added_provider_price_is_unknown_not_free()
     print()
     if _failures:
         print(f"{len(_failures)} FAILURE(S): " + ", ".join(_failures))

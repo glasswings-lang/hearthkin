@@ -1304,18 +1304,25 @@ class ModelBrowserDialog(wx.Dialog):
         pricing = m.get("pricing") or {}
         # Pricing is per-token in scientific notation; convert to $/M for readability
         def per_m(field):
+            if field not in pricing:
+                return "?"
             try:
-                v = float(pricing.get(field, "0"))
+                v = float(pricing.get(field))
                 if v <= 0:
                     return "free"
                 return f"${v * 1_000_000:.2f}/M"
             except (TypeError, ValueError):
                 return "?"
-        in_p = per_m("prompt")
-        out_p = per_m("completion")
         ctx_str = context_length_label(m.get("context_length"))
         warmth = warmth_for(mid, self._overrides).get("warmth", "unknown")
         warmth_tag = {"high": "♥♥♥", "medium": "♥♥", "low": "♥", "unknown": "—"}[warmth]
+        # Only OpenRouter's catalogue carries prices. Every other service
+        # answers with ids and nothing else, and a missing price used to read
+        # as "free" -- on services that charge for every reply.
+        if not pricing:
+            return f"{warmth_tag}  {mid}  —  price unknown, {ctx_str}"
+        in_p = per_m("prompt")
+        out_p = per_m("completion")
         return f"{warmth_tag}  {mid}  —  in {in_p}, out {out_p}, {ctx_str}"
 
     # ─── Selection / detail ──────────────────────────────────────────────────
@@ -1447,7 +1454,9 @@ class ModelBrowserDialog(wx.Dialog):
             f"Warmth note: {info.get('note') or '(no curated note — add to ~/.ai_programs/warmth_overrides.json)'}",
             "",
             f"Context:     {m.get('context_length', '?')} tokens",
-            f"Pricing:     in ${pricing.get('prompt', '?')}/tok, out ${pricing.get('completion', '?')}/tok",
+            (f"Pricing:     in ${pricing.get('prompt', '?')}/tok, out ${pricing.get('completion', '?')}/tok"
+             if pricing else
+             "Pricing:     unknown. This service doesn't report prices; check its own website."),
             f"Capabilities: {caps_str}",
             f"Caching:     {caching}",
             "",
