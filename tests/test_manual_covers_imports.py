@@ -38,6 +38,7 @@ SPOKEN = {
     "kindroid": ("kindroid", "text export"),
     "claude_json": ("claude", ".zip"),
     "claude_markdown": ("claude", "markdown"),
+    "claude_code": ("claude code", ".jsonl"),
     "skype_json": ("skype",),
     "skype_txt": ("skype",),
     "telegram": ("telegram",),

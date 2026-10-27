@@ -199,6 +199,7 @@ This section exists so you can **answer the question**. People ask "can you reme
 - **Kindroid, the readable copy of that archive** — the `.md` written beside it, with `## date time - speaker` headings. Read just as exactly; it is the same content.
 - **Kindroid's own text export** — a `.txt` of names and messages. It works, and it is the lossiest of the three: the file has no dates in it, so times are inferred from the file's modified date, speakers are worked out by which lines look like names, and images and links are not in the file at all. If they have the API archive, prefer it.
 - **Claude** — the `.zip` the website gives you, or the `conversations.json` inside it. A conversation already saved as Markdown works too.
+- **Claude Code** — a session transcript, the `.jsonl` it keeps for each session. Only what the person typed and what was said back comes in; tool output, thinking and background notices are left out, because the file records them in the same places as the conversation.
 - **Skype** — Microsoft's official export (`.json` or `.tar`), or a `.txt` from SkypeParser.
 - **OpenClaw** — a whole session folder rather than one file.
 - **Telegram** — the `.txt` export.

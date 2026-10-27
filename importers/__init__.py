@@ -36,8 +36,9 @@ from ._canonical import (  # noqa: F401
 )
 from tools._io import robust_read_text
 
-from . import (claude_json, claude_markdown, hearthkin_jsonl, kindroid,
-               kindroid_api, openclaw, skype_json, skype_txt, text_log)
+from . import (claude_code, claude_json, claude_markdown, hearthkin_jsonl,
+               kindroid, kindroid_api, openclaw, skype_json, skype_txt,
+               text_log)
 
 
 # Dispatch order: most specific format first, text_log last (it owns
@@ -52,6 +53,11 @@ from . import (claude_json, claude_markdown, hearthkin_jsonl, kindroid,
 # like `conversation_id` for Skype JSON (one file = many conversations).
 _PARSERS = (
     (openclaw.detect, openclaw.parse),
+    # Before claude_json and the text parsers: a Claude Code transcript is
+    # line-oriented JSON whose turns nest role inside `message`, which no
+    # other detector here sniffs for. Its own detector wants sessionId and
+    # parentUuid together, a pairing nothing else writes.
+    (claude_code.detect, claude_code.parse),
     # Before skype_json: both are .json and both hold many
     # conversations, so the more specific sniff has to go first.
     (claude_json.detect, claude_json.parse),

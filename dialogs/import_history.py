@@ -470,7 +470,7 @@ class ImportHistoryDialog(wx.Dialog):
                 "Text and markdown logs (*.txt;*.md)|*.txt;*.md|"
                 "Claude export (*.zip;*.json)|*.zip;*.json|"
                 "Skype JSON / .tar exports (*.json;*.tar)|*.json;*.tar|"
-                "Kindroid API archive / OpenClaw sessions (*.jsonl)"
+                "Kindroid API archive / OpenClaw / Claude Code sessions (*.jsonl)"
                 "|*.jsonl|"
                 "All files (*.*)|*.*"
             ),
@@ -1029,6 +1029,7 @@ def _format_label(fmt):
         "openclaw": "OpenClaw session store (whole-life folder)",
         "claude_json": "Claude export (.zip or conversations.json)",
         "claude_markdown": "Claude conversation already saved as Markdown",
+        "claude_code": "Claude Code session transcript (.jsonl)",
     }.get(fmt, fmt)
 
 
@@ -1069,6 +1070,12 @@ def _describe_source(filename, kin_display_name, fmt):
         return f"a Skype chat archive ({filename})"
     if fmt == "openclaw":
         return "your history from OpenClaw, before Hearthkin"
+    # Claude's formats fell through to the Telegram wording below, so a kin
+    # was told its Claude history was a Telegram archive.
+    if fmt == "claude_code":
+        return f"a Claude Code working session ({filename})"
+    if fmt in ("claude_json", "claude_markdown"):
+        return f"a Claude conversation history ({filename})"
     # Telegram (or plain): name the counterpart if we have one.
     if kin_display_name:
         return f"Telegram archive with {kin_display_name}"
