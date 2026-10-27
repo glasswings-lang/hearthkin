@@ -31,6 +31,7 @@ Per-class modules:
 from ._shared import _IntField, rebuild_listbox
 from .agent_name import AgentNameDialog
 from .app_prompts_all import AllAppPromptsDialog
+from .balances import BalancesDialog
 from .base_prompt import BasePromptDialog
 from .confirm_close import ConfirmCloseDialog
 from .cron_entry import CronEntryDialog
@@ -64,6 +65,7 @@ __all__ = [
     "rebuild_listbox",
     "AgentNameDialog",
     "AllAppPromptsDialog",
+    "BalancesDialog",
     "BasePromptDialog",
     "ConfirmCloseDialog",
     "CronEntryDialog",

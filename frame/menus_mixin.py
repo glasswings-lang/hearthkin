@@ -5,7 +5,7 @@ Hearthkin(wx.Frame) class in hearthkin.pyw; every method here runs with
 the frame as `self`. Moved verbatim — no logic changed.
 """
 from frame_shared import (
-    HealthCheckDialog,
+    BalancesDialog, HealthCheckDialog,
     EditKinDialog, LOGS_DIR, Path, UsageHistoryDialog, __version__, _tool_cap_cache,
     agent_dir, clear_models_cache, datetime, json, list_agents, list_rooms,
     load_agent_config, nvda_speak, os, strip_model_annotation, sys, threading, urllib, wx,
@@ -139,6 +139,10 @@ class MenusMixin:
         # "where did my OpenRouter credits go" — pick the one whose
         # shape fits the question.
         self.mnu_usage = tools_menu.Append(wx.ID_ANY, "&Usage stats...")
+        # Every service's remaining money in one window. It sits with usage
+        # because it answers the other half of the same question: what was
+        # spent, and what is left.
+        self.mnu_balances = tools_menu.Append(wx.ID_ANY, "Bala&nces…")
         self.mnu_usage_history = tools_menu.Append(
             wx.ID_ANY, "Usage &history…",
         )
@@ -251,6 +255,9 @@ class MenusMixin:
                   lambda _e: self._on_speed_check(),
                   self.mnu_speed_check)
         self.Bind(wx.EVT_MENU,
+                  lambda _e: self._on_balances(),
+                  self.mnu_balances)
+        self.Bind(wx.EVT_MENU,
                   lambda _e: self._on_open_usage_log(),
                   self.mnu_open_usage_log)
         self.Bind(wx.EVT_MENU,
@@ -335,6 +342,17 @@ class MenusMixin:
             dlg.Destroy()
         except Exception as e:
             self._set_status(f"Couldn't open the speed check: {e}")
+
+    def _on_balances(self):
+        """Open Balances: what's left on every paid service, one line each.
+        Replaced the OpenRouter-only button in Preferences, so a second paid
+        service doesn't mean a second place to look."""
+        try:
+            dlg = BalancesDialog(self)
+            dlg.ShowModal()
+            dlg.Destroy()
+        except Exception as e:
+            self._set_status(f"Couldn't open Balances: {e}")
 
     def _on_usage_history(self):
         """Open the structured Usage history dialog — reads

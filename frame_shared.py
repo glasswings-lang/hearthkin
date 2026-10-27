@@ -84,6 +84,7 @@ import windows_startup
 # namespace by the time the dialog methods run.
 from dialogs import (
     AgentNameDialog,
+    BalancesDialog,
     ConfirmCloseDialog,
     EditKinDialog,
     ExecApprovalDialog,

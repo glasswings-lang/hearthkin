@@ -422,7 +422,6 @@ class PrefsMixin:
 
         or_row = self._build_provider_key_row(
             parent, "openrouter", "OpenRouter API key:", "sk-or-…",
-            with_balance_button=True,
         )
         brave_row = self._build_provider_key_row(
             parent, "brave", "Brave Search API key:", "BSA…"
@@ -488,7 +487,7 @@ class PrefsMixin:
 
     # --- Provider-key (API keys in Preferences → Connections) helpers --- #
 
-    def _build_provider_key_row(self, parent, provider_name, label_text, placeholder, with_balance_button=False):
+    def _build_provider_key_row(self, parent, provider_name, label_text, placeholder):
         """Build one Connections row inside its own StaticBox so the
         cluster announces as a group to NVDA. Each box contains:
         masked-key display + Edit + Test. The provider name lives on
@@ -531,28 +530,8 @@ class PrefsMixin:
         row.Add(display, proportion=1, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
         row.Add(edit_btn, flag=wx.RIGHT, border=6)
         row.Add(test_btn)
-        # Optional "Show balance" button — OpenRouter has a per-account
-        # credits/usage endpoint that's actually useful (current remaining
-        # balance, total spent). Their web dashboard buries the balance
-        # behind chart-heavy UI that screen-readers can't navigate, so
-        # surfacing it here as a one-line plain-text answer (status field
-        # + NVDA speak) makes the "how much have I burned" question
-        # accessible. Brave / ElevenLabs don't expose a comparable
-        # account-balance API so this button is per-provider opt-in.
-        if with_balance_button:
-            # 6px gap before the balance button. Use AddSpacer(int) —
-            # row.Add(wx.Size(6, 0)) raises TypeError on current
-            # wxPython (the Sizer.Add overload set doesn't accept
-            # bare wx.Size; it wants a (w, h) tuple or a real spacer).
-            # That bug silently broke the entire Preferences dialog
-            # via the unhandled exception in open_preferences_dialog.
-            row.AddSpacer(6)
-            bal_btn = wx.Button(box, label=f"Show {clean_label} balance")
-            bal_btn.Bind(
-                wx.EVT_BUTTON,
-                lambda e, pn=provider_name: self._on_show_provider_balance(pn),
-            )
-            row.Add(bal_btn, flag=wx.LEFT, border=6)
+        # Balances used to be a button here, OpenRouter only. They live in
+        # Tools → Balances now, every service in one window (balances.py).
         outer.Add(row, flag=wx.EXPAND | wx.ALL, border=4)
         return outer
 
@@ -963,76 +942,6 @@ class PrefsMixin:
             return False, f"{provider_name}: network error: {e.reason}"
         except Exception as e:
             return False, f"{provider_name}: {type(e).__name__}: {e}"
-
-    def _on_show_provider_balance(self, provider_name):
-        """Fetch the provider's account balance / usage info and surface
-        it as plain text in the status field + spoken via NVDA. The web
-        dashboards (OpenRouter especially) bury this info behind
-        chart-heavy UI that doesn't read well in a screen-reader; this
-        button puts it one keypress away in the already-accessible
-        Connections panel.
-
-        Runs the network call in a worker thread so the UI doesn't
-        block. Only OpenRouter is implemented — Brave and ElevenLabs
-        don't expose a comparable account-balance endpoint."""
-        key = llm_backend.resolve_provider_key(provider_name)
-        if not key:
-            self._set_status(
-                f"{provider_name}: no key configured. Click Edit to add one."
-            )
-            return
-        self._set_status(f"{provider_name}: fetching balance…")
-
-        def worker():
-            ok, message = self._provider_balance_call(provider_name, key)
-            wx.CallAfter(self._on_provider_balance_done, provider_name, ok, message)
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _provider_balance_call(self, provider_name, key):
-        """Provider-specific balance/usage fetch. Returns (ok, message)
-        where `message` is a short single-line string fit for the
-        status field. New providers go here as elif branches."""
-        try:
-            if provider_name == "openrouter":
-                # /api/v1/credits returns {data: {total_credits, total_usage}}
-                # in dollars. Remaining balance = total_credits - total_usage.
-                # This is the field OpenRouter's web dashboard surfaces
-                # only inside a chart; we just want the number.
-                req = urllib.request.Request(
-                    "https://openrouter.ai/api/v1/credits",
-                    headers={"Authorization": f"Bearer {key}"},
-                )
-                # Non-200 raises HTTPError — handled by the except below.
-                with urllib.request.urlopen(req, timeout=15) as resp:
-                    raw = resp.read().decode("utf-8", "replace")
-                data = json.loads(raw).get("data") or {}
-                total_credits = float(data.get("total_credits") or 0.0)
-                total_usage = float(data.get("total_usage") or 0.0)
-                remaining = total_credits - total_usage
-                # Format: balance first (the thing the user asked for),
-                # then enough context to make the number readable
-                # ("X.XX remaining of Y.YY total = Z.ZZ spent").
-                return True, (
-                    f"OpenRouter balance: ${remaining:.2f} remaining "
-                    f"(${total_usage:.2f} spent of ${total_credits:.2f} "
-                    f"in credits)."
-                )
-            else:
-                return False, f"No balance check implemented for {provider_name!r}."
-        except urllib.error.HTTPError as e:
-            return False, f"{provider_name}: HTTP {e.code} {e.reason}"
-        except urllib.error.URLError as e:
-            return False, f"{provider_name}: network error: {e.reason}"
-        except Exception as e:
-            return False, f"{provider_name}: {type(e).__name__}: {e}"
-
-    def _on_provider_balance_done(self, provider_name, ok, message):
-        """Surface the balance result on the Activity field AND speak
-        it via NVDA, same shape as _on_provider_test_done. User-invoked
-        action → MUST speak regardless of nvda_mode (otherwise pressing
-        the button gives no feedback to a screen-reader user)."""
-        self._set_status(message, speak=True)
 
     def _on_provider_test_done(self, provider_name, ok, message):
         """Surface the test result on the Activity field AND speak it
