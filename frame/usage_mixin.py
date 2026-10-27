@@ -4,13 +4,110 @@ One cohesive slice of the Hearthkin frame's behavior. Mixed into the
 Hearthkin(wx.Frame) class in hearthkin.pyw; every method here runs with
 the frame as `self`. Moved verbatim — no logic changed.
 """
+import threading
+import time
+
+import balances
 from frame_shared import (
     Path, _model_context_length, _num_ctx_of, estimate_message_tokens, estimate_tokens,
     json, llm_backend, strip_model_annotation, wx,
 )
 
+# A failed hosted reply asks for a balance at once — but a burst of failures
+# (a room round, a retrying tool loop) must not become a burst of checks.
+# Ollama allows ten balance checks a minute per account.
+_BALANCE_FAILURE_GAP_SECS = 60
+
 
 class UsageMixin:
+
+    # --- Background balance watch -------------------------------------- #
+    #
+    # Every `balance_check_mins` minutes, and at once after a hosted reply
+    # fails, each paid service is asked what's left. Below
+    # `balance_warn_usd` the Activity field says so, spoken, once per level
+    # (balances.low_warnings). Not per message: the balance barely moves
+    # between two replies, and asking that often would run into Ollama's
+    # ten-a-minute limit with a few kin talking at once.
+
+    def _start_balance_watch(self):
+        self._balance_warned = {}
+        self._balance_checking = False
+        self._balance_last_failure_check = 0.0
+        self._balance_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, lambda _e: self._balance_check_now("timer"),
+                  self._balance_timer)
+        self._restart_balance_timer()
+        try:
+            llm_backend.add_hosted_failure_listener(self._on_hosted_failure)
+        except Exception:
+            pass
+        # First look a minute after start, not during it: startup is busy
+        # enough, and a warning spoken over the opening announcements is lost.
+        if self._balance_watch_minutes() > 0:
+            wx.CallLater(60_000, self._balance_check_now, "startup")
+
+    def _balance_watch_minutes(self):
+        try:
+            return max(0, int(self.config.get("balance_check_mins", 30)))
+        except (TypeError, ValueError):
+            return 30
+
+    def _restart_balance_timer(self):
+        timer = getattr(self, "_balance_timer", None)
+        if timer is None:
+            return
+        timer.Stop()
+        mins = self._balance_watch_minutes()
+        if mins > 0:
+            timer.Start(mins * 60_000)
+
+    def _stop_balance_watch(self):
+        timer = getattr(self, "_balance_timer", None)
+        if timer is not None:
+            try:
+                timer.Stop()
+            except Exception:
+                pass
+        try:
+            llm_backend.remove_hosted_failure_listener(self._on_hosted_failure)
+        except Exception:
+            pass
+
+    def _on_hosted_failure(self, provider, status):
+        """Called from whatever thread the failed request ran on."""
+        now = time.monotonic()
+        if now - self._balance_last_failure_check < _BALANCE_FAILURE_GAP_SECS:
+            return
+        self._balance_last_failure_check = now
+        wx.CallAfter(self._balance_check_now, "failure")
+
+    def _balance_check_now(self, reason="timer"):
+        if self._balance_checking:
+            return
+        if reason == "timer" and self._balance_watch_minutes() <= 0:
+            return
+        self._balance_checking = True
+
+        def work():
+            try:
+                results = balances.check_all_detailed()
+            except Exception:
+                results = []
+            wx.CallAfter(self._on_balance_results, results)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_balance_results(self, results):
+        self._balance_checking = False
+        try:
+            threshold = float(self.config.get("balance_warn_usd", 1.0))
+        except (TypeError, ValueError):
+            threshold = 1.0
+        messages, self._balance_warned = balances.low_warnings(
+            results, threshold, self._balance_warned)
+        if messages:
+            self._set_status(" ".join(messages), speak=True)
 
     def _build_usage_tab(self, parent):
         """A read-only summary of the active kin/room's token usage, model,

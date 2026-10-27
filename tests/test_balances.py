@@ -138,12 +138,149 @@ def test_wiring():
     check("...and it is bound", "self._on_balances()" in menus and "self.mnu_balances)" in menus)
 
 
+def test_amounts_and_warnings():
+    check("openrouter amount left", abs(balances.left_openrouter(OR_ANSWER) - 4.12) < 1e-9)
+    check("ollama amount is plan plus bought", balances.left_ollama(OLLAMA_ANSWER) == 12.25)
+    check("older percentage plan has no amount", balances.left_ollama(OLLAMA_LEGACY) is None)
+
+    providers = {"openrouter": {"base": "x"}, "oc": {"base": "https://ollama.com/v1"}}
+    detailed_holder = {}
+    saved = (llm_backend.api_providers, llm_backend.resolve_provider_key)
+    llm_backend.api_providers = lambda: providers
+    llm_backend.resolve_provider_key = lambda n: "k"
+    try:
+        detailed_holder["r"] = balances.check_all_detailed(
+            fetch=lambda url, key: OR_ANSWER if "openrouter" in url else OLLAMA_ANSWER)
+    finally:
+        llm_backend.api_providers, llm_backend.resolve_provider_key = saved
+    r = detailed_holder["r"]
+    check("detailed results carry the amount beside the line",
+          r[0]["left"] is not None and r[1]["left"] == 12.25 and r[0]["line"].startswith("OpenRouter:"))
+
+    def at(amount):
+        return [{"label": "Ollama", "left": amount}]
+
+    msgs, w = balances.low_warnings(at(5.0), 1.0, {})
+    check("above the line: nothing said", msgs == [] and w == {})
+    msgs, w = balances.low_warnings(at(0.84), 1.0, w)
+    check("below the line: said once, with the amount",
+          msgs == ["Ollama is down to $0.84. Replies stop when it runs out."])
+    msgs, w = balances.low_warnings(at(0.60), 1.0, w)
+    check("still low half an hour later: not said again", msgs == [])
+    msgs, w = balances.low_warnings(at(0.0), 1.0, w)
+    check("running out is a new level, so it is said",
+          len(msgs) == 1 and "out of credit" in msgs[0])
+    msgs, w = balances.low_warnings(at(0.0), 1.0, w)
+    check("still out: not said again", msgs == [])
+    msgs, w = balances.low_warnings(at(None), 1.0, w)
+    check("a failed check keeps the state, says nothing", msgs == [] and w == {"Ollama": "out"})
+    msgs, w = balances.low_warnings(at(10.0), 1.0, w)
+    check("topped up: forgotten, so a later drop is said again", msgs == [] and w == {})
+    msgs, w = balances.low_warnings(at(0.5), 0, {})
+    check("warning amount 0: low is quiet", msgs == [])
+    msgs, w = balances.low_warnings(at(0.0), 0, {})
+    check("...but running out is still said", len(msgs) == 1)
+
+
+def test_failed_reply_is_announced():
+    """A refused hosted request reaches the listeners, with the status."""
+    import json as _json
+    import threading as _threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            out = _json.dumps({"error": {"message": "insufficient credit"}}).encode()
+            self.send_response(402)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    _threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:%d/v1" % srv.server_address[1]
+    real = llm_backend.api_providers
+    heard = []
+    listener = lambda p, s: heard.append((p, s))  # noqa: E731
+    llm_backend.api_providers = lambda: dict(real(), broke={"base": base, "label": "broke"})
+    os.environ["BROKE_API_KEY"] = "not-needed"
+    llm_backend.add_hosted_failure_listener(listener)
+    try:
+        for stream in (False, True):
+            try:
+                out = llm_backend.chat("broke/m", [{"role": "user", "content": "hi"}],
+                                       stream=stream, think_effort="off")
+                if stream:
+                    for _c in out:
+                        pass
+            except Exception:
+                pass
+        check("a refused reply is announced, streamed or not",
+              heard.count(("broke", 402)) == 2)
+        llm_backend.remove_hosted_failure_listener(listener)
+        heard.clear()
+        try:
+            llm_backend.chat("broke/m", [{"role": "user", "content": "hi"}],
+                             stream=False, think_effort="off")
+        except Exception:
+            pass
+        check("a removed listener hears nothing", heard == [])
+    finally:
+        llm_backend.remove_hosted_failure_listener(listener)
+        llm_backend.api_providers = real
+        os.environ.pop("BROKE_API_KEY", None)
+        srv.shutdown()
+
+
+def test_frame_watch():
+    """The desktop's half of it, on a stand-in frame: no window, no timer."""
+    import frame.usage_mixin as um
+
+    class Stand(um.UsageMixin):
+        def __init__(self):
+            self.config = {"balance_warn_usd": 1.0, "balance_check_mins": 30}
+            self._balance_warned = {}
+            self._balance_checking = True
+            self._balance_last_failure_check = 0.0
+            self.said = []
+
+        def _set_status(self, msg, speak=False):
+            self.said.append((msg, speak))
+
+    s = Stand()
+    s._on_balance_results([{"label": "Ollama", "left": 0.5}])
+    check("a low balance is said aloud on the Activity line",
+          s.said == [("Ollama is down to $0.50. Replies stop when it runs out.", True)])
+    check("...and the check is marked finished", s._balance_checking is False)
+    s._on_balance_results([{"label": "Ollama", "left": 0.5}])
+    check("the next check stays quiet", len(s.said) == 1)
+
+    calls = []
+    saved = um.wx.CallAfter
+    um.wx.CallAfter = lambda fn, *a: calls.append(a)
+    try:
+        s._on_hosted_failure("oc", 402)
+        s._on_hosted_failure("oc", 402)
+        s._on_hosted_failure("oc", 500)
+    finally:
+        um.wx.CallAfter = saved
+    check("a burst of failures asks for one check, not three", calls == [("failure",)])
+
+
 def main():
     test_descriptions()
     test_recognised_by_address()
     test_every_service_gets_a_line()
     test_failures_read_as_sentences()
     test_wiring()
+    test_amounts_and_warnings()
+    test_failed_reply_is_announced()
+    test_frame_watch()
     print()
     if _fails:
         print(f"{len(_fails)} FAILURE(S): " + ", ".join(_fails))

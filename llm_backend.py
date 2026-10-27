@@ -4023,6 +4023,7 @@ def _openrouter_blocking_request(payload, provider="openrouter"):
         url, headers=headers, body=body, timeout=60,
     )
     if status >= 400:
+        _notify_hosted_failure(provider, status)
         _raise_openrouter_error_from_status(status, raw, resp_headers)
     try:
         return json.loads(raw)
@@ -4132,7 +4133,37 @@ def _openrouter_request(payload, *, stream, provider="openrouter"):
     try:
         return urllib.request.urlopen(req, timeout=120 if stream else 60)
     except urllib.error.HTTPError as e:
+        _notify_hosted_failure(provider, e.code)
         _raise_openrouter_error(e)
+
+
+# Told about every hosted request the provider refused, as (provider,
+# status). The desktop listens so an empty account is named the moment a
+# reply fails, rather than at the next scheduled balance check — running out
+# mid-conversation is exactly when a plain answer matters. Listeners run on
+# the request's own thread and must not block; a failing listener is ignored,
+# because nothing about telling someone may get in the way of the error.
+_hosted_failure_listeners = []
+
+
+def add_hosted_failure_listener(fn):
+    if fn not in _hosted_failure_listeners:
+        _hosted_failure_listeners.append(fn)
+
+
+def remove_hosted_failure_listener(fn):
+    try:
+        _hosted_failure_listeners.remove(fn)
+    except ValueError:
+        pass
+
+
+def _notify_hosted_failure(provider, status):
+    for fn in list(_hosted_failure_listeners):
+        try:
+            fn(provider, status)
+        except Exception:
+            pass
 
 
 def _raise_openrouter_error(http_err):

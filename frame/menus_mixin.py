@@ -347,8 +347,12 @@ class MenusMixin:
         """Open Balances: what's left on every paid service, one line each.
         Replaced the OpenRouter-only button in Preferences, so a second paid
         service doesn't mean a second place to look."""
+        def save(config):
+            from frame_shared import CONFIG_FILE, atomic_write_json
+            atomic_write_json(CONFIG_FILE, config)
+            self._restart_balance_timer()
         try:
-            dlg = BalancesDialog(self)
+            dlg = BalancesDialog(self, config=self.config, on_save=save)
             dlg.ShowModal()
             dlg.Destroy()
         except Exception as e:

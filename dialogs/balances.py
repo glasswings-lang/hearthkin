@@ -20,11 +20,16 @@ import balances
 
 
 class BalancesDialog(wx.Dialog):
-    def __init__(self, parent, check=balances.check_all):
+    def __init__(self, parent, check=balances.check_all, config=None, on_save=None):
+        """`config` is the app config dict, read for the two watch settings;
+        `on_save(config)` is called on close when either changed. Both
+        optional, so the window still works as a plain report."""
         super().__init__(parent, title="Balances",
                          style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self._check = check
         self._busy = False
+        self._config = config
+        self._on_save = on_save
 
         panel = wx.Panel(self)
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -36,6 +41,28 @@ class BalancesDialog(wx.Dialog):
             panel, style=wx.TE_MULTILINE | wx.TE_READONLY, size=(560, 220))
         sizer.Add(self.report_field, proportion=1,
                   flag=wx.EXPAND | wx.ALL, border=12)
+
+        # The watch settings live here, beside the numbers they watch, so
+        # there is still only one place to look for anything about money.
+        cfg = config or {}
+        self._mins = int(cfg.get("balance_check_mins", 30) or 0)
+        self.watch_box = wx.CheckBox(
+            panel, label="Check in the bac&kground every half hour, and warn me when one is low")
+        self.watch_box.SetValue(self._mins > 0)
+        sizer.Add(self.watch_box, flag=wx.LEFT | wx.RIGHT, border=12)
+        warn_row = wx.BoxSizer(wx.HORIZONTAL)
+        # Label right before the field, so NVDA names the spin box by it.
+        warn_row.Add(wx.StaticText(panel, label="&Warn me below this many dollars:"),
+                     flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
+        self.warn_field = wx.SpinCtrlDouble(
+            panel, min=0.0, max=1000.0, inc=0.5,
+            initial=float(cfg.get("balance_warn_usd", 1.0) or 0.0))
+        self.warn_field.SetDigits(2)
+        warn_row.Add(self.warn_field)
+        sizer.Add(warn_row, flag=wx.ALL, border=12)
+        self.warn_field.Enable(self.watch_box.GetValue())
+        self.watch_box.Bind(wx.EVT_CHECKBOX,
+                            lambda _e: self.warn_field.Enable(self.watch_box.GetValue()))
 
         btns = wx.BoxSizer(wx.HORIZONTAL)
         self.again_btn = wx.Button(panel, wx.ID_ANY, "Check &again")
@@ -49,7 +76,8 @@ class BalancesDialog(wx.Dialog):
 
         self.again_btn.Bind(wx.EVT_BUTTON, lambda _e: self.refresh())
         self.copy_btn.Bind(wx.EVT_BUTTON, self._on_copy)
-        self.close_btn.Bind(wx.EVT_BUTTON, lambda _e: self.EndModal(wx.ID_CLOSE))
+        self.close_btn.Bind(wx.EVT_BUTTON, self._on_close)
+        self.Bind(wx.EVT_CLOSE, self._on_close)
         self.SetEscapeId(wx.ID_CLOSE)
 
         panel.SetSizer(sizer)
@@ -93,6 +121,35 @@ class BalancesDialog(wx.Dialog):
         self.report_field.SetInsertionPoint(0)
         if self.IsShown():
             self.report_field.SetFocus()
+
+    def watch_settings(self):
+        """(minutes, dollars) as the window currently says them. Unticking
+        keeps the old interval aside so ticking again restores it."""
+        mins = (self._mins or 30) if self.watch_box.GetValue() else 0
+        return mins, round(float(self.warn_field.GetValue()), 2)
+
+    def save_settings(self):
+        if self._config is None:
+            return False
+        mins, dollars = self.watch_settings()
+        if (self._config.get("balance_check_mins") == mins
+                and self._config.get("balance_warn_usd") == dollars):
+            return False
+        self._config["balance_check_mins"] = mins
+        self._config["balance_warn_usd"] = dollars
+        if self._on_save:
+            try:
+                self._on_save(self._config)
+            except Exception:
+                pass
+        return True
+
+    def _on_close(self, _e):
+        self.save_settings()
+        if self.IsModal():
+            self.EndModal(wx.ID_CLOSE)
+        else:
+            self.Destroy()
 
     def _on_copy(self, _e):
         if wx.TheClipboard.Open():

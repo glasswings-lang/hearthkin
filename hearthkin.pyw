@@ -422,6 +422,13 @@ class Hearthkin(DiagnosticsMixin, MenusMixin, UsageMixin, PrefsMixin, KinMgmtMix
                   self._conversation_poll_timer)
         self._conversation_poll_timer.Start(5000)
 
+        # Background balance watch: what's left on each paid service, every
+        # half hour by default and at once after a hosted reply fails.
+        try:
+            self._start_balance_watch()
+        except Exception:
+            pass
+
 
         # Point the shared Ollama-probe host at the kin we're about to
         # load, BEFORE the startup reachability probe fires below — its

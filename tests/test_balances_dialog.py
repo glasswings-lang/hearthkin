@@ -91,6 +91,33 @@ check("a check that blows up is said, not swallowed",
 dlg.Destroy()
 dlg2.Destroy()
 
+# The watch settings, saved on close only when they changed.
+cfg = {"balance_check_mins": 30, "balance_warn_usd": 1.0}
+saves = []
+d3 = BalancesDialog(None, check=lambda: [], config=cfg, on_save=saves.append)
+check("settings start from the config",
+      d3.watch_box.GetValue() and d3.warn_field.GetValue() == 1.0)
+check("untouched: nothing saved", d3.save_settings() is False and saves == [])
+d3.warn_field.SetValue(2.5)
+check("a new amount is saved", d3.save_settings() and cfg["balance_warn_usd"] == 2.5
+      and len(saves) == 1)
+d3.watch_box.SetValue(False)
+check("unticking turns the watch off", d3.save_settings() and cfg["balance_check_mins"] == 0)
+d3.watch_box.SetValue(True)
+check("ticking again restores half an hour", d3.save_settings()
+      and cfg["balance_check_mins"] == 30)
+kids3 = list(d3.warn_field.GetParent().GetChildren())
+j = kids3.index(d3.warn_field)
+check("the amount box's label sits right before it",
+      isinstance(kids3[j - 1], wx.StaticText) and "dollars" in kids3[j - 1].GetLabel())
+all_letters = []
+for w in kids3:
+    lab = w.GetLabel() if isinstance(w, (wx.Button, wx.CheckBox, wx.StaticText)) else ""
+    if "&" in lab:
+        all_letters.append(lab.split("&")[1][0].lower())
+check("still no two shortcut letters the same", len(all_letters) == len(set(all_letters)))
+d3.Destroy()
+
 print()
 if _fails:
     print(f"{len(_fails)} FAILURE(S): " + ", ".join(_fails))

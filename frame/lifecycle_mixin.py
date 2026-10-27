@@ -343,6 +343,10 @@ class LifecycleMixin:
             atomic_write_json(CONFIG_FILE, self.config)
         except Exception:
             pass
+        try:
+            self._stop_balance_watch()
+        except Exception:
+            pass
         # Stop the cron poll timer + drop the running-lock so the next
         # cron fire knows we're gone and goes isolated-mode. Both are
         # best-effort; a left-behind lock would just get reaped on the

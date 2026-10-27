@@ -116,23 +116,60 @@ def _failure(e):
     return f"the check failed ({type(e).__name__})."
 
 
+def left_openrouter(data):
+    """Dollars left on OpenRouter, or None when the answer can't say."""
+    try:
+        d = (data or {}).get("data") or {}
+        return float(d.get("total_credits") or 0) - float(d.get("total_usage") or 0)
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def left_ollama(data):
+    """Dollars left on Ollama's cloud: plan credit plus bought credit. None
+    for the older percentage plans, which don't say in money."""
+    try:
+        data = data or {}
+        inc = data.get("included") or {}
+        bought = (data.get("purchased") or {}).get("balance_usd")
+        if "balance_usd" not in inc and bought is None:
+            return None
+        return float(inc.get("balance_usd") or 0) + float(bought or 0)
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 def check_all(fetch=_fetch_json):
     """One line per service, OpenRouter first, then every added provider in
     alphabetical order (the order never shifts, so the lines stay where a
     screen reader left them). Never raises."""
-    lines = []
+    return [r["line"] for r in check_all_detailed(fetch)]
 
-    def run(label, url, key, describe):
+
+def check_all_detailed(fetch=_fetch_json):
+    """The same check, keeping the amount beside each line:
+    [{"label", "line", "left"}], where `left` is dollars or None when the
+    service doesn't say (no key, no balance check, a failed check, or a
+    plan that reports percentages). The background warning reads `left`;
+    the window reads `line`."""
+    results = []
+
+    def run(label, url, key, describe, left_of):
         if not key:
-            lines.append(f"{label}: no key saved, so there's nothing to check.")
+            results.append({"label": label, "left": None,
+                            "line": f"{label}: no key saved, so there's nothing to check."})
             return
         try:
-            lines.append(f"{label}: {describe(fetch(url, key))}")
+            data = fetch(url, key)
+            results.append({"label": label, "left": left_of(data),
+                            "line": f"{label}: {describe(data)}"})
         except Exception as e:
-            lines.append(f"{label}: {_failure(e)}")
+            results.append({"label": label, "left": None,
+                            "line": f"{label}: {_failure(e)}"})
 
     run("OpenRouter", OPENROUTER_CREDITS_URL,
-        llm_backend.resolve_provider_key("openrouter"), describe_openrouter)
+        llm_backend.resolve_provider_key("openrouter"), describe_openrouter,
+        left_openrouter)
 
     try:
         providers = llm_backend.api_providers()
@@ -145,8 +182,44 @@ def check_all(fetch=_fetch_json):
                 key = llm_backend.resolve_provider_key(name)
             except Exception:
                 key = ""
-            run(f"{name} (Ollama cloud)", OLLAMA_BALANCE_URL, key, describe_ollama)
+            run(f"{name} (Ollama cloud)", OLLAMA_BALANCE_URL, key, describe_ollama,
+                left_ollama)
         else:
-            lines.append(f"{name}: this service doesn't offer a balance check. "
-                         f"Look on its own website.")
-    return lines
+            results.append({"label": name, "left": None,
+                            "line": f"{name}: this service doesn't offer a balance check. "
+                                    f"Look on its own website."})
+    return results
+
+
+def low_warnings(results, threshold, warned):
+    """Which services to warn about, said once each.
+
+    Returns (messages, still_warned), where still_warned maps each service
+    to the level last said: "low" or "out". Each level is said once, and
+    not again until the service has been back above the line — a warning
+    every half hour about the same dollar would be the nagging that teaches
+    someone to stop listening. Going from low to out is a new level, so it
+    is said. A service whose amount is unknown keeps whatever state it had.
+    `threshold` of 0 or less turns the low warning off; running out
+    entirely is always said, because that is when replies start failing."""
+    messages = []
+    still = dict(warned or {})
+    for r in results:
+        label, left = r.get("label"), r.get("left")
+        if left is None:
+            continue
+        if left <= 0.005:
+            level = "out"
+            text = (f"{label} is out of credit. Replies from it will fail "
+                    f"until you add more.")
+        elif threshold and threshold > 0 and left < threshold:
+            level = "low"
+            text = (f"{label} is down to {_money(left)}. "
+                    f"Replies stop when it runs out.")
+        else:
+            still.pop(label, None)
+            continue
+        if still.get(label) != level:
+            messages.append(text)
+            still[label] = level
+    return messages, still

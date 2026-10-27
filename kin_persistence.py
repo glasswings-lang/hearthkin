@@ -302,6 +302,12 @@ for d in [CONFIG_DIR, AGENTS_DIR, ROOMS_DIR, CONVOS_DIR, LOGS_DIR]:
 # ─── Default configs / prompts ──────────────────────────────────────────────
 
 DEFAULT_CONFIG = {
+    # Background balance watch (Tools → Balances). Every this-many minutes
+    # each paid service is asked what's left, and a warning is said once
+    # when one drops below balance_warn_usd. 0 minutes turns the watch off.
+    # A failed reply from a hosted service also triggers a check at once.
+    "balance_check_mins": 30,
+    "balance_warn_usd": 1.0,
     "last_agent": "",
     "last_target_kind": "kin",   # "kin" or "room"
     "last_room": "",
