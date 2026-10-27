@@ -4409,6 +4409,22 @@ def set_ollama_keep_alive(model, keep_alive, *, host=None, only_if_loaded=True):
         return False
 
 
+def is_ollama_cloud_model(name):
+    """True when an Ollama model name is one of Ollama's CLOUD models.
+
+    A cloud model sits in the same `ollama list` as a local one, but it
+    runs on Ollama's servers: the conversation leaves the computer and
+    every reply spends the account's credit. Ollama marks them in the
+    tag, as `glm-5.2:cloud` or the older `gpt-oss:120b-cloud`. The
+    Python client drops the remote fields from a list entry, so the name
+    is the only thing to go on."""
+    name = name or ""
+    if ":" not in name:
+        return False
+    tag = name.rsplit(":", 1)[-1].lower()
+    return tag == "cloud" or tag.endswith("-cloud")
+
+
 def list_ollama_models(host=None):
     """Return locally-installed Ollama models in an OpenRouter-shaped
     dict so the model browser can render them with the same filter +
@@ -4469,20 +4485,33 @@ def list_ollama_models(host=None):
         param_size = details.get("parameter_size") or "?"
         quant = details.get("quantization_level") or "?"
         size_gb = size / (1024 ** 3) if size else 0
-        description = (
-            f"Local Ollama model. Family: {family}. Parameter size: {param_size}. "
-            f"Quantization: {quant}. On-disk: {size_gb:.1f} GB. "
-            f"Modified: {modified_at[:19] if modified_at else 'unknown'}."
-        )
+        cloud = is_ollama_cloud_model(name)
+        if cloud:
+            # Never "free" or "local": both would be false, and the person
+            # choosing reads this to decide where their words go.
+            description = (
+                f"Ollama cloud model. Runs on Ollama's servers, not this "
+                f"computer: the conversation leaves the machine, and each "
+                f"reply uses your Ollama credit. Family: {family}."
+            )
+            pricing = {}
+        else:
+            description = (
+                f"Local Ollama model. Family: {family}. Parameter size: {param_size}. "
+                f"Quantization: {quant}. On-disk: {size_gb:.1f} GB. "
+                f"Modified: {modified_at[:19] if modified_at else 'unknown'}."
+            )
+            pricing = {"prompt": "0", "completion": "0"}
         out.append({
             "id": name,
             "name": name,
             "description": description,
             "context_length": None,  # lazy: fetched by browser if user selects
-            "pricing": {"prompt": "0", "completion": "0"},
+            "pricing": pricing,
             "architecture": {"modality": "text", "input_modalities": ["text"]},
             "supported_parameters": [],  # populated lazily on select
             "_ollama_local": True,
+            "_ollama_cloud": cloud,
             "_ollama_details": {
                 "family": family,
                 "parameter_size": param_size,

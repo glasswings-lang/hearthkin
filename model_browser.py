@@ -655,7 +655,9 @@ class ModelBrowserDialog(wx.Dialog):
             panel,
             value=(
                 "Pick a model. Ollama models run on your own machines "
-                "(free, private). Models from an online provider — "
+                "(free, private), except ones marked CLOUD, which run on "
+                "Ollama's servers and use your credit. Models from an "
+                "online provider — "
                 "OpenRouter, or one you add with Manage providers — run "
                 "somewhere else: they can cost money, and your conversation "
                 "leaves your computer. For OpenRouter, warmth ranks how well "
@@ -1291,6 +1293,11 @@ class ModelBrowserDialog(wx.Dialog):
                         f"but can't load it (incomplete pull). "
                         f"Remove it with: ollama rm {mid}")
             ctx_str = context_length_label(m.get("context_length"))
+            if m.get("_ollama_cloud"):
+                # Said in the list itself, not only the detail card: someone
+                # arrowing through hears this line and may never open the card.
+                return (f"{mid}  —  CLOUD: runs on Ollama's servers and "
+                        f"uses your credit, {family}, {ctx_str}")
             return (f"{mid}  —  {family}, {params}, "
                     f"{size_gb:.1f} GB on disk, {ctx_str}")
 
@@ -1489,6 +1496,28 @@ class ModelBrowserDialog(wx.Dialog):
             self._spawn_ollama_caps_fetch(mid)
             caps_str = "(loading…)"
 
+        # Filled in by annotate_ollama_context_lengths when the list loaded.
+        # It's the architecture's ceiling, not a recommendation.
+        ctx = m.get("context_length")
+        ctx_str = (f"{ctx:,} tokens" if isinstance(ctx, int) and ctx > 0
+                   else "unknown (the model doesn't say)")
+
+        if m.get("_ollama_cloud"):
+            # A cloud entry's size and quantization describe a stub, not a
+            # model; showing them would read as "0.0 GB, free, local".
+            lines = [
+                f"Model:        {mid}",
+                f"Provider:     Ollama cloud (not on this computer)",
+                f"Family:       {family}",
+                f"Max context:  {ctx_str}",
+                f"Capabilities: {caps_str}",
+                "",
+                "Cloud model — it runs on Ollama's servers. Your conversation "
+                "leaves this computer, and each reply uses your Ollama "
+                "credit. Hearthkin's usage figures do not count that cost; "
+                "check it on your Ollama account.",
+            ]
+            return "\n".join(lines)
         lines = [
             f"Model:        {mid}",
             f"Provider:     Ollama (local)",
@@ -1497,6 +1526,7 @@ class ModelBrowserDialog(wx.Dialog):
             f"Quantization: {quant}",
             f"Size on disk: {size_gb:.1f} GB",
             f"Modified:     {modified}",
+            f"Max context:  {ctx_str}",
             f"Capabilities: {caps_str}",
             "",
             "Local model — no pricing, no caching, no network. Content "
