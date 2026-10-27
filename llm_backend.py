@@ -3701,6 +3701,15 @@ def _build_openrouter_payload(model, messages, options, think_effort, tools, cac
         if "frequency_penalty" in options: payload["frequency_penalty"] = options["frequency_penalty"]
         if "num_predict" in options:    payload["max_tokens"] = options["num_predict"]
         if "stop" in options:           payload["stop"] = options["stop"]
+    if not is_openrouter and stream:
+        # OpenAI's shape only reports token use on a STREAMED reply when asked.
+        # OpenRouter always sends it, which is why this went unnoticed: every
+        # streamed reply from an added provider (Telegram, the desktop) came
+        # back with no usage, so nothing reached usage.log and a paid service
+        # spent money that no Usage window could see. Checked against Ollama's
+        # cloud: without this the stream carries no usage at all; with it, the
+        # final event does. It is part of OpenAI's own spec, not an extension.
+        payload["stream_options"] = {"include_usage": True}
     if not is_openrouter:
         # Other providers get the plain OpenAI field instead. "off" is sent
         # as "none", NOT left out. Leaving it out was the first version, on
