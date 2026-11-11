@@ -21,6 +21,10 @@ if errorlevel 1 goto :fail
 echo Installing/updating runtime dependencies...
 python -m pip install -r requirements.txt
 if errorlevel 1 goto :fail
+:: Local dictation ships only if faster-whisper is in the build (see
+:: Hearthkin.spec); pinned to match the GitHub build check.
+python -m pip install "faster-whisper==1.2.1"
+if errorlevel 1 goto :fail
 
 :: --- Step 0: stamp the version into app_version.py ---
 :: If HEARTHKIN_VERSION isn't set explicitly, derive it from the current

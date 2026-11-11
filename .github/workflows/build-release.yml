@@ -68,6 +68,10 @@ jobs:
           # collect_submodules("discord") pulls in its dynamically-loaded
           # submodules that PyInstaller's static analysis would otherwise miss.
           python -m pip install "discord.py==2.7.1"
+          # Local dictation is bundled only if faster-whisper is installed
+          # (see Hearthkin.spec). Not in requirements.txt because source
+          # installs can do without it; the shipped app cannot.
+          python -m pip install "faster-whisper==1.2.1"
         shell: pwsh
 
       # Inno Setup 6 ships on the windows-latest image as a Chocolatey
