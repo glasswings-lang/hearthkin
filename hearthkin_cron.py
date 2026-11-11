@@ -24,6 +24,7 @@ wake-up now" button and by manual debugging."""
 import argparse
 import datetime
 import json
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -189,6 +190,71 @@ def _resolve_entry(cfg, index):
     return entry, time_label, prompt
 
 
+def own_history_path(kin, entry, index):
+    """Where a scheduled job with its OWN history keeps it, or None.
+
+    By default a wake-up reads the kin's whole conversation and is saved back
+    into it, which is how self-directed wake-ups keep continuity. For some
+    jobs that is exactly wrong. A fiction-writing job carried the person's
+    real life into its fiction (it is handed all of it), and its prompts and
+    entries landed in the chat history as turns in the person's slot -- a
+    third of one kin's recent history, which it then could not tell apart
+    from the person.
+
+    `own_history` on the entry opts a job out of both directions: it reads
+    only its own history and writes only to it. A string names the file
+    (`"story-journal"` -> cron_history/story-journal.jsonl); `true`
+    names it after the entry's position.
+    """
+    if not isinstance(entry, dict):
+        return None
+    val = entry.get("own_history")
+    if not val:
+        return None
+    if not (isinstance(val, str) and val.strip()):
+        # `true` -- use the name the job dialog keeps for it, if any.
+        val = entry.get("own_history_name")
+    if isinstance(val, str) and val.strip():
+        name = re.sub(r"[^A-Za-z0-9._-]+", "-", val.strip()).strip("-.") or None
+    else:
+        name = None
+    name = name or f"entry-{int(index)}"
+    try:
+        from hearthkin_paths import kin_dir as _kin_dir
+        return Path(_kin_dir(kin)) / "cron_history" / f"{name}.jsonl"
+    except Exception:
+        return None
+
+
+def _load_own_history(path):
+    """Read a job's own history file; [] when it doesn't exist yet."""
+    out = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    m = json.loads(line)
+                except Exception:
+                    continue
+                if isinstance(m, dict):
+                    out.append(m)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+    return out
+
+
+def _append_own_history(path, msg):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(msg, ensure_ascii=False) + "\n")
+
+
 def _est_tokens(text):
     """Rough token count, shared with the rest of the app. Falls back to a
     character heuristic rather than raising -- a sizing helper must never be
@@ -200,8 +266,12 @@ def _est_tokens(text):
         return max(1, len(text or "") // 4)
 
 
-def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0):
-    """Build the message list for the cron call: soul + memory as the
+def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
+                    history_path=None):
+    """`history_path`: a job with its own history (see own_history_path)
+    reads that file as its middle instead of the kin's conversation.
+
+    Build the message list for the cron call: soul + memory as the
     system prompt, the kin's conversation history as the middle,
     `user_turn_text` as a final user turn. Filters tool-role turns out
     of history (cron doesn't run tools; passing them through can
@@ -290,7 +360,10 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0):
                 "authoring_bridge_hint", kin)
         except Exception:
             pass
-    convo = load_agent_conversation(kin) or []
+    if history_path:
+        convo = _load_own_history(history_path)
+    else:
+        convo = load_agent_conversation(kin) or []
     if history_tokens and history_tokens > 0:
         # Budget by SIZE, not turn count. Counting turns sounds equivalent and
         # is not: a kin being fed long passages has turns of 1,200+ tokens, so
@@ -461,7 +534,8 @@ def _deliver_to_destinations(kin, cfg, text, destinations):
         # "desktop" / unknown -> no outward send (conversation.jsonl covers it)
 
 
-def _append_to_conversation(kin, prompt, reply, intermediate_turns=None):
+def _append_to_conversation(kin, prompt, reply, intermediate_turns=None,
+                            history_path=None):
     """Append the wake-up user turn + (any tool round-trips) + final
     assistant reply to the kin's persisted conversation. Only call
     this when Hearthkin is NOT running (lock absent) — otherwise the
@@ -481,6 +555,18 @@ def _append_to_conversation(kin, prompt, reply, intermediate_turns=None):
     load + modify + save shape — meaningful for kin with hundreds of
     turns)."""
     now_iso = datetime.datetime.now().isoformat(timespec="seconds")
+    if history_path:
+        # A job with its own history (own_history_path): saved there and
+        # nowhere else, so it never lands in the person's chat.
+        try:
+            _append_own_history(history_path, {"role": "user", "content": prompt, "ts": now_iso})
+            for turn in (intermediate_turns or []):
+                if isinstance(turn, dict):
+                    _append_own_history(history_path, turn)
+            _append_own_history(history_path, {"role": "assistant", "content": reply, "ts": now_iso})
+        except Exception as e:
+            cron_helpers.log_cron_error(kin, "own_history_write", str(e))
+        return
     try:
         # raise_on_failure: the append helper logs-and-swallows by
         # default, which made this whole except block dead code (audit
@@ -769,7 +855,8 @@ def _maybe_authoring_bridge_cron(kin, reply, safe_tools, shown_scopes=(),
         return None, None
 
 
-def _run_isolated(kin, cfg, time_label, prompt, tend_retry=0, destinations=None):
+def _run_isolated(kin, cfg, time_label, prompt, tend_retry=0, destinations=None,
+                  history_path=None):
     """Announce this run to the desktop app, then do it.
 
     A wake-up here happens in a SEPARATE PROCESS from Hearthkin, sharing no
@@ -790,7 +877,8 @@ def _run_isolated(kin, cfg, time_label, prompt, tend_retry=0, destinations=None)
     try:
         return _run_isolated_inner(
             kin, cfg, time_label, prompt,
-            tend_retry=tend_retry, destinations=destinations)
+            tend_retry=tend_retry, destinations=destinations,
+            history_path=history_path)
     finally:
         try:
             cron_helpers.clear_cron_running(marker)
@@ -799,7 +887,7 @@ def _run_isolated(kin, cfg, time_label, prompt, tend_retry=0, destinations=None)
 
 
 def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
-                        destinations=None):
+                        destinations=None, history_path=None):
     """Lock-absent path: run the LLM call directly from this subprocess,
     persist the result everywhere (conversation + journal + Telegram).
 
@@ -831,7 +919,8 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     # prompt's tool/memory scaffolding is fenced to what this wake-up can
     # actually run (see _load_cron_tools / build_system_prompt).
     schemas, executor, safe_tools = _load_cron_tools(kin)
-    messages = _build_messages(kin, framed_prompt, enabled_tools=safe_tools)
+    messages = _build_messages(kin, framed_prompt, enabled_tools=safe_tools,
+                                history_path=history_path)
     # Park keeper: for a keeper kin a wake-up IS a park turn. Show the park as it stands
     # plus the one salient move, and ask for a `> command` we run after the
     # reply. Injected as an ephemeral turn (not baked into framed_prompt), so
@@ -1062,6 +1151,7 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     _append_to_conversation(
         kin, framed_prompt, reply,
         intermediate_turns=getattr(result, "messages_added", None) or [],
+        history_path=history_path,
     )
     # Tell the app these turns happened. This branch only runs with Hearthkin
     # CLOSED, so there is no in-memory counter to tick and the "every N
@@ -1070,25 +1160,28 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     # which is why this went unnoticed: whether a kin kept remembering
     # depended on which of the two settings its person had chosen.
     try:
-        cron_helpers.note_unattended_turns(kin, "desktop", 2)
+        if not history_path:  # own-history turns aren't chat turns
+            cron_helpers.note_unattended_turns(kin, "desktop", 2)
     except Exception:
         pass
+    # Notes about this run go where the run itself was saved.
+    def _note_turn(content):
+        msg = {"role": "system", "content": content,
+               "ts": datetime.datetime.now().isoformat(timespec="seconds")}
+        if history_path:
+            _append_own_history(history_path, msg)
+        else:
+            append_agent_conversation_turn(kin, msg)
     # Kin-facing bridge note (full paths) appended AFTER the assistant reply
     # it describes, so the kin's next read knows what actually landed.
     if bridge_note:
         try:
-            append_agent_conversation_turn(kin, {
-                "role": "system", "content": bridge_note,
-                "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-            })
+            _note_turn(bridge_note)
         except Exception:
             pass
     for _note in steer_notes:
         try:
-            append_agent_conversation_turn(kin, {
-                "role": "system", "content": _note,
-                "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-            })
+            _note_turn(_note)
         except Exception:
             pass
     # Operator-facing confirmation (basenames) rides into the journal entry.
@@ -1456,6 +1549,7 @@ def main(argv=None):
     # isolated mode (Hearthkin closed, or inject_when_running=false).
     running = cron_helpers.lock_indicates_running()
     inject = bool(cfg.get("cron_inject_when_running", True))
+    history_path = own_history_path(kin, entry, args.entry_index)
 
     if running and inject:
         try:
@@ -1487,7 +1581,8 @@ def main(argv=None):
             # Resolve cron-safe tools up front so the base prompt is fenced
             # to this wake-up's actual tool set (mirrors _run_isolated).
             schemas, executor, safe_tools = _load_cron_tools(kin)
-            messages = _build_messages(kin, framed_prompt, enabled_tools=safe_tools)
+            messages = _build_messages(kin, framed_prompt, enabled_tools=safe_tools,
+                                        history_path=history_path)
             staging_had_work, toolless_scopes = _inject_staging_status(
                 kin, messages, safe_tools, model)
             # Per-turn memory recall (same as the cron-subprocess path above).
@@ -1599,6 +1694,13 @@ def main(argv=None):
                 kin, reply, safe_tools, toolless_scopes, model)
             if _tl_confirm:
                 reply = reply + "\n\n" + _tl_confirm
+            if history_path:
+                # This branch keeps no chat record, but a job with its own
+                # history still needs one, or it loses its continuity here.
+                _append_to_conversation(
+                    kin, framed_prompt, reply,
+                    intermediate_turns=getattr(result, "messages_added", None) or [],
+                    history_path=history_path)
             cron_helpers.append_journal(kin, time_label or "(no time)", prompt, reply)
             _post_cron_reply_to_telegram(
                 kin, cfg, reply, result, schemas, destinations=destinations)
@@ -1626,7 +1728,7 @@ def main(argv=None):
     # we own the conversation file.
     try:
         _run_isolated(kin, cfg, time_label, prompt, tend_retry=tend_retry,
-                      destinations=destinations)
+                      destinations=destinations, history_path=history_path)
     except Exception as e:
         tb = traceback.format_exc()
         cron_helpers.log_cron_error(kin, type(e).__name__, f"{e}\n{tb}")

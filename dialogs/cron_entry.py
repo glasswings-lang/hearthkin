@@ -74,6 +74,26 @@ class CronEntryDialog(wx.Dialog):
         )
         self.enabled_check.SetValue(bool(defaults.get("enabled", True)))
 
+        # Own history (see hearthkin_cron.own_history_path). Off by default:
+        # most wake-ups keep their continuity by sharing the chat. A job that
+        # writes something apart from the chat -- fiction, a separate journal
+        # -- is better off seeing only its own past runs, and keeping them out
+        # of the conversation.
+        self.own_history_check = wx.CheckBox(
+            self, label="&Keep this job's history separate from the chat",
+        )
+        self.own_history_check.SetValue(bool(defaults.get("own_history")))
+        own_history_hint = wx.TextCtrl(
+            self,
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP | wx.TE_NO_VSCROLL,
+            value="(When ticked, this job sees only its own past runs, not "
+                  "the chat, and its runs aren't saved into the chat. Good "
+                  "for fiction or writing jobs. Unticked, it shares the chat "
+                  "as usual.)",
+        )
+        own_history_hint.SetMinSize((-1, 56))
+        own_history_hint.SetName("What a separate history does")
+
         # Outcome-based tend retry. Only meaningful for tending entries (ones
         # that hand the kin staging to process). When > 0, if this wake-up has
         # pending staging but the kin's reply calls no tools, it's re-prompted
@@ -193,6 +213,13 @@ class CronEntryDialog(wx.Dialog):
         sizer.Add(
             self.enabled_check, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8,
         )
+        sizer.Add(
+            self.own_history_check, flag=wx.LEFT | wx.RIGHT, border=8,
+        )
+        sizer.Add(
+            own_history_hint,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8,
+        )
         sizer.Add(retry_label, flag=wx.LEFT | wx.RIGHT, border=8)
         sizer.Add(
             self.retry_choice,
@@ -300,6 +327,22 @@ class CronEntryDialog(wx.Dialog):
             "enabled": bool(self.enabled_check.GetValue()),
             "tend_retry": int(self.retry_choice.GetSelection()),
         })
+        # Own history keeps ONE name for the job's life, so unticking and
+        # ticking again picks the same history back up instead of starting
+        # an empty one. An entry set up by hand with a name keeps that name.
+        prev = out.get("own_history")
+        name = (prev if isinstance(prev, str) and prev.strip()
+                else out.get("own_history_name"))
+        if self.own_history_check.GetValue():
+            if not (isinstance(name, str) and name.strip()):
+                import datetime as _dt
+                name = "job-" + _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+            out["own_history"] = name
+            out["own_history_name"] = name
+        else:
+            out["own_history"] = False
+            if isinstance(name, str) and name.strip():
+                out["own_history_name"] = name
         # Migrate off the shapes this dialog no longer emits — it always
         # produces an explicit `times` list now, so a stale single `time` or
         # interval spec left behind would confuse cron_entry_fire_times.

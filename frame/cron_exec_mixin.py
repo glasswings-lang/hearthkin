@@ -285,6 +285,7 @@ class CronExecMixin:
             # older cron subprocess that predates the payload field.
             time_label = str(payload.get("time_label", "") or "").strip()
             destinations = None
+            own_history = False
             try:
                 cfg = load_agent_config(kin)
                 entries = cfg.get("cron_entries") or []
@@ -294,6 +295,7 @@ class CronExecMixin:
                     _dests = entries[entry_index].get("destinations")
                     if isinstance(_dests, list) and _dests:
                         destinations = _dests
+                    own_history = bool(entries[entry_index].get("own_history"))
             except Exception:
                 pass
             framed_prompt = cron_helpers.frame_wake_up_prompt(prompt, time_label, kin_name=kin)
@@ -329,6 +331,9 @@ class CronExecMixin:
                 and not self._room_active
                 and not destinations
                 and not park_keeper_turn
+                # A job with its own history must not be poured into the live
+                # chat -- that is the exact mixing own_history exists to stop.
+                and not own_history
             ):
                 # Parity with the isolated cron path: tell the kin its staging
                 # state up front so it knows whether there's anything to tend
@@ -623,7 +628,8 @@ class CronExecMixin:
                     _dests if isinstance(_dests, list) and _dests else None)
             hearthkin_cron._run_isolated(
                 kin, cfg, time_label, prompt, tend_retry=tend_retry,
-                destinations=destinations)
+                destinations=destinations,
+                history_path=hearthkin_cron.own_history_path(kin, entry, entry_index))
         except Exception as e:
             cron_helpers.log_cron_error(kin, type(e).__name__, str(e))
             try:

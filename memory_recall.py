@@ -59,7 +59,14 @@ _BOOST_MULT = 1.5
 # quota, not retrieval. See `_eligible_by_live_message` for the absolute gate
 # that now sits in front of it.
 _RELEVANCE_FLOOR = 0.18
-# Bound the embed batch over the network even on a big corpus.
+# Bound the EMBED batch over the network even on a big corpus. This caps only
+# the semantic rerank, which runs on the strongest lexical candidates. It must
+# never cap what lexical scoring can see: it used to stop chunking the corpus
+# at this many chunks, in folder order, so a kin with 384 note files and ~4,900
+# chunks was only ever recalled from its first ten files -- one week of daily logs,
+# alphabetically first, surfaced as if current, every turn, for months.
+# memory_search already did this right (BM25 over everything, embed the top
+# few); recall now matches it.
 _MAX_CHUNKS = 240
 
 # --- The absolute gate: does this chunk match the message actually in front of
@@ -451,16 +458,31 @@ def _build_recall_block_inner(kin_name, recent_messages, budget_tokens,
     if not corpus:
         return None, []
 
-    # Chunk every file; carry source path + line number.
+    # Leave out what can never be picked BEFORE chunking, so it neither costs
+    # time nor sways the scoring: journals (unless asked for) and fenced paths.
+    kept = []
+    file_text = {}  # relpath -> text, for dating a picked note
+    for path, text in corpus:
+        try:
+            rel = path.relative_to(mem_dir).as_posix()
+        except Exception:
+            rel = path.name
+        if not include_journals and _is_journal(rel):
+            continue
+        if _matches_any(rel, fence):
+            continue
+        kept.append((path, text))
+        file_text[rel] = text
+    corpus = kept
+    if not corpus:
+        return None, []
+
+    # Chunk EVERY remaining file -- no cap here. See _MAX_CHUNKS for why.
     chunks = []  # (path, lineno, text)
     for path, text in corpus:
         for lineno, ctext in _chunk_text(text):
             if ctext.strip():
                 chunks.append((path, lineno, ctext))
-            if len(chunks) >= _MAX_CHUNKS:
-                break
-        if len(chunks) >= _MAX_CHUNKS:
-            break
     if not chunks:
         return None, []
 
@@ -495,15 +517,26 @@ def _build_recall_block_inner(kin_name, recent_messages, budget_tokens,
     bm25 = _BM25Okapi(chunk_tokens)
     lex = _normalize(bm25.get_scores(query_tokens))
 
-    # Optional semantic rerank, blended 50/50 when available.
+    # Optional semantic rerank, blended 50/50 when available -- over the
+    # strongest eligible lexical candidates only, so the embed batch stays
+    # bounded however large the memory folder grows. Everything else stays
+    # eligible on its lexical score; it simply isn't reranked.
     base = lex
     if semantic:
-        sem = _semantic_scores(
-            query, [c[2] for c in chunks], embed_model,
-            mem_dir / ".recall_embeds.json", embed_timeout)
-        if sem is not None:
-            sem = _normalize(sem)
-            base = [0.5 * l + 0.5 * s for l, s in zip(lex, sem)]
+        cand = sorted((i for i in eligible if lex[i] > 0),
+                      key=lambda i: lex[i], reverse=True)[:_MAX_CHUNKS]
+        if cand:
+            sem = _semantic_scores(
+                query, [chunks[i][2] for i in cand], embed_model,
+                mem_dir / ".recall_embeds.json", embed_timeout)
+            if sem is not None:
+                sem = _normalize(sem)
+                base = list(lex)
+                for i, s in zip(cand, sem):
+                    base[i] = 0.5 * lex[i] + 0.5 * s
+                # Only reranked chunks may be picked when the rerank ran, so a
+                # half-scored chunk can't outrank a fully scored one by default.
+                eligible = set(cand)
 
     salience = _load_json(mem_dir / ".salience.json", {})
     if not isinstance(salience, dict):
@@ -585,7 +618,9 @@ def _build_recall_block_inner(kin_name, recent_messages, budget_tokens,
         if spent + cost > budget_tokens and used:
             continue
         used.append({"relpath": rel, "lineno": lineno,
-                     "score": round(score, 4), "text": ctext.strip()})
+                     "score": round(score, 4), "text": ctext.strip(),
+                     "date": _note_date(file_text.get(rel, ""), lineno, rel,
+                                        span=ctext.count("\n") + 1)})
         per_source[rel] = per_source.get(rel, 0) + 1
         spent += cost
         spent_chars += len(ctext)
@@ -597,6 +632,67 @@ def _build_recall_block_inner(kin_name, recent_messages, budget_tokens,
                 "score": u["score"],
                 "snippet": _snippet(u["text"])} for u in used]
     return block, readout
+
+
+_DATE_RE = re.compile(r"(20\d\d)-(\d\d)-(\d\d)")
+_MONTHS = ("January February March April May June July August September "
+           "October November December").split()
+
+
+def _fmt_date(m):
+    y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if not (1 <= mo <= 12 and 1 <= d <= 31):
+        return None
+    return f"{d} {_MONTHS[mo - 1]} {y}"
+
+
+def _note_date(text, lineno, relpath, span=1):
+    """When a recalled note is FROM, as plain words ("3 May 2026"), or None.
+
+    A note handed over without a date reads as current. That is not
+    hypothetical: a kin read an everyday line about breakfast and a game from
+    an eight-month-old daily log as a description of the person's day, and
+    told them so. So every note says when it is from.
+
+    Nearest dated heading at or above the note's first line wins -- topic logs
+    are written as dated sections under one title. Then a date on a heading
+    inside the note. Then a date in the file name (daily logs). Otherwise None:
+    better to say nothing than to guess.
+    """
+    lines = (text or "").splitlines()
+    start = max(1, int(lineno or 1))
+    end = start + max(1, int(span or 1)) - 1
+
+    def _heading_date(line):
+        if line.lstrip().startswith("#"):
+            m = _DATE_RE.search(line)
+            if m and _fmt_date(m):
+                return m
+        return None
+
+    found = []  # (sortable, words)
+    # The section above only dates this note if the note doesn't open with a
+    # dated heading of its own.
+    opens_dated = bool(start - 1 < len(lines) and _heading_date(lines[start - 1]))
+    for line in ([] if opens_dated else reversed(lines[:start - 1])):
+        m = _heading_date(line)
+        if m:
+            found.append(((m.group(1), m.group(2), m.group(3)), _fmt_date(m)))
+            break
+    for line in lines[start - 1:end]:
+        m = _heading_date(line)
+        if m:
+            found.append(((m.group(1), m.group(2), m.group(3)), _fmt_date(m)))
+    if found:
+        found.sort()
+        first, last = found[0][1], found[-1][1]
+        # A note that runs across several dated sections says so, rather than
+        # wearing only the first section's date.
+        return first if first == last else f"{first} to {last}"
+    m = _DATE_RE.search(relpath.rsplit("/", 1)[-1])
+    if m and _fmt_date(m):
+        return _fmt_date(m)
+    return None
 
 
 def _fit_to_cap(text, cap):
@@ -841,5 +937,14 @@ def _format_block(used, frame, kin_name=None):
     file a note came from is bookkeeping, not something the kin needs told.
     """
     header = frame or _default_frame(kin_name)
-    body = "\n\n".join(u["text"].strip() for u in used)
+    # Each note says when it is from (see _note_date). Phrased as a note's
+    # date, never as a speaker -- "From your notes, 3 May 2026:" is not
+    # speaker-shaped the way "[Name]:" is.
+    parts = []
+    for u in used:
+        d = u.get("date")
+        lead = (f"From your notes, {d}:" if d
+                else "From your notes, date not recorded:")
+        parts.append(lead + "\n" + u["text"].strip())
+    body = "\n\n".join(parts)
     return (header + "\n\n" + body).strip()
