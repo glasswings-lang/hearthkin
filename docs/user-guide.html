@@ -331,7 +331,7 @@ python hearthkin.pyw</code></pre>
     <li><strong>Search across kin…</strong> — <kbd>Ctrl</kbd>+<kbd>F</kbd>. Searches souls, memories, one-on-one conversations and room conversations. <strong>Search filters…</strong> in that window lets you leave any of those four out.</li>
     <li><strong>Tend a kin's park…</strong> — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>. See <a href="#games">The creature park</a>.</li>
     <li><strong>Edit park words…</strong></li>
-    <li><strong>Usage stats…</strong>, <strong>Usage history…</strong> and <strong>Open raw usage log</strong> — see <a href="#costs">Managing OpenRouter costs</a>.</li>
+    <li><strong>Usage stats…</strong>, <strong>Balances…</strong>, <strong>Usage history…</strong> and <strong>Open raw usage log</strong> — see <a href="#costs">Managing costs on paid models</a>. Balances says how much money is left on each paid service.</li>
     <li><strong>Speed check…</strong> — explains, in plain words, why replies are slow. See <a href="#speed-check">below</a>.</li>
     <li><strong>Open logs folder</strong> and <strong>Open active kin folder</strong>.</li>
     <li><strong>Edit base prompt…</strong>, <strong>Edit prompts…</strong> and <strong>Prompt updates…</strong> — see <a href="#editable-prompts">Editable prompts</a>.</li>
@@ -520,6 +520,8 @@ python hearthkin.pyw</code></pre>
 
 <p><strong>Recall stays quiet unless something actually matches.</strong> Most messages are not about anything in a kin's memory, and for those the right amount of recalled memory is none. A note is only surfaced if it genuinely shares words with the message you just sent — and a word only counts if it isn't scattered through the kin's whole memory anyway, so the kin's own name, and yours, don't qualify everything. Above a small floor that keeps a short question answerable, the block is also bounded by the length of your own message, so recalled memory can never be the bulk of a turn. Surfaced notes arrive <strong>beside</strong> your message as their own separate turn — never inside it. Your words reach the kin exactly as you typed them, with nothing bolted on the front.</p>
 
+<p><strong>Recall looks through every note the kin has, and says when each one is from.</strong> Every turn it searches the kin's whole memory folder, however many files are in it. (It used to stop after the first few hundred pieces, in folder order, so a kin with a lot of dated logs kept being handed the same early week while everything newer stayed out of reach.) Each note it brings back opens with <em>"From your notes,"</em> and a date — for example <em>"From your notes, 3 May 2026:"</em>. The date comes from the nearest dated heading above the note in its file. A note that runs across several dated sections gets a span, such as "3 May 2026 to 9 May 2026". With no dated heading, a date in the file's name is used, which suits daily logs. A note with no date anywhere says <em>"date not recorded"</em> rather than guessing. That way an old note reads as old, and a kin doesn't describe something from months ago as if it happened today. If you want a kin's notes dated well, a heading with the date on it (<code>## 2026-05-03</code>) at the top of each section is all it takes.</p>
+
 <p><strong>If a kin starts narrating instead of doing — check how often recall fires.</strong> The symptom: it says "I'll go and do that" and then doesn't, replies feel reflective and a little beside the point, and it happens on every surface at once without you restarting anything. That last part is the giveaway, because it rules out anything in the app itself.</p>
 
 <p>The cause is usually one memory note that has started matching almost everything. A large file about general things — feelings, states, how someone is doing — shares a word or two with nearly any message, so it qualifies turn after turn. And <strong>whatever is largest in a turn is what gets answered</strong>: if a 600-character note lands beside your 50-character message, your kin is mostly replying to the note. A reflective note produces a reflective reply, not an action.</p>
@@ -683,7 +685,7 @@ recalling old memories tends to help a drifting kin.</p>
 
 <h4>The kin manual</h4>
 
-<p>For the kin's own reference, Hearthkin ships a kin-facing document at <code>~/.hearthkin/kin_manual.md</code> (seeded from the bundled <code>docs/kin_manual.md</code> on first run). It explains the architecture from the kin's first-person perspective: where files live, every tool in detail, what each surface (desktop / Telegram DM / Telegram group / cron / rooms) means, how costs and truncation work, and what's safe for the kin to modify themselves vs. what should be a conversation with the operator first. The base prompt mentions it so the kin knows to pull it via <code>read_file</code> when something feels unclear. You can edit it freely — your edits stay between reseeds (the seeder only writes when the file is missing).</p>
+<p>For the kin's own reference, Hearthkin ships a kin-facing document at <code>~/.hearthkin/kin_manual.md</code> (copied from the bundled <code>docs/kin_manual.md</code>). It explains the architecture from the kin's first-person perspective: where files live, every tool in detail, what each surface (desktop / Telegram DM / Telegram group / cron / rooms) means, how costs and truncation work, and what's safe for the kin to modify themselves vs. what should be a conversation with the operator first. The base prompt mentions it so the kin knows to pull it via <code>read_file</code> when something feels unclear. It is reference material that has to match the version you're running, so it is not yours to customise: each time Hearthkin starts, it replaces that copy with the bundled one whenever they differ. That is how a new release's corrections reach your kin without you doing anything. If you change the copy in <code>~/.hearthkin</code>, your change is lost at the next launch.</p>
 
 <h3>Conversation transcripts</h3>
 
@@ -691,14 +693,14 @@ recalling old memories tends to help a drifting kin.</p>
 
 <h2 id="import">Importing existing history from elsewhere</h2>
 
-<p>If you have chat history with someone (or some kin) on another platform — Telegram exports, Skype logs, Kindroid transcripts, Claude exports, an OpenClaw session folder, or text you've written by hand to seed a relationship — Hearthkin can bring it into a kin's <code>conversation.jsonl</code> so the kin reads it as their own past. Use <strong>File → Import history…</strong>.</p>
+<p>If you have chat history with someone (or some kin) on another platform — Telegram exports, Skype logs, Kindroid transcripts or archives, Claude exports, a Claude Code session, an OpenClaw session folder, or text you've written by hand to seed a relationship — Hearthkin can bring it into a kin's <code>conversation.jsonl</code> so the kin reads it as their own past. Use <strong>File → Import history…</strong>.</p>
 
 <p>The dialog asks for a source file, auto-detects the format, and shows a preview of the first ten parsed messages so you can sanity-check before committing. You pick a target kin (existing or brand-new), pick how the import meets the kin's existing history, and import.</p>
 
 <p>A few things about the Import window worth knowing before you start:</p>
 
 <ul>
-  <li><strong>Source file(s)</strong> — <strong>Browse</strong> lets you pick several files at once. Its file filter starts on text and Markdown logs. There are also filters for a Claude export (the <code>.zip</code> you download, or the <code>conversations.json</code> inside it — the <code>.zip</code> can be imported as it is), for Skype <code>.json</code> and <code>.tar</code> exports, and for OpenClaw <code>.jsonl</code> session files. For anything else, switch the filter to <strong>All files</strong>.</li>
+  <li><strong>Source file(s)</strong> — <strong>Browse</strong> lets you pick several files at once. Its file filter starts on <strong>All supported logs</strong>, which shows every kind of file Hearthkin can read, so nothing you can import is hidden. There are also narrower filters: text and Markdown logs, a Claude export (the <code>.zip</code> you download, or the <code>conversations.json</code> inside it — the <code>.zip</code> can be imported as it is), Skype <code>.json</code> and <code>.tar</code> exports, and <code>.jsonl</code> files (a Kindroid archive, OpenClaw sessions, or Claude Code sessions). For anything else, switch the filter to <strong>All files</strong>.</li>
   <li><strong>Browse picks files only.</strong> For an OpenClaw sessions folder, type or paste the folder's path into the box instead.</li>
   <li><strong>Detected format</strong> says which kind of file Hearthkin thinks it is.</li>
   <li><strong>How multiple source files combine, before anything is saved</strong> — when you picked several files: <strong>Keep each conversation whole, oldest first</strong>, or <strong>Weave everything together by date</strong>.</li>
@@ -710,7 +712,7 @@ recalling old memories tends to help a drifting kin.</p>
 
 <dl>
   <dt>Telegram <code>.txt</code> exports</dt>
-  <dd>The <code>[MM-DD-YYYY HH:MM:SS] Speaker: text</code> shape Telegram produces from Settings → Export chat. Continuation lines fold into the previous message correctly. Multi-party group exports are supported — each non-kin speaker keeps an inline <code>[Display Name]</code> attribution so the kin can tell speakers apart.</dd>
+  <dd>The <code>[MM-DD-YYYY HH:MM:SS] Speaker: text</code> shape Telegram produces from Settings → Export chat. Continuation lines fold into the previous message correctly. A message from an account that has since been deleted (the export writes it with no name, just the time and a colon) comes in as its own message from <strong>Unknown sender</strong>, at its own time; the export doesn't say who it was, so Hearthkin doesn't guess. Multi-party group exports are supported — each non-kin speaker keeps an inline <code>[Display Name]</code> attribution so the kin can tell speakers apart.</dd>
 
   <dt>Hand-authored text files</dt>
   <dd>Plain text you write yourself — the way to seed a kin with imagined early history, so its first real turn lands in a relationship that already exists rather than a cold start. Write a page or two and import it. The format is forgiving; the rules are:
@@ -728,8 +730,17 @@ SpeakerFive: Most of it. The eastern section
 needs another pass before it's usable.</code></pre>
     That's three turns — two from SpeakerFive, one from SpeakerFifteen — and SpeakerFive's second message runs across two lines (the second line has no <code>Name:</code> colon, so it folds in). Whichever name you enter as the kin's in the import dialog becomes the kin's turns; everyone else becomes the other side.</dd>
 
-  <dt>Kindroid chat exports</dt>
-  <dd>The "speaker on their own line, content below" shape Kindroid produces — both regular chats and voice-call transcripts (whose header timestamp anchors the conversation's real date). UI artifacts like <code>play</code>, <code>show recalled memories</code>, and <code>Edit message</code> get filtered out automatically.</dd>
+  <dt>Kindroid archives taken from Kindroid's own API</dt>
+  <dd>If you saved your Kindroid history with an archiving tool that reads Kindroid's API (one row per message, in a <code>.jsonl</code> file), import that rather than Kindroid's text export. It is the best Kindroid source: every message carries its real time and says who spoke, so nothing is guessed. The Detected format line reads <strong>Kindroid archive from their API (real timestamps)</strong>.
+  <ul>
+    <li><strong>Group chats keep everyone separate.</strong> Only messages whose speaker name matches the kin name you give become the kin's turns, ignoring capitals; other Kindroids in the chat come through as themselves.</li>
+    <li><strong>If the name matches nothing</strong> (the kin was renamed, or there's a typo), every AI message is taken as the kin's rather than none of them, because the archive does state which messages were the AI's.</li>
+    <li><strong>Images, links and web lookups</strong> come in as short notes on the message instead of vanishing.</li>
+  </ul>
+  <p>The readable <code>.md</code> copy such an archiver writes beside each record imports too, and gives the same messages, speakers and times. Its Detected format line reads <strong>Kindroid archive, the readable copy</strong>. One rule differs: that copy doesn't say which speakers are AI, so if the kin name matches nobody, <em>no</em> turns become the kin's. The preview will say "0 kin turns", and you fix the name before importing.</p></dd>
+
+  <dt>Kindroid text exports</dt>
+  <dd>The "speaker on their own line, content below" shape Kindroid's own export produces — both regular chats and voice-call transcripts (whose header timestamp anchors the conversation's real date). UI artifacts like <code>play</code>, <code>show recalled memories</code>, and <code>Edit message</code> get filtered out automatically. This is the lossiest format Hearthkin reads, and the Detected format line says so: it has no times (Hearthkin spaces the messages out from the file's own date), it doesn't say who spoke (the speakers are worked out from the text), and images and links are dropped. If you have an API archive of the same chat, use that instead.</dd>
 
   <dt>Skype</dt>
   <dd>Two flavors. The official Microsoft Skype export bundle (<code>messages.json</code> inside the <code>.tar</code> you download from Skype) — the dialog auto-extracts <code>messages.json</code> in memory, lists every DM in the archive sorted by message count, and lets you pick which one to import. And the third-party SkypeParser <code>.txt</code> output — one file per chat thread; the kin's turns are the ones whose display name or Skype handle matches the kin name you give, ignoring capitals. Both flavors handle the same conversation cleanly with content cleanup: Skype's RichText markup (<code>&lt;b raw_pre="*"&gt;hugs&lt;/b&gt;</code> → <code>*hugs*</code>), emoticons, call events become <code>[skype call: 7s]</code> markers, media references become <code>[skype file: name — not imported]</code> markers.</dd>
@@ -752,6 +763,9 @@ needs another pass before it's usable.</code></pre>
 
   <p><strong>Dates</strong> come from a <code>- Date:</code> line if the file has one, then from a <code>YYYY-MM-DD</code> at the start of the filename. With neither, the conversation still imports in order, just without a real anchor — losing turns over a missing timestamp would be the worse trade.</p></dd>
 
+  <dt>Claude Code sessions</dt>
+  <dd>Claude Code keeps each working session as a <code>.jsonl</code> file. Pick one and it imports as one conversation, opening with a one-line header that names the folder the session ran in, so you can tell later which project it was about. Only what the person typed and the spoken text of the replies come in. Tool output, thinking, helper agents' own conversations, background notices and the text Claude Code adds to messages behind the scenes are all left out. That matters because Claude Code files tool output as if the person had said it; a history that trusted those labels would be mostly machine output. As with the other Claude formats, you don't need to type a name: the file says which side is which.</dd>
+
   <dt>OpenClaw session store</dt>
   <dd>For a kin that lived on OpenClaw before Hearthkin. Unlike the others, OpenClaw keeps a kin's history as a whole <em>folder</em> of per-session files (with reset/deleted archive copies that repeat messages), not a single export — so here you point the import at the sessions <em>folder</em>, or at any one session file inside it, or its <code>sessions.json</code>. Hearthkin reads every session, dedupes by message id so the archive copies collapse into one clean timeline, drops the machinery (tool calls, tool output that OpenClaw fed back as "user" turns, heartbeat replies), and — since OpenClaw ran kin over Telegram — lifts the real sender out of each turn's metadata so group members stay named. What lands is the human-and-kin conversation, in order, ready for the kin to read as its own past.</dd>
 </dl>
@@ -762,7 +776,7 @@ needs another pass before it's usable.</code></pre>
 
 <ul>
   <li><strong>Append, merge, or replace.</strong> The default is append (imported block lands at the end of any existing <code>conversation.jsonl</code>). <strong>Merge by date</strong> instead weaves the imported turns into the existing conversation chronologically — the right choice when you're bringing in an <em>older</em> era (say, a kin's life on an earlier platform) that belongs <em>before</em> what's already here; it backs the conversation up first, then rewrites it with the imported turns threaded into place, keeping the existing turns in their own order and placing only the imported ones by time. Replace mode writes the imported block as the new sole content. All three back up first — to <code>~/.hearthkin/kin/&lt;kin&gt;/backups/conversation-&lt;timestamp&gt;.jsonl</code> — so delete the backup whenever you're confident the import landed right. (Backups live in their own folder rather than beside <code>conversation.jsonl</code>, so they don't turn up in the file picker looking like something you'd want to restore <em>from</em>.)</li>
-  <li><strong>How the kin's name is matched depends on the format.</strong> For Telegram, hand-written, plain text and Kindroid files the kin name must match exactly, capitals included. If the kin is "willow" (lowercase) in your source file, type it that way — or pick it from the <strong>Who is the kin in this file</strong> list, which avoids the problem. The preview shows the speaker distribution, so you'll see "0 kin turns" if it didn't match and can fix it before committing. Both Skype formats ignore capitals. The two Claude formats ignore the name entirely, because every message already says which side it is. For Skype JSON, the conversation picker auto-fills the kin name from the chosen DM's display name.</li>
+  <li><strong>How the kin's name is matched depends on the format.</strong> For Telegram, hand-written, plain text and Kindroid text-export files the kin name must match exactly, capitals included. If the kin is "willow" (lowercase) in your source file, type it that way — or pick it from the <strong>Who is the kin in this file</strong> list, which avoids the problem. The preview shows the speaker distribution, so you'll see "0 kin turns" if it didn't match and can fix it before committing. Both Skype formats and both Kindroid archive formats ignore capitals. The three Claude formats ignore the name entirely, because every message already says which side it is. For Skype JSON, the conversation picker auto-fills the kin name from the chosen DM's display name.</li>
 </ul>
 
 <h2 id="restore">Putting a kin's own history back together</h2>
@@ -795,7 +809,8 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <dl>
   <dt><strong>Ollama (local)</strong></dt>
-  <dd>The default. Models you've pulled with <code>ollama pull &lt;name&gt;</code> show up automatically in the model browser. Conversations never leave your machine. Cost: $0 plus your power bill. Speed: depends on your hardware and the model size. Ollama can also run on another machine of yours — see <a href="#ollama-host">Pointing Hearthkin at a remote Ollama</a>.</dd>
+  <dd>The default. Models you've pulled with <code>ollama pull &lt;name&gt;</code> show up automatically in the model browser. Conversations never leave your machine. Cost: $0 plus your power bill. Speed: depends on your hardware and the model size. Ollama can also run on another machine of yours — see <a href="#ollama-host">Pointing Hearthkin at a remote Ollama</a>.
+  <p><strong>One exception: Ollama's cloud models.</strong> Ollama also offers models that run on its own servers, and they can sit in the same list as the ones on your machine. Their names end in <code>cloud</code> (for example <code>some-model:cloud</code>). For those, the conversation does leave your computer, and every reply uses your Ollama credit. The model browser marks them, and Hearthkin never calls them free.</p></dd>
 
   <dt><strong>OpenRouter (remote)</strong></dt>
   <dd>Built in. A single gateway to hosted Claude, GPT, Gemini, Llama, and dozens of others. A kin on OpenRouter has a model name that starts <code>openrouter/</code>; the model browser does this for you when you pick the <strong>openrouter (remote)</strong> radio. You'll need an OpenRouter API key — set it under <strong>Preferences → Connections</strong>.</dd>
@@ -820,6 +835,8 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><kbd>Alt</kbd>+<kbd>L</kbd> jumps to the result list from anywhere in the window.</li>
   <li>First-letter keyboard navigation in the list — type a letter or two to jump to matching models.</li>
   <li><strong>Refresh list</strong> fetches the list again, and <strong>Use this model</strong> saves your pick to the kin.</li>
+  <li>An Ollama cloud model says so first on its line: <strong>CLOUD: runs on Ollama's servers and uses your credit</strong>, so you hear it while arrowing through. Its detail card says the conversation leaves this computer, and that Hearthkin's cost figures don't include it; check the cost on your Ollama account.</li>
+  <li>Models from a service you added say <strong>price unknown</strong> on their line, because only OpenRouter reports prices. That means the price isn't known, not that the model is free.</li>
   <li>A local model whose download never finished is marked <strong>NOT USABLE</strong> on its line, with the command to remove it.</li>
   <li>Every model's <strong>context ceiling</strong> is on its line, both providers, so you can compare them without opening a kin's settings one at a time. A local model that doesn't publish one reads as <em>ctx unknown</em>. Remember this is what the model's design supports, not what will actually run on the machine serving it — a model advertising 262K can return nothing at all on hardware where 32K is fine, so treat it as a ceiling rather than a suggestion, and see <a href="#num-ctx-headroom">Leave a little headroom below the ceiling</a>.</li>
 </ul>
@@ -865,7 +882,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <p>It is <strong>not</strong> "how large a context the model can handle." It is <strong>how much Hearthkin sends to the model on every single message</strong>. Each turn, Hearthkin packs the kin's soul, memory, recent conversation, and tool definitions into (up to) that many tokens and sends the whole bundle. The model keeps nothing between calls — the entire context is rebuilt and re-sent every time.</p>
 
-<p>On a local Ollama model that is free, so you can set the window as large as the model allows. On an <strong>OpenRouter</strong> model you pay for every token sent, on <em>every message</em>. At a typical price of $3 per million input tokens, a window of 32,000 costs roughly $0.10 each time you press Send — before the reply is even written. Leave the window at a million and let the conversation grow to fill it, and each message creeps toward $3, climbing further as the conversation gets longer.</p>
+<p>On a model running on your own computer that is free, so you can set the window as large as the model allows. On a paid model — <strong>OpenRouter</strong>, a service you added, or an Ollama cloud model — you pay for every token sent, on <em>every message</em>. At a typical price of $3 per million input tokens, a window of 32,000 costs roughly $0.10 each time you press Send — before the reply is even written. Leave the window at a million and let the conversation grow to fill it, and each message creeps toward $3, climbing further as the conversation gets longer.</p>
 
 <p>So for a paid model the right value is <strong>not</strong> the model's maximum. It is "how much recent conversation is genuinely useful in front of the model" — a modest number. <strong>Around 32,768 is a sensible default for an OpenRouter kin.</strong> History that falls outside the window is not lost: that is exactly what <code>memory.md</code> and distillation are for (see <a href="#soul-memory">Soul, memory, and how kin remember</a>). The window holds recent turns; distilled memory carries the long term.</p>
 
@@ -874,7 +891,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 <p id="num-ctx-headroom"><strong>Leave a little headroom below the ceiling.</strong> Setting the window to the exact <strong>Model max</strong> number is the one combination that can quietly bite. Hearthkin estimates how big your message will be before it sends; the provider counts it for real on receipt. Those two numbers rarely match exactly, and the difference grows when images are in the recent conversation (each image adds roughly 1,500 tokens that aren't visible until send time). At the literal max, even a small mismatch tips over and the provider returns a confusing 400 error. <strong>Easy fix:</strong> set the window to about 5–10% under the model max. If <strong>Model max:</strong> reads 262,144, set the window to 240,000. The kin still has plenty of room; the buffer absorbs the slop. (This only really matters at the top end. If you're already at the recommended ~32,768, you're nowhere near a ceiling.)</p>
 
 <div class="warn">
-  <p><strong>Cost trap:</strong> when you move a kin from a free local model to a paid OpenRouter model, its context window comes along unchanged. A value that was harmless on a local model is now a charge on every message. After any local-to-OpenRouter switch, check the window and bring it down — ~32,768 unless you have a specific reason otherwise.</p>
+  <p><strong>Cost trap:</strong> when you move a kin from a free local model to a paid one (OpenRouter, a service you added, or an Ollama cloud model), its context window comes along unchanged. A value that was harmless on a local model is now a charge on every message. After any switch from local to paid, check the window and bring it down — ~32,768 unless you have a specific reason otherwise.</p>
 </div>
 
 <h4 id="num-ctx-reference">Context window: sizing reference</h4>
@@ -893,7 +910,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <ol>
   <li><strong>How long does a typical session with this kin actually run?</strong> A 30-minute conversation is usually 30–60 turns. A multi-hour deep session might be 100–200. Find the bucket above that comfortably fits, then go <em>one tier smaller</em>. The "one smaller" is because most content sitting in the window on a long session is older turns the kin doesn't need re-reading every reply — recent matters; older is what staging is for.</li>
-  <li><strong>What runs this kin?</strong> On free local Ollama, the constraint is VRAM — work back from your hardware. On paid OpenRouter, the constraint is per-send cost — work back from what you're willing to spend per day.</li>
+  <li><strong>What runs this kin?</strong> On free local Ollama, the constraint is VRAM — work back from your hardware. On a paid online model, the constraint is per-send cost — work back from what you're willing to spend per day.</li>
   <li><strong>Does this kin use tools heavily?</strong> Tool round-trips eat the budget — a single <code>read_file</code> on a 30 KB file is ~7,500 tokens that sit in the next turn's input until they roll out. Tool-using kin benefit from one tier higher (16,384 instead of 8,192). Conversational kin without tools rarely need it.</li>
 </ol>
 
@@ -956,9 +973,9 @@ Willow would end up with 1200 turns in all.</code></pre>
 
 <p>The watchdog counts as proof-of-life: any content token from the model, any reasoning token from the model, and any OpenRouter SSE keepalive line. So a reasoning model thinking for minutes won't trip it, and a slow-but-connected hosted provider sending heartbeats won't trip it either.</p>
 
-<h3 id="costs">Managing OpenRouter costs</h3>
+<h3 id="costs">Managing costs on paid models</h3>
 
-<p>OpenRouter models bill per token. A handful of things drive the bill harder than people expect:</p>
+<p>OpenRouter models bill per token, and so do Ollama's cloud models and most services you add. The examples below use OpenRouter, because it is the one Hearthkin can put prices on. A handful of things drive the bill harder than people expect:</p>
 
 <ul>
   <li><strong>Context size, on every message.</strong> The big one — see <a href="#models">the context window note above</a>. Because the whole context is re-sent each turn, the window is a recurring per-message cost, not a one-time setup value. Keep it modest on paid models.</li>
@@ -968,14 +985,15 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>Nightly tending uses the chat model.</strong> When the kin tends their staging notes via the cron entry, they run AS themselves — the chat model, not the cheaper summarizer. Tending is a deliberate session of "the kin reading what happened and writing what they want to keep," so it should be on the model that <em>is</em> the kin. A typical tending pass runs a few cents on Haiku-class models, more on Sonnet. Disable the tending cron entry if you don't want this cost; tend manually or let the staging pile up.</li>
   <li><strong>Telegram group "always" policy.</strong> A group set to <strong>always</strong> makes a full model call for <em>every message in the group</em> — including the ones the kin reads and decides not to answer. On a paid model that adds up fast. Prefer <strong>mention-only</strong> unless you specifically want the kin processing every line.</li>
   <li><strong>Tool loops.</strong> A turn in which the kin calls tools makes one model call per tool round-trip, each one re-sending the context. More tools used per turn means more calls billed.</li>
+  <li><strong>"Price unknown" means paid.</strong> Only a model on your own computer is free. When a model is paid but Hearthkin can't price it — an Ollama cloud model, or any model from a service you added — the distillation status line and the catch-up and redistill estimates say <strong>price unknown</strong> rather than "no charge". The number of calls is still given, so you can work out the cost from the service's own price list.</li>
   <li><strong>Provider choice on OpenRouter.</strong> Adjacent to cost: which inference provider serves your kin's request can vary the price (different providers charge different rates for the same model) AND can vary content-policy enforcement (some providers filter content the model would otherwise produce, others don't). If a kin's responses suddenly change shape — refusing where it didn't before, or charging more than your math expected — the provider may have shifted under you. See <a href="#provider-routing">Pinning a specific OpenRouter provider</a> for how to lock it down.</li>
 </ul>
 
 <p>Two places to watch the numbers:</p>
 
 <ul>
-  <li><strong>Tools → Usage history…</strong> opens a breakdown of every model call by kin, by model, and by surface (desktop, room, Telegram, distillation, cron), with date filters. It is the fastest way to see <em>where</em> the spend is going. The cost figures are estimates from OpenRouter's catalogue pricing — close, but your OpenRouter dashboard remains the authoritative bill.</li>
-  <li><strong>Tools → Balances…</strong> says how much is left on every paid service at once, one line each: OpenRouter's remaining credit, and for Ollama's cloud (added in Manage providers) the plan credit with its renewal date and any credit you bought. Every service you've added gets a line, and one with no balance check says so. <strong>Check again</strong> refreshes it and <strong>Copy</strong> copies it. Below them, <strong>Check in the background every half hour</strong> (on by default) has Hearthkin look on its own and say, once, when a service drops under the amount in <strong>Warn me below this many dollars</strong> (one dollar to start with). Running out completely is always said. If a reply from an online service fails, Hearthkin checks straight away, so an empty account is named as the reason instead of leaving you with an error.</li>
+  <li><strong>Tools → Usage history…</strong> opens a breakdown of every model call by kin, by model, and by surface (desktop, room, Telegram, distillation, cron), with date filters. It is the fastest way to see <em>where</em> the spend is going. The cost figures are estimates from OpenRouter's catalogue pricing — close, but your OpenRouter dashboard remains the authoritative bill. Replies from a service you added, including Ollama's cloud, are counted too, with real token numbers, but their cost reads "—", because those services don't publish prices Hearthkin can read.</li>
+  <li><strong>Tools → Balances…</strong> says how much is left on every paid service at once, one line each: OpenRouter's remaining credit, and for Ollama's cloud (added in Manage providers) the plan credit with its renewal date and any credit you bought. Every service you've added gets a line, and one with no balance check says so. The answers are in the <strong>Balances</strong> field (<kbd>Alt</kbd>+<kbd>B</kbd>), and focus moves there when they arrive. After it come <strong>Check in the background every half hour, and warn me when one is low</strong> (<kbd>Alt</kbd>+<kbd>K</kbd>, on by default) and <strong>Warn me below this many dollars</strong> (<kbd>Alt</kbd>+<kbd>W</kbd>, one dollar to start with), then <strong>Check again</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>), <strong>Copy</strong> (<kbd>Alt</kbd>+<kbd>Y</kbd>) and <strong>Close</strong>. With the background check on, Hearthkin looks on its own and says once, aloud and on the Activity line, when a service drops under the warning amount. It says it again only after the balance has been topped up and dropped back. Running out completely is always said, even with the warning amount at zero. If a reply from an online service fails, Hearthkin checks straight away, so an empty account is named as the reason instead of leaving you with an error.</li>
 </ul>
 
 <h3>Reasoning effort (thinking)</h3>
@@ -1112,7 +1130,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <dd>Your short name for the service. It is made lowercase, spaces and dots become hyphens, and other symbols are dropped. The hint right under the box tells you, as you type, what it will be saved as — type "Featherless AI" and it says it will be saved as "featherless-ai". Adding a name that already exists replaces that entry.</dd>
 
   <dt><strong>Address</strong></dt>
-  <dd>The base address from the service's own documentation. It usually ends in <code>/v1</code>, for example <code>https://api.featherless.ai/v1</code>. Don't put a model name or <code>/chat/completions</code> on the end; Hearthkin adds that part. It must start with <code>http://</code> or <code>https://</code>. A server on your own network works too, as long as it speaks the OpenAI-style protocol — Ollama at its <code>/v1</code> address, llama.cpp, or LM Studio.</dd>
+  <dd>The base address from the service's own documentation. It usually ends in <code>/v1</code>, for example <code>https://api.featherless.ai/v1</code>. Don't put a model name or <code>/chat/completions</code> on the end; Hearthkin adds that part. It must start with <code>http://</code> or <code>https://</code>. A server on your own network works too, as long as it speaks the OpenAI-style protocol — Ollama at its <code>/v1</code> address, llama.cpp, or LM Studio. Ollama's own cloud can be added this way too, at its address on <code>ollama.com</code>; <strong>Tools → Balances…</strong> recognises it by that address, whatever name you give it.</dd>
 
   <dt><strong>Key</strong></dt>
   <dd><strong>Heads-up: this box is not hidden</strong>, so you can check what you pasted. That also means NVDA reads the key aloud as you type or move through it. When you edit a provider, leaving the box blank keeps the key already saved.</dd>
@@ -1189,6 +1207,8 @@ Willow would end up with 1200 turns in all.</code></pre>
 <p>A room is a conversation with two or more kin and yourself. Each turn one kin speaks; the room loop cycles through the members. Useful for getting a multi-perspective response, or for kin-to-kin conversations where you mostly observe.</p>
 
 <p>Create a room from the <strong>Room → New room…</strong> menu. Pick which kin are members, optionally write a <strong>Room context note</strong> that everyone sees as additional system context, and configure the turn limits, including <strong>Per-turn token cap (per kin)</strong> (default 800).</p>
+
+<p>The <strong>Members</strong> list is a list with checkboxes. Arrow to a kin and press <kbd>Space</kbd> to tick or untick it; NVDA says "checked" or "not checked" for each one as you move and as you press Space. <strong>Check all</strong> and <strong>Uncheck all</strong> sit beside it. Just after the list, a read-only line, <strong>Currently in this room</strong>, reads every member in speaking order in one go.</p>
 
 <h3>Who speaks when</h3>
 
@@ -1860,7 +1880,7 @@ understood, exactly as it does for you at the console.</p>
 
 <dl>
   <dt><strong>Hearthkin is open, and the tick-box is on</strong> (default)</dt>
-  <dd>The scheduled task leaves a request in <code>~/.hearthkin/cron_requests/</code> and exits, and Hearthkin picks it up within 5 seconds. The wake-up goes live into the conversation in front of you only when all of these are true: that kin is the one open in the main window, nothing is being written, you aren't in a room, the entry has nothing ticked under <strong>Send this message to</strong>, and the kin isn't a park Keeper. Otherwise Hearthkin runs it quietly in the background, the same way as when Hearthkin is closed.</dd>
+  <dd>The scheduled task leaves a request in <code>~/.hearthkin/cron_requests/</code> and exits, and Hearthkin picks it up within 5 seconds. The wake-up goes live into the conversation in front of you only when all of these are true: that kin is the one open in the main window, nothing is being written, you aren't in a room, the entry has nothing ticked under <strong>Send this message to</strong>, the entry doesn't keep its own history (see below), and the kin isn't a park Keeper. Otherwise Hearthkin runs it quietly in the background, the same way as when Hearthkin is closed.</dd>
 
   <dt><strong>Hearthkin is closed</strong></dt>
   <dd>The scheduled task runs the model itself — no window, no display. It appends the turn to the kin's <code>conversation.jsonl</code>, writes to the daily journal at <code>~/.hearthkin/kin/&lt;kin&gt;/memory/journal/YYYY-MM-DD.md</code>, and posts to Telegram as described below.</dd>
@@ -1868,6 +1888,8 @@ understood, exactly as it does for you at the console.</p>
   <dt><strong>Hearthkin is open, and the tick-box is off</strong></dt>
   <dd>The scheduled task runs the model itself and writes the journal and the Telegram post, but the turn is not added to the kin's conversation.</dd>
 </dl>
+
+<p><strong>A job with its own history is the exception to all three.</strong> If <strong>Keep this job's history separate from the chat</strong> is ticked on an entry, its runs are never added to the kin's conversation, whichever of the three cases applies. They are kept with the job instead. See <a href="#cron-own-history">Keeping a job's history separate</a>, below. The journal entry and any Telegram post still happen as usual.</p>
 
 <p><strong>Where it posts.</strong> With nothing ticked under <strong>Send this message to</strong>, a wake-up goes to the Telegram users who have <strong>Mirror desktop messages to my Telegram chat</strong> on. With places ticked, it goes to exactly those. <strong>Desktop only</strong> records it in the kin's chat and journal and sends it nowhere outward.</p>
 
@@ -1880,10 +1902,28 @@ understood, exactly as it does for you at the console.</p>
 <p>Each entry's window also has:</p>
 
 <ul>
+  <li><strong>Keep this job's history separate from the chat</strong> (<kbd>Alt</kbd>+<kbd>K</kbd>) — off by default. Explained just below this list.</li>
   <li><strong>Retry tending if no tool call fired</strong> — 0 (off), 1, 2 or 3; default 0. Only matters for tending wake-ups. If the kin answers without making any tool call, it is asked again, up to this many times. Leave it at 0 for check-in prompts that don't use tools.</li>
   <li><strong>Send this message to</strong> — a checklist of <strong>Desktop only</strong>, each Telegram DM user, and each Telegram group the kin is in. Space ticks and unticks.</li>
   <li>A <strong>time overlap warning</strong>. If the time you chose overlaps another kin's wake-up, pressing OK shows a warning instead of saving, because kin sharing one graphics card take turns and the later one can time out. Change the time, or press OK again to keep it.</li>
 </ul>
+
+<h4 id="cron-own-history">Keeping a job's history separate</h4>
+
+<p>Normally a wake-up is handed the kin's whole conversation with you, and what it says is saved back into that conversation. That is the right choice for most wake-ups, and it is why the box starts unticked: a kin checking in on you, or tending its memory, keeps its sense of continuity by sharing the chat.</p>
+
+<p>It is the wrong choice for a job that makes something apart from your conversation, such as a story the kin writes a part of every night. Shared, your real life leaks into the fiction, because the job sees all of it, and the job's prompts and entries fill up your chat until the kin can't tell them apart from what you actually said.</p>
+
+<p>Tick <strong>Keep this job's history separate from the chat</strong> for a job like that. The read-only note under the box says the same thing in short. With it ticked:</p>
+
+<ul>
+  <li>The job sees only its own past runs, not your conversation.</li>
+  <li>Its runs are saved only with the job, not into the chat — even when its kin is the one open in front of you. It then runs in the background rather than live in the chat.</li>
+  <li>The history is kept in the kin's folder, at <code>~/.hearthkin/kin/&lt;kin&gt;/cron_history/</code>, one file per job.</li>
+  <li>Unticking and ticking again picks the same history back up. Nothing is lost by unticking.</li>
+</ul>
+
+<p>The kin's soul and memory still come with every run, so it is still itself; it just isn't handed the chat.</p>
 
 <p><strong>Test now</strong> fires the selected entry immediately, bypassing both the schedule and the enabled flag. Use it to verify the pipeline end-to-end before relying on it.</p>
 
@@ -1903,7 +1943,7 @@ understood, exactly as it does for you at the console.</p>
 
 <h3 id="heartbeat">Proactive heartbeat (the kin reaches out on its own)</h3>
 
-<p>A cron entry fires a <em>directed</em> prompt at a set time. A <strong>proactive heartbeat</strong> is different: it gives a kin a quiet moment, on a timer, to reach out to <em>you</em> on its own initiative — but only if it genuinely has something to say. Most of the time it stays silent, and <strong>silence sends nothing and leaves no trace</strong> (no journal entry, no message, no "still here" ping). That anti-spam design is the whole point — a heartbeat with nothing to say costs you nothing to read.</p>
+<p>A cron entry fires a <em>directed</em> prompt at a set time. A <strong>proactive heartbeat</strong> is different: it gives a kin a quiet moment, on a timer, to reach out to <em>you</em> on its own initiative — but only if it genuinely has something to say. Most of the time it stays silent, and <strong>silence sends nothing</strong> (no journal entry, no message, no "still here" ping). That anti-spam design is the whole point — a heartbeat with nothing to say costs you nothing to read.</p>
 
 <p>Turn it on under <strong>Settings → Cron → "Proactive heartbeat…"</strong>. The dialog has:</p>
 <ul>
@@ -1919,7 +1959,7 @@ understood, exactly as it does for you at the console.</p>
 <p>It only runs while Hearthkin is open. You don't need to enable any tool for this — during a heartbeat the kin always has <code>reach_out</code>, <code>memory_search</code> and <code>recent_thinking</code>, whatever its own tool list says. If Hearthkin is busy with other work on the model when a heartbeat is due, the heartbeat waits and tries again rather than losing its turn; that is noted in <code>logs\heartbeat.log</code>.</p>
 
 <p class="note"><strong>If a kin used to reach out and stopped, this is the first thing to check.</strong> A heartbeat has no reader: the kin's reply goes nowhere, and the <code>reach_out</code> tool is the only way anything actually reaches you. Some models answer &ldquo;is there something you'd like to say?&rdquo; by <em>writing the message</em> rather than by calling the tool &mdash; and that message used to be thrown away with no record anywhere, which looks exactly like a kin that has gone quiet on you. Hearthkin now asks the kin once, plainly, whether it meant that for you; if it says no, that is taken as a real answer. Anything that still doesn't get through is written to <code>logs/heartbeat_unsent.log</code>, so a lost message is something you can find rather than something that never existed. Changing a kin's model is the usual reason this starts happening, and nothing about the kin has changed when it does.</p>
-<p><strong>Cost:</strong> each heartbeat runs the model at least once, even when the kin decides to stay quiet — that's the price of giving it a genuine chance to speak. Sometimes it runs twice: if the kin wrote 120 characters or more without calling <code>reach_out</code>, it is asked once more whether it meant that for you. On a local Ollama model that's just compute; on a paid model, keep the interval long so quiet check-ins don't add up.</p>
+<p><strong>Cost:</strong> each heartbeat runs the model at least once, even when the kin decides to stay quiet — that's the price of giving it a genuine chance to speak. Sometimes it runs twice: if the kin wrote 120 characters or more without calling <code>reach_out</code>, it is asked once more whether it meant that for you. On a model running on your own computer that's just compute; on a paid model, including Ollama's cloud models, keep the interval long so quiet check-ins don't add up.</p>
 
 <h2 id="prefs">Preferences and API keys</h2>
 
@@ -2220,6 +2260,8 @@ understood, exactly as it does for you at the console.</p>
 │       ├── backups/              # copies of soul.md / memory.md from before a kin
 │       │                         #   overwrote them, plus import/restore backups
 │       ├── voice_history.md      # voice-model swap audit log (per-kin)
+│       ├── cron_history/
+│       │   └── &lt;job&gt;.jsonl       # past runs of a scheduled job that keeps its own history
 │       ├── attachments/
 │       │   └── &lt;hash&gt;.&lt;ext&gt;       # images sent / received, content-addressed
 │       ├── staging/
