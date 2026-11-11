@@ -3377,9 +3377,14 @@ def _openrouter_pricing(model, *, allow_fetch=True):
 
 def _estimate_call_cost(model, prompt_tokens, completion_tokens, cached_tokens=0,
                         *, allow_fetch=True):
-    """Best-effort USD cost estimate for one chat() call. Returns None
-    for Ollama (free, local) and for OpenRouter models we can't price
-    (catalogue unavailable, model unknown).
+    """Best-effort USD cost estimate for one chat() call.
+
+    0.0 means the model runs on this computer (local Ollama) and a call
+    costs nothing but electricity. None means it costs money we can't
+    price: an Ollama CLOUD model (`glm-5.2:cloud`), a model from a service
+    the person added (which report no prices), or an OpenRouter model the
+    catalogue doesn't know. Callers must keep those apart. Reading None as
+    0 told people a paid cloud model was "local -- no charge".
 
     `allow_fetch=False` forbids a network catalogue refresh during the
     lookup — pass it from anywhere that runs inside a send.
@@ -3392,8 +3397,10 @@ def _estimate_call_cost(model, prompt_tokens, completion_tokens, cached_tokens=0
     L4). When no cache pricing is available we bill the cached portion
     at the full prompt rate (upper-bound)."""
     if not _is_openrouter_model(model):
-        # Ollama or unknown — no cost.
-        return 0.0 if model else None
+        if not model:
+            return None
+        # Ollama: local costs nothing; a cloud model spends credit we can't price.
+        return None if is_ollama_cloud_model(model) else 0.0
     prompt_price, completion_price, cache_read_price = _openrouter_pricing(
         model, allow_fetch=allow_fetch)
     if prompt_price is None or completion_price is None:

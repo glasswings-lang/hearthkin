@@ -2444,11 +2444,20 @@ class EditKinDialog(wx.Dialog):
                        if "/" in memory_model else memory_model)
         try:
             from llm_backend import _estimate_call_cost
-            per_call_est = _estimate_call_cost(memory_model, 10000, 500) or 0.0
+            per_call_est = _estimate_call_cost(memory_model, 10000, 500)
         except Exception:
-            per_call_est = 0.0
-        total_est = per_call_est * est_chunks
-        if per_call_est > 0:
+            per_call_est = None
+        # None = a paid model with no price we can read (a cloud model, an
+        # added service). It must never read as "local -- no charge".
+        unpriced_line = (
+            f"Estimated {est_chunks} distillation calls on {model_short}. "
+            f"Price unknown: this model runs on a paid service that doesn't "
+            f"report prices, so each call costs something Hearthkin can't "
+            f"estimate.")
+        total_est = (per_call_est or 0.0) * est_chunks
+        if per_call_est is None:
+            cost_line = unpriced_line
+        elif per_call_est > 0:
             cost_line = (
                 f"Estimated {est_chunks} distillation calls on {model_short} "
                 f"— about ${total_est:.2f} total (~${per_call_est:.3f} each)."
@@ -2537,11 +2546,20 @@ class EditKinDialog(wx.Dialog):
                        if "/" in memory_model else memory_model)
         try:
             from llm_backend import _estimate_call_cost
-            per_call_est = _estimate_call_cost(memory_model, 10000, 500) or 0.0
+            per_call_est = _estimate_call_cost(memory_model, 10000, 500)
         except Exception:
-            per_call_est = 0.0
-        total_est = per_call_est * est_chunks
-        if per_call_est > 0:
+            per_call_est = None
+        # None = a paid model with no price we can read (a cloud model, an
+        # added service). It must never read as "local -- no charge".
+        unpriced_line = (
+            f"Estimated {est_chunks} distillation calls on {model_short}. "
+            f"Price unknown: this model runs on a paid service that doesn't "
+            f"report prices, so each call costs something Hearthkin can't "
+            f"estimate.")
+        total_est = (per_call_est or 0.0) * est_chunks
+        if per_call_est is None:
+            cost_line = unpriced_line
+        elif per_call_est > 0:
             cost_line = (
                 f"Estimated {est_chunks} distillation calls on "
                 f"{model_short} — about ${total_est:.2f} total "

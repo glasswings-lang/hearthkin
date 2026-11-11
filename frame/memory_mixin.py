@@ -1889,7 +1889,11 @@ class MemoryMixin:
                 cached_tok = _cached_tokens_from_usage(usage_info)
                 cost = _estimate_call_cost(model, p_tok, c_tok, cached_tokens=cached_tok)
                 model_short = model.split("/")[-1] if "/" in model else model
-                if cost > 0:
+                # None is a paid model we can't price (cloud, an added
+                # service), never "no charge" -- see _estimate_call_cost.
+                if cost is None:
+                    cost_str = "(price unknown)"
+                elif cost > 0:
                     cost_str = f"~${cost:.4f}"
                 else:
                     cost_str = "(local — no charge)"
