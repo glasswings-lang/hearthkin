@@ -2,7 +2,7 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
-## Unreleased
+## v0.11.0 — 2026-11-11
 
 ### Added
 
@@ -87,6 +87,8 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 - **The private-string guard runs as git hooks, and fails closed.** Before, it had to be remembered, and it passed when its list was missing. That meant it could not tell a fork apart from this repository with the guard switched off, and the public working copy sat in exactly that state, reporting ALL PASS while watching nothing. Now `pre-commit` scans every tracked file and `commit-msg` scans the message, since a message is the one thing a file scan can't see. One line arms a fresh clone: `git config core.hooksPath githooks`. It can't be committed for you, because git refuses to let a repository run its own code on clone. A checkout without `docs/private/` prints a DISARMED banner and passes, so a contributor is never blocked by a file they cannot have. `CONTRIBUTING.md` says all of this where someone setting up would look.
 
 - **`run_all.py` gives every test file one shared sandbox, not one each.** A test that makes a real `chat()` call writes usage and fingerprint logs there, and the next test to read those logs sees lines it didn't write. That happened once, and a test failed only inside the full run. A test that calls a model should make its own folder inside the home it was given, as `tests/test_provider_extras.py` and `tests/test_usage_provider.py` now do.
+
+- **Releases are built locally, and the GitHub build only checks.** The workflow used to upload the portable zip and the installer, about 140 MB, as artifacts on every push to master, and build a release on every `v*` tag. Artifacts count against the 0.5 GB Actions-storage cap, so a few pushes in a row set off GitHub's storage-quota warning. It now builds on pushes and pull requests to prove the app still builds, and keeps nothing. Tags trigger nothing. A release is `build.bat` with `HEARTHKIN_VERSION` set, then `gh release create` with the zip and installer. `build.bat` installs the same pinned tools as the workflow (PyInstaller 6.22.3, Pillow 12.2.0), and finds Inno Setup where winget installs it per-user.
 
 - The working notes and old audits moved from the repository root into `docs/`, and the 2026-06-11 security audit now says it is a list that was worked through, not a live map of open holes.
 

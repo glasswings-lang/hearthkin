@@ -12,12 +12,11 @@ echo   3. (Optional) Build the Windows installer via Inno Setup
 echo.
 
 :: --- Dependencies ---
-python -c "import PyInstaller" >nul 2>nul
-if errorlevel 1 (
-    echo PyInstaller not found. Installing...
-    python -m pip install pyinstaller
-    if errorlevel 1 goto :fail
-)
+:: Same pins as the GitHub build check (build-release.yml), so a local
+:: release is built with the same tools. Update both together.
+echo Installing pinned build tools...
+python -m pip install "pyinstaller==6.22.3" "pillow==12.2.0"
+if errorlevel 1 goto :fail
 
 echo Installing/updating runtime dependencies...
 python -m pip install -r requirements.txt
@@ -112,6 +111,8 @@ echo [3/3] Building Windows installer via Inno Setup...
 set "ISCC="
 if exist "%ProgramFiles(x86)%\Inno Setup 6\iscc.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\iscc.exe"
 if not defined ISCC if exist "%ProgramFiles%\Inno Setup 6\iscc.exe" set "ISCC=%ProgramFiles%\Inno Setup 6\iscc.exe"
+:: winget installs Inno Setup per-user, here, unless run elevated.
+if not defined ISCC if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 if not defined ISCC where iscc >nul 2>nul && set "ISCC=iscc"
 
 if not defined ISCC (
