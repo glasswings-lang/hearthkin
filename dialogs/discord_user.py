@@ -29,7 +29,7 @@ class _DiscordUserDialog(wx.Dialog):
     value you then have to open to inspect.
     """
 
-    def __init__(self, parent, user_id="", bucket="none"):
+    def __init__(self, parent, user_id="", bucket="none", tool_cap=None):
         super().__init__(parent, title="Discord user",
                          style=wx.DEFAULT_DIALOG_STYLE)
         self._bucket = bucket or "none"
@@ -112,6 +112,33 @@ class _DiscordUserDialog(wx.Dialog):
         surface_hint.SetMinSize((-1, 112))
         outer.Add(surface_hint, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
 
+        # Per-person ceiling on tool calls in one reply. Blank = the kin's
+        # own setting (Settings -> Tools); a number overrides it for this
+        # person only, 0 = no limit.
+        cap_lbl = wx.StaticText(
+            self, label="Tool call &limit in one reply for this person:")
+        self.cap_field = wx.TextCtrl(
+            self, value="" if tool_cap is None else str(tool_cap))
+        self.cap_field.SetName(
+            "Tool call limit in one reply for this person. Blank uses the "
+            "kin's setting; 0 means no limit.")
+        outer.Add(cap_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        outer.Add(self.cap_field, flag=wx.LEFT | wx.RIGHT, border=8)
+        cap_hint = wx.TextCtrl(
+            self,
+            value=("Leave blank to use the kin's own setting (Settings, Tools: "
+                   "Most tool calls in one reply for other people). A number "
+                   "here applies to this person only. 0 means no limit. Each "
+                   "call counts, even several asked for at once; past the "
+                   "limit the rest don't run and the kin answers with what "
+                   "it has."),
+            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
+            | wx.TE_WORDWRAP,
+        )
+        cap_hint.SetName("What the tool call limit does")
+        cap_hint.SetMinSize((-1, 80))
+        outer.Add(cap_hint, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
+
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         ok_btn = wx.Button(self, wx.ID_OK, label="&Save")
         cancel_btn = wx.Button(self, wx.ID_CANCEL, label="Ca&ncel")
@@ -121,6 +148,16 @@ class _DiscordUserDialog(wx.Dialog):
 
         self.SetSizerAndFit(outer)
         self.id_field.SetFocus()
+
+    def get_tool_cap(self):
+        """The per-person tool-call limit: None for "use the kin's
+        setting", else a whole number (0 = no limit)."""
+        from tools._buckets import parse_tool_call_cap
+        return parse_tool_call_cap(self.cap_field.GetValue())
+
+    def tool_cap_is_valid(self):
+        t = self.cap_field.GetValue().strip()
+        return (not t) or t.isdigit()
 
     def get_values(self):
         """(user_id, bucket). The ID is returned as typed apart from

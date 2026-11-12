@@ -2970,7 +2970,12 @@ class EditKinDialog(wx.Dialog):
         if dlg.ShowModal() == wx.ID_OK:
             (uid, label, bucket, share_desktop,
              mirror_to_telegram, webcam_perm) = dlg.get_values()
-            if not uid:
+            cap = dlg.get_tool_cap()
+            if not dlg.tool_cap_is_valid():
+                wx.MessageBox("The tool call limit has to be a whole number, or "
+                              "blank to use the kin's setting. Nothing was saved.",
+                              "Add user", wx.OK | wx.ICON_WARNING)
+            elif not uid:
                 wx.MessageBox("User ID can't be empty.", "Add user",
                               wx.OK | wx.ICON_WARNING)
             else:
@@ -2988,6 +2993,12 @@ class EditKinDialog(wx.Dialog):
                 share[uid] = share_desktop
                 mirror[uid] = mirror_to_telegram
                 webcam[uid] = webcam_perm
+                caps = dict(tg.get("user_tool_caps") or {})
+                if cap is None:
+                    caps.pop(uid, None)
+                else:
+                    caps[uid] = cap
+                tg["user_tool_caps"] = caps
                 tg["allow_from"] = allow
                 tg["user_labels"] = labels
                 tg["user_tools"] = tools
@@ -3024,12 +3035,18 @@ class EditKinDialog(wx.Dialog):
             share_desktop=bool(share.get(uid_old, False)),
             mirror_to_telegram=bool(mirror.get(uid_old, False)),
             webcam_permission=str(webcam.get(uid_old, "ask")),
+            tool_cap=(tg.get("user_tool_caps") or {}).get(uid_old),
         )
         if dlg.ShowModal() == wx.ID_OK:
             (uid_new, label_new, bucket_new, share_new,
              mirror_new, webcam_new) = dlg.get_values()
+            cap_new = dlg.get_tool_cap()
             share_old = bool((tg.get("user_share_desktop") or {}).get(uid_old, False))
-            if not uid_new:
+            if not dlg.tool_cap_is_valid():
+                wx.MessageBox("The tool call limit has to be a whole number, or "
+                              "blank to use the kin's setting. Nothing was saved.",
+                              "Edit user", wx.OK | wx.ICON_WARNING)
+            elif not uid_new:
                 wx.MessageBox("User ID can't be empty.", "Edit user",
                               wx.OK | wx.ICON_WARNING)
             else:
@@ -3055,6 +3072,11 @@ class EditKinDialog(wx.Dialog):
                 share[uid_new] = share_new
                 mirror[uid_new] = mirror_new
                 webcam[uid_new] = webcam_new
+                caps = dict(tg.get("user_tool_caps") or {})
+                caps.pop(uid_old, None)
+                if cap_new is not None:
+                    caps[uid_new] = cap_new
+                tg["user_tool_caps"] = caps
                 tg["allow_from"] = allow
                 tg["user_labels"] = labels
                 tg["user_tools"] = tools
@@ -3585,7 +3607,12 @@ class EditKinDialog(wx.Dialog):
         dlg = _DiscordUserDialog(self, user_id="", bucket="none")
         if dlg.ShowModal() == wx.ID_OK:
             uid, bucket = dlg.get_values()
-            if not self._dc_valid_user_id(uid):
+            cap = dlg.get_tool_cap()
+            if not dlg.tool_cap_is_valid():
+                wx.MessageBox("The tool call limit has to be a whole number, or "
+                              "blank to use the kin's setting. Nothing was saved.",
+                              "Add person", wx.OK | wx.ICON_WARNING)
+            elif not self._dc_valid_user_id(uid):
                 wx.MessageBox(
                     "A Discord user ID is a string of digits — turn on "
                     "Developer Mode in Discord, right-click someone and "
@@ -3599,6 +3626,12 @@ class EditKinDialog(wx.Dialog):
                 if uid not in allow:
                     allow.append(uid)
                 tools[uid] = bucket
+                caps = dict(dc.get("user_tool_caps") or {})
+                if cap is None:
+                    caps.pop(uid, None)
+                else:
+                    caps[uid] = cap
+                dc["user_tool_caps"] = caps
                 dc["allow_from"] = allow
                 dc["user_tools"] = tools
                 self._commit_discord_dict(dc)
@@ -3615,10 +3648,16 @@ class EditKinDialog(wx.Dialog):
         dc = (self.cfg.get("discord") or {})
         tools = dc.get("user_tools") or {}
         dlg = _DiscordUserDialog(
-            self, user_id=uid_old, bucket=tools.get(uid_old, "none"))
+            self, user_id=uid_old, bucket=tools.get(uid_old, "none"),
+            tool_cap=(dc.get("user_tool_caps") or {}).get(uid_old))
         if dlg.ShowModal() == wx.ID_OK:
             uid_new, bucket_new = dlg.get_values()
-            if not self._dc_valid_user_id(uid_new):
+            cap_new = dlg.get_tool_cap()
+            if not dlg.tool_cap_is_valid():
+                wx.MessageBox("The tool call limit has to be a whole number, or "
+                              "blank to use the kin's setting. Nothing was saved.",
+                              "Edit person", wx.OK | wx.ICON_WARNING)
+            elif not self._dc_valid_user_id(uid_new):
                 wx.MessageBox(
                     "A Discord user ID is a string of digits, or * for "
                     "anyone.", "Edit person", wx.OK | wx.ICON_WARNING)
@@ -3632,6 +3671,11 @@ class EditKinDialog(wx.Dialog):
                 if uid_new not in allow:
                     allow.append(uid_new)
                 tools[uid_new] = bucket_new
+                caps = dict(dc.get("user_tool_caps") or {})
+                caps.pop(uid_old, None)
+                if cap_new is not None:
+                    caps[uid_new] = cap_new
+                dc["user_tool_caps"] = caps
                 dc["allow_from"] = allow
                 dc["user_tools"] = tools
                 self._commit_discord_dict(dc)
@@ -3657,6 +3701,9 @@ class EditKinDialog(wx.Dialog):
         tools = dict(dc.get("user_tools") or {})
         tools.pop(uid, None)
         dc["user_tools"] = tools
+        caps = dict(dc.get("user_tool_caps") or {})
+        caps.pop(uid, None)
+        dc["user_tool_caps"] = caps
         self._commit_discord_dict(dc)
         self._refresh_dc_users_list()
 

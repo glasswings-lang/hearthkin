@@ -743,6 +743,19 @@ class DiscordBot:
         # "stop" typed in this channel can reach the model call; and the
         # desktop's confirm-on-close, so quitting says what it would abandon.
         self._begin_turn(channel_id, who)
+        # This person's tool-call ceiling (their own number if one is set,
+        # else the kin's), kept with the turn so the model call can read it.
+        try:
+            from tools._buckets import resolve_tool_call_cap
+            _cap = resolve_tool_call_cap(
+                (cfg.get("discord") or {}).get("user_tool_caps"),
+                getattr(message.author, "id", ""),
+                _cfg_count(cfg, "remote_max_tool_calls", 15))
+            with self._turn_lock:
+                if channel_id in self._active_turns:
+                    self._active_turns[channel_id]["tool_cap"] = _cap
+        except Exception:
+            pass
         try:
             text, thinking, added_turns = self._run_model(
                 schemas, executor, model, messages, cfg, common, ed, channel,
@@ -989,7 +1002,10 @@ class DiscordBot:
         import llm_backend
 
         if schemas:
-            _remote_cap = _cfg_count(cfg, "remote_max_tool_calls", 15)
+            with self._turn_lock:
+                _entry = self._active_turns.get(channel_id) or {}
+            _remote_cap = _entry.get(
+                "tool_cap", _cfg_count(cfg, "remote_max_tool_calls", 15))
             _notice_at = _cfg_count(cfg, "remote_tool_call_notice", 10)
 
             def on_tool_call(name, args, result, is_error):

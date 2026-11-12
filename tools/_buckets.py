@@ -158,3 +158,39 @@ def filter_tool_names(kin_allowlist, bucket):
     ordering at the model side)."""
     allowed = tools_for_bucket(bucket)
     return [name for name in (kin_allowlist or []) if name in allowed]
+
+
+
+def resolve_tool_call_cap(per_user, user_id, kin_default, is_operator=False):
+    """How many tool calls one reply may run for this person. 0 = no limit.
+
+    A number set for the person (or for "*", anyone) wins. Otherwise the
+    operator's own surfaces are unlimited and everyone else gets the kin's
+    "Most tool calls in one reply for other people" setting. Bad values in
+    the settings fall through to the next rule rather than breaking a reply.
+    """
+    per_user = per_user if isinstance(per_user, dict) else {}
+    for key in (str(user_id), "*"):
+        if key in per_user:
+            try:
+                return max(0, int(per_user[key]))
+            except (TypeError, ValueError):
+                break
+    if is_operator:
+        return 0
+    try:
+        return max(0, int(kin_default))
+    except (TypeError, ValueError):
+        return 15
+
+
+def parse_tool_call_cap(text):
+    """The per-person field: blank means "use the kin's setting" (None);
+    a whole number is the limit (0 = none). Anything else is None too, and
+    the window says so before saving."""
+    t = (text or "").strip()
+    if not t:
+        return None
+    if t.isdigit():
+        return int(t)
+    return None

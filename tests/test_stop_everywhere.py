@@ -143,8 +143,8 @@ def main():
     tgsrc = src("telegram_bot.py")
     check("Telegram passes a call ceiling to the tool loop",
           "max_tool_calls=_remote_cap or None" in tgsrc)
-    check("...which is 0 (none) for the operator's own Telegram",
-          "_remote_cap = (0 if self._user_shares_desktop(user_id)" in tgsrc)
+    check("...which is none for the operator's own Telegram unless set",
+          "is_operator=self._user_shares_desktop(user_id)" in tgsrc)
     check("Discord always passes the ceiling",
           "max_tool_calls=_remote_cap or None" in src("discord_bot.py"))
 

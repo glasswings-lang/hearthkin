@@ -6113,8 +6113,11 @@ class TelegramBot:
         # Ceiling on calls for anyone who isn't the operator (see
         # remote_max_tool_calls); the operator's own Telegram is uncapped,
         # same as the desktop.
-        _remote_cap = (0 if self._user_shares_desktop(user_id)
-                       else _cfg_count(full_cfg, "remote_max_tool_calls", 15))
+        from tools._buckets import resolve_tool_call_cap
+        _remote_cap = resolve_tool_call_cap(
+            (self.get_config() or {}).get("user_tool_caps"), user_id,
+            _cfg_count(full_cfg, "remote_max_tool_calls", 15),
+            is_operator=self._user_shares_desktop(user_id))
         result = llm_backend.run_tool_loop(
             model, messages,
             tools=schemas, tool_executor=executor,
