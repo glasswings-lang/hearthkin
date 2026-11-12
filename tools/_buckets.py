@@ -124,11 +124,9 @@ BUCKET_EXPLAINER = {
              "host webcam) + tff (play the kin's own Time for Family park "
              "game). use_webcam is additionally gated by a per-user "
              "permission setting (ask / auto / deny).",
-    "full": "All tools including exec. A command this person asks for "
-            "still needs approval — in the chat on Telegram, on your "
-            "desktop for Discord — unless you remembered it, or the kin "
-            "is trusted or full AND \"Run remote (Telegram/Discord) exec "
-            "without asking\" is on in Tool behaviour settings. Denylisted "
+    "full": "All tools including exec. Whether a command this person "
+            "asks for runs straight away or asks you first is set below, "
+            "per person. When it asks, it asks you, never them. Denylisted "
             "commands are always refused.",
 }
 
@@ -194,3 +192,28 @@ def parse_tool_call_cap(text):
     if t.isdigit():
         return int(t)
     return None
+
+
+EXEC_APPROVAL_CHOICES = ("default", "ask", "auto")
+
+
+def resolve_exec_approval(per_user, user_id, kin_cfg):
+    """Does a shell command this person asks for on a remote surface run
+    straight away ("auto") or wait for the operator's answer ("ask")?
+
+    The person's own setting wins (Telegram and Discord person windows,
+    stored as `user_exec_approval` under that surface). Without one, the
+    kin-wide box decides, exactly as before: "Run remote commands without
+    asking" on AND the kin trusted or full. One rule for both surfaces, so
+    they can't drift apart again.
+    """
+    per_user = per_user if isinstance(per_user, dict) else {}
+    for key in (str(user_id), "*"):
+        v = per_user.get(key)
+        if v in ("ask", "auto"):
+            return v
+    kin_cfg = kin_cfg if isinstance(kin_cfg, dict) else {}
+    if (kin_cfg.get("remote_unattended_exec")
+            and kin_cfg.get("tool_trust") in ("trusted", "full")):
+        return "auto"
+    return "ask"

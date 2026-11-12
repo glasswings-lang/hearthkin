@@ -599,7 +599,8 @@ class DiscordBot:
                          "confine_paths": _confine},
                 model=model)
             if self._wrap_exec is not None:
-                executor = self._wrap_exec(executor, self.agent_name)
+                executor = self._wrap_exec(executor, self.agent_name,
+                                           user_id=str(author_id))
             elif "exec" in executor:
                 executor = {k: v for k, v in executor.items() if k != "exec"}
                 schemas = [s for s in schemas

@@ -75,6 +75,23 @@ def main():
         d = make(40)
         check(f"{name}: an existing person's number is shown", d.cap_field.GetValue() == "40")
         d.Destroy()
+        # The commands choice (12 Nov 2026): there, a tab stop with its
+        # explainer next, Alt+C used once, starts on the kin's setting.
+        d = make(None)
+        ch = getattr(d, "exec_choice", None)
+        stops = [c for c in d.GetChildren() if c.CanAcceptFocusFromKeyboard()]
+        names = [c.GetName() for c in stops]
+        check(f"{name}: the commands choice is there, starting on the kin's setting",
+              ch is not None and d.get_exec_approval() == "default")
+        check(f"{name}: it's a tab stop, with its explainer right after",
+              ch in stops and "What the commands setting does" in names
+              and names.index("What the commands setting does") == stops.index(ch) + 1)
+        cs = [c.GetLabel() for c in d.GetChildren()
+              if re.search(r"&[cC]", (c.GetLabel() if hasattr(c, "GetLabel") else "") or "")]
+        check(f"{name}: only it uses Alt+C", len(cs) == 1)
+        ch.SetSelection(1)
+        check(f"{name}: 'Ask me first' reads back as ask", d.get_exec_approval() == "ask")
+        d.Destroy()
 
     print()
     if _fails:

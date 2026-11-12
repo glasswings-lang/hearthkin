@@ -140,6 +140,11 @@ _DENY_RESULTS = {
         "[NOT RUN — this approval request was replaced by a newer one before "
         "it was answered. Nobody refused it.]"
     ),
+    "unavailable": (
+        "[NOT RUN — the operator couldn't be asked (Hearthkin's desktop "
+        "wasn't there to show the question). Nobody refused it. Say so "
+        "plainly, and don't tell anyone it was denied.]"
+    ),
 }
 
 
@@ -846,7 +851,7 @@ class TelegramBot:
                  get_model_options, on_status, on_activity=None,
                  request_webcam_approval=None, on_approval_needed=None,
                  on_long_reply=None,
-                 get_busy_label=None):
+                 get_busy_label=None, request_desktop_exec_approval=None):
         self.agent_name = agent_name
         self.get_config = get_config
         self.get_soul = get_soul
@@ -890,6 +895,12 @@ class TelegramBot:
         # on_long_reply(kin, surface, who, count): a reply here has run
         # remote_tool_call_notice tool calls; the desktop says so aloud.
         self.on_long_reply = on_long_reply
+        # request_desktop_exec_approval(kin, command, reason) -> "allow" /
+        # "remember" / "deny" / "unavailable". Blocks this worker until the
+        # operator answers the desktop dialog. Used when someone OTHER than
+        # the operator asks for a command and their setting is "ask first".
+        # None means there's no desktop to ask: the command doesn't run.
+        self.request_desktop_exec_approval = request_desktop_exec_approval
         # Optional callback returning a short phrase for whatever currently has
         # the model — a distillation, a scheduled wake-up, a heartbeat, a room
         # round, a kin mid-reply to somebody else — or "" when nothing does.
@@ -6306,19 +6317,43 @@ class TelegramBot:
             # users. So trusted/full now auto-runs a remote exec ONLY when the
             # operator has explicitly set `remote_unattended_exec: true` in
             # the kin config; otherwise we fall through to chat approval.
-            if tool_trust in ("trusted", "full"):
+            # Per person since 12 Nov 2026: the person's own "Commands this
+            # person asks for" setting wins; without one, the kin-wide box
+            # decides as above. One rule shared with Discord (tools._buckets).
+            try:
+                from kin_persistence import load_agent_config
+                _cfg = dict(load_agent_config(self.agent_name) or {})
+            except Exception:
+                _cfg = {}
+            _cfg["tool_trust"] = tool_trust
+            from tools._buckets import resolve_exec_approval
+            _per_user = (self.get_config() or {}).get("user_exec_approval")
+            if resolve_exec_approval(_per_user, user_id, _cfg) == "auto":
+                return inner_exec(args)
+            # Ask first. Only the operator answers: if this person IS the
+            # operator (shares the desktop conversation), ask here in the
+            # chat, which works from a phone. Anyone else's request goes to
+            # the operator's desktop, so nobody approves their own command.
+            if self._user_shares_desktop(user_id):
+                decision = self._request_exec_approval_telegram(
+                    user_id, chat_id, command,
+                    f"background={background}" if background else "",
+                )
+            elif getattr(self, "request_desktop_exec_approval", None) is not None:
                 try:
-                    from kin_persistence import load_agent_config
-                    _cfg = load_agent_config(self.agent_name) or {}
+                    self._send_chunked(
+                        chat_id, "Asking the operator to approve a command…")
                 except Exception:
-                    _cfg = {}
-                if _cfg.get("remote_unattended_exec"):
-                    return inner_exec(args)
-            # Otherwise ask the user via Telegram chat.
-            decision = self._request_exec_approval_telegram(
-                user_id, chat_id, command,
-                f"background={background}" if background else "",
-            )
+                    pass
+                try:
+                    decision = self.request_desktop_exec_approval(
+                        self.agent_name, command,
+                        "Remote request from Telegram, from someone other "
+                        "than you. Only you can approve it.")
+                except Exception:
+                    decision = "unavailable"
+            else:
+                decision = "unavailable"
             if decision == "remember":
                 try:
                     add_to_allowlist(self.agent_name, command, surface=surface_key)

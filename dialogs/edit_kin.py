@@ -2999,6 +2999,12 @@ class EditKinDialog(wx.Dialog):
                 else:
                     caps[uid] = cap
                 tg["user_tool_caps"] = caps
+                ex = dict(tg.get("user_exec_approval") or {})
+                if dlg.get_exec_approval() == "default":
+                    ex.pop(uid, None)
+                else:
+                    ex[uid] = dlg.get_exec_approval()
+                tg["user_exec_approval"] = ex
                 tg["allow_from"] = allow
                 tg["user_labels"] = labels
                 tg["user_tools"] = tools
@@ -3036,6 +3042,8 @@ class EditKinDialog(wx.Dialog):
             mirror_to_telegram=bool(mirror.get(uid_old, False)),
             webcam_permission=str(webcam.get(uid_old, "ask")),
             tool_cap=(tg.get("user_tool_caps") or {}).get(uid_old),
+            exec_approval=(tg.get("user_exec_approval") or {}).get(
+                uid_old, "default"),
         )
         if dlg.ShowModal() == wx.ID_OK:
             (uid_new, label_new, bucket_new, share_new,
@@ -3077,6 +3085,11 @@ class EditKinDialog(wx.Dialog):
                 if cap_new is not None:
                     caps[uid_new] = cap_new
                 tg["user_tool_caps"] = caps
+                ex = dict(tg.get("user_exec_approval") or {})
+                ex.pop(uid_old, None)
+                if dlg.get_exec_approval() != "default":
+                    ex[uid_new] = dlg.get_exec_approval()
+                tg["user_exec_approval"] = ex
                 tg["allow_from"] = allow
                 tg["user_labels"] = labels
                 tg["user_tools"] = tools
@@ -3121,6 +3134,10 @@ class EditKinDialog(wx.Dialog):
         mirror.pop(uid, None)
         webcam = dict(tg.get("user_webcam_permission") or {})
         webcam.pop(uid, None)
+        for _key in ("user_tool_caps", "user_exec_approval"):
+            _d = dict(tg.get(_key) or {})
+            _d.pop(uid, None)
+            tg[_key] = _d
         tg["allow_from"] = allow
         tg["user_labels"] = labels
         tg["user_tools"] = tools
@@ -3632,6 +3649,12 @@ class EditKinDialog(wx.Dialog):
                 else:
                     caps[uid] = cap
                 dc["user_tool_caps"] = caps
+                ex = dict(dc.get("user_exec_approval") or {})
+                if dlg.get_exec_approval() == "default":
+                    ex.pop(uid, None)
+                else:
+                    ex[uid] = dlg.get_exec_approval()
+                dc["user_exec_approval"] = ex
                 dc["allow_from"] = allow
                 dc["user_tools"] = tools
                 self._commit_discord_dict(dc)
@@ -3649,7 +3672,9 @@ class EditKinDialog(wx.Dialog):
         tools = dc.get("user_tools") or {}
         dlg = _DiscordUserDialog(
             self, user_id=uid_old, bucket=tools.get(uid_old, "none"),
-            tool_cap=(dc.get("user_tool_caps") or {}).get(uid_old))
+            tool_cap=(dc.get("user_tool_caps") or {}).get(uid_old),
+            exec_approval=(dc.get("user_exec_approval") or {}).get(
+                uid_old, "default"))
         if dlg.ShowModal() == wx.ID_OK:
             uid_new, bucket_new = dlg.get_values()
             cap_new = dlg.get_tool_cap()
@@ -3676,6 +3701,11 @@ class EditKinDialog(wx.Dialog):
                 if cap_new is not None:
                     caps[uid_new] = cap_new
                 dc["user_tool_caps"] = caps
+                ex = dict(dc.get("user_exec_approval") or {})
+                ex.pop(uid_old, None)
+                if dlg.get_exec_approval() != "default":
+                    ex[uid_new] = dlg.get_exec_approval()
+                dc["user_exec_approval"] = ex
                 dc["allow_from"] = allow
                 dc["user_tools"] = tools
                 self._commit_discord_dict(dc)
@@ -3704,6 +3734,9 @@ class EditKinDialog(wx.Dialog):
         caps = dict(dc.get("user_tool_caps") or {})
         caps.pop(uid, None)
         dc["user_tool_caps"] = caps
+        ex = dict(dc.get("user_exec_approval") or {})
+        ex.pop(uid, None)
+        dc["user_exec_approval"] = ex
         self._commit_discord_dict(dc)
         self._refresh_dc_users_list()
 

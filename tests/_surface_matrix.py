@@ -767,21 +767,15 @@ CAPABILITIES = [
         what="Routes a shell command to a human before it runs",
         why="A command arriving over the internet must never run on somebody's "
             "machine unattended",
-        markers=("wrap_exec", "_wrap_exec_executor", "_CRON_TOOL_DENYLIST"),
+        markers=("wrap_exec", "_wrap_exec_executor", "_wrap_cron_exec"),
         surfaces={
             "desktop": Present(markers="_wrap_exec_executor"),
             "telegram": Present(markers="wrap_exec"),
             "discord": Present(markers="wrap_exec"),
-            # Probed for the APPROVAL wiring, not for the denylist that makes
-            # it unnecessary. If a future change hands cron an exec path, the
-            # approval marker appears and this cell fails — which is exactly
-            # the moment somebody should have to think about it.
-            "cron": NotHere(
-                "exec is removed from the tool set entirely on this surface "
-                "(_CRON_TOOL_DENYLIST), so there is nothing to approve. "
-                "Nobody is awake to approve it, and removing the tool is the "
-                "right answer rather than a gap.",
-                markers=("wrap_exec", "_wrap_exec_executor")),
+            # Since 12 Nov 2026 a wake-up keeps exec, under the desktop's
+            # rule minus asking: remembered or trusted/full runs, anything
+            # else is not run and the kin is told nobody was there to ask.
+            "cron": Present(markers="_wrap_cron_exec"),
         },
     ),
 
@@ -798,7 +792,7 @@ CAPABILITIES = [
             "discord": Present(),
             "cron": NotHere(
                 "use_webcam is removed from the tool set entirely on this "
-                "surface (_CRON_TOOL_DENYLIST), for the same reason as exec: "
+                "surface (_CRON_TOOL_DENYLIST): "
                 "a camera in somebody's room must not be reachable by a turn "
                 "nobody is present for.",
                 markers=("request_webcam_approval", "_wrap_webcam")),

@@ -75,6 +75,11 @@ class BotIntegrationMixin:
                 on_long_reply=lambda kin, surface, who, n: wx.CallAfter(
                     self._notify_long_remote_reply, kin, surface, who, n
                 ),
+                # Someone other than the operator asked for a shell command
+                # and their setting is "ask first": the question comes HERE,
+                # never to them, so nobody approves their own command.
+                request_desktop_exec_approval=lambda kin, cmd, why:
+                    self._request_exec_approval(kin, cmd, why),
             )
             self.bots[agent_name] = bot
         bot.start()
@@ -243,8 +248,8 @@ class BotIntegrationMixin:
                 # denylist-hard-denies, uses a Discord-scoped remembered-
                 # approval list, and never lets tool_trust=trusted/full
                 # auto-run a command that came in over Discord.
-                wrap_exec=lambda ex, an: self._wrap_exec_for_remote(
-                    ex, an, "discord"),
+                wrap_exec=lambda ex, an, user_id=None: self._wrap_exec_for_remote(
+                    ex, an, "discord", user_id=user_id),
                 # Webcam approval, same shape as Telegram's: the dialog pops
                 # on THIS desktop. Discord has no per-user ask/auto/deny
                 # radio, so the bot always asks — a missing setting must read

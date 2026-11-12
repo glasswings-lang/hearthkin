@@ -24,7 +24,8 @@ class _TelegramUserDialog(wx.Dialog):
 
     def __init__(self, parent, user_id="", label="", bucket="none",
                  share_desktop=False, mirror_to_telegram=False,
-                 webcam_permission="ask", tool_cap=None):
+                 webcam_permission="ask", tool_cap=None,
+                 exec_approval="default"):
         super().__init__(parent, title="Telegram user",
                          style=wx.DEFAULT_DIALOG_STYLE)
         self._bucket = bucket or "none"
@@ -218,6 +219,39 @@ class _TelegramUserDialog(wx.Dialog):
 
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         btn_row.AddStretchSpacer(1)
+        # Per person: does a shell command this person asks for run straight
+        # away, or wait for the operator? Same three choices on Telegram and
+        # Discord (tools._buckets.resolve_exec_approval).
+        from tools._buckets import EXEC_APPROVAL_CHOICES
+        exec_lbl = wx.StaticText(
+            self, label="&Commands this person asks for:")
+        self.exec_choice = wx.Choice(self, choices=[
+            "Use the kin's setting",
+            "Ask me first",
+            "Run without asking",
+        ])
+        self.exec_choice.SetSelection(
+            EXEC_APPROVAL_CHOICES.index(exec_approval)
+            if exec_approval in EXEC_APPROVAL_CHOICES else 0)
+        self.exec_choice.SetName("Commands this person asks for")
+        outer.Add(exec_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        outer.Add(self.exec_choice, flag=wx.LEFT | wx.RIGHT, border=8)
+        exec_hint = wx.TextCtrl(
+            self,
+            value=("Only matters if this person has Full tools. \"Use the "
+                   "kin's setting\" follows the box \"Run remote "
+                   "(Telegram/Discord) exec without asking\" in Settings, "
+                   "Tools. \"Ask me first\" always asks you, never them: "
+                   "in the chat if this is you on Telegram, otherwise in a "
+                   "window on this computer. Commands on the never-run list "
+                   "are always refused."),
+            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
+            | wx.TE_WORDWRAP,
+        )
+        exec_hint.SetName("What the commands setting does")
+        exec_hint.SetMinSize((-1, 80))
+        outer.Add(exec_hint, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
+
         # Per-person ceiling on tool calls in one reply. Blank = the kin's
         # own setting (Settings -> Tools); a number overrides it for this
         # person only, 0 = no limit.
@@ -258,6 +292,12 @@ class _TelegramUserDialog(wx.Dialog):
             self.id_field.SetFocus()
         else:
             self.label_field.SetFocus()
+
+    def get_exec_approval(self):
+        """"default" (use the kin's setting), "ask" or "auto"."""
+        from tools._buckets import EXEC_APPROVAL_CHOICES
+        i = self.exec_choice.GetSelection()
+        return EXEC_APPROVAL_CHOICES[i] if 0 <= i < 3 else "default"
 
     def get_tool_cap(self):
         """The per-person tool-call limit: None for "use the kin's

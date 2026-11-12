@@ -1,48 +1,47 @@
 # Where Hearthkin's surfaces differ
 
-A kin can be talked to in several places: the desktop chat, rooms, Telegram (one-to-one and groups), Discord, scheduled wake-ups, and heartbeats. Each place was built at a different time, and features added to one have not always reached the others. This page lists the differences that matter, in plain words, so an operator who doesn't read code can know what to expect where.
+You can talk to a kin in several places: the desktop chat, rooms, Telegram (private chats and groups), Discord, and scheduled wake-ups. Each place was built at a different time, and things added to one haven't always reached the others. This page lists the differences that matter, in plain words, so you know what to expect where.
 
-Made from a full read-through of the code on 12 November 2026. Items marked **checked** were confirmed by hand against the code. The rest come from the read-through and are very likely right, but treat them as "probably" until checked.
-
-Each item says whether the difference is **on purpose** (with the reason) or **drift** (nobody meant it), and whether it has been **fixed**.
+Each item says whether the difference is **on purpose** (and why) or **drift** (nobody meant it), and whether it's **fixed**. Last checked 12 November 2026.
 
 ## Stopping a kin, and talking to it mid-reply
 
-- **Scheduled wake-ups can't be stopped once they start.** Drift. A wake-up that runs on its own, which is any time Hearthkin is closed and often when it's open, has no stop at all. Ctrl+Shift+X doesn't reach it either. **Checked.** To do.
-- **Messages sent mid-reply reach the reply only on Telegram private chats.** On Discord, a message sent while the kin is replying waits until the reply is finished, and a second message sent within three seconds of the first is silently thrown away (a flood guard). **Checked.** The Discord part is drift; to do. In Telegram groups this is on purpose: someone might be talking to another person, not the kin. That was fixed tonight; it briefly applied to groups too.
-- **The per-reply limit on tool calls applies on Discord and Telegram, not on the desktop, rooms or scheduled wake-ups.** On purpose for the desktop and rooms, since that's you. For scheduled wake-ups, it's an open question.
-- **On Discord, the limit also applies to you.** Discord has no way to tell the operator apart from anyone else yet. Telegram counts you as the operator when "share with desktop" is on for you. Drift-ish; to decide.
+- **Scheduled wake-ups can't be stopped once they start.** Drift. Nothing stops a wake-up that's running on its own, not even Control Shift X. To do, first.
+- **A message sent mid-reply only reaches the reply in Telegram private chats.** On Discord it waits until the reply is done. Discord also quietly drops a second message sent within three seconds of the first. Drift; to do. In Telegram groups the waiting is on purpose, because a message there might be meant for another person.
+- **The limit on tool calls in one reply covers Discord and Telegram, not the desktop, rooms or wake-ups.** On purpose for the desktop and rooms, since that's you. Open question for wake-ups.
+- **On Discord, that limit covers you too,** because Discord can't yet tell you apart from anyone else. On Telegram, it knows you're you when "share with desktop" is on for you. Drift; to do.
 
 ## Per-person settings
 
-- **Discord has fewer per-person settings than Telegram.** Telegram lets you set, per person: a name, tool access, a tool-call limit, sharing with the desktop conversation, mirroring desktop replies to them, and webcam permission (ask, always allow, never). Discord has tool access and the tool-call limit only. Sharing is one setting for the whole kin, and webcam always asks. Drift; to do.
-- **Who approves a remote command differs.** On Discord, any shell command goes to a dialog on your desktop, so only you can approve it. On Telegram, the approval prompt goes to the person who asked, in the chat, and they answer it; your desktop is only told. Probably drift, and the more important of the two: on Telegram, someone you've given full tool access approves their own commands. To decide.
+- **Discord has fewer per-person settings than Telegram.** Telegram lets you set, for each person: a name, which tools they get, a tool-call limit, whether their commands ask first, sharing with the desktop conversation, mirroring desktop replies to them, and the webcam (ask, always allow, never). Discord has which tools, the tool-call limit and whether commands ask first. Drift; to do. Discord should simply have what Telegram has.
+- **Commands are now set per person, the same on both.** Fixed 12 November 2026. Each person can be "use the kin's setting", "ask me first" or "run without asking". When a command asks, it asks you, never the person who wanted it. If that person is you on Telegram, you're asked in the chat. Anyone else's request comes to a window on your desktop. Before this, one box for the whole kin decided for everyone. With that box off, a Telegram person with full tools approved their own commands.
 
 ## Files and safety
 
-- **Discord saved files from fenced blocks outside the kin's folder.** Drift, and a real gap: Discord's file tools were kept inside the kin's folder, but a file written out in a reply wasn't. **Checked. Fixed 12 Nov 2026.**
-- **Scheduled wake-ups have different powers depending on which kin is on screen.** When a wake-up runs on its own, shell commands and the webcam are taken away from it. When it's delivered into the open desktop chat (the kin is on screen and nothing else is happening), it gets the kin's full tools, shell commands included. Drift; to decide.
+- **Discord could save files outside the kin's folder** when the kin wrote a file out in its reply. Fixed 12 November 2026.
+- **Wake-ups now have shell commands either way.** Fixed 12 November 2026. Before, a wake-up running on its own had no commands, while one landing in your open chat did. Now both do. On its own, a command runs if the kin is trusted or full, or you told it to remember that command. Otherwise it waits for no one, doesn't run, and the kin is told nobody was there to ask. Commands that keep running in the background can't start on a wake-up, because nothing would be left to stop them.
+- **The webcam is still off for wake-ups that run on its own,** but on when a wake-up lands in your open chat. On purpose for now: a camera in your room shouldn't fire when nobody's there.
 
 ## What a kin remembers of its own turns
 
-- **On Discord, the kin never sees its own past tool calls or the notes it's been given.** They're saved, but the code that rebuilds the conversation for the next reply keeps only plain messages. So "you described a tool call but didn't make one" notes never reach a Discord kin, and it can't see what its tools did last time. **Checked.** Drift; to do.
-- **Rooms don't keep tool calls either.** On purpose for now; the code says so.
-- **"Tool history kept" (Settings, Tools) only works on the desktop.** On Telegram, old tool calls come back in full, not summarised. Drift; to do.
+- **On Discord, a kin never sees its own past tool use, or the notes Hearthkin gives it.** They're saved, but left out when it gets ready to reply. So "you described doing it but didn't" never reaches a Discord kin. Drift; to do.
+- **Rooms don't keep tool use either.** On purpose for now.
+- **The "tool history kept" setting only works on the desktop.** On Telegram, old tool use comes back in full. Drift; to do.
 
 ## Tidying a reply before it's kept
 
-- **One kind of scheduled wake-up skips all the tidying.** When Hearthkin is open but set not to send wake-ups into the chat, the wake-up's reply skips: the clean-up that stops a kin speaking as someone else, the removal of stray thinking text, saving files from fenced blocks, and the "you only described it" notes. That reply still goes to Telegram and the journal. Drift; to do.
-- **Scheduled wake-ups don't recover a reply that came back empty.** Other places keep what the kin said before its last tool call, if the final reply is blank. Drift; to do.
-- **On Discord, an empty reply leaves no note.** Elsewhere the kin is told next turn that its reply came back empty. Drift; to do.
+- **One kind of wake-up skips all the tidying.** That's when Hearthkin is open but set not to send wake-ups into the chat. Its reply skips: the clean-up that stops a kin speaking as someone else, removing stray thinking text, saving files written out in the reply, and the "you only described it" notes. That reply still goes to Telegram and the journal. Drift; to do.
+- **Wake-ups don't rescue a reply that came back empty.** Elsewhere, if the final reply is blank, Hearthkin keeps what the kin said just before. Drift; to do.
+- **On Discord, an empty reply leaves no note for next time.** Elsewhere the kin is told its last reply came back empty. Drift; to do.
 
-## Everyday features
+## Everyday things
 
-- **Telegram groups don't read text files people send.** Private chats do; groups only see the caption. Drift; to do.
-- **Discord has no commands** (no regenerate, undo, clear or status). Telegram groups have only help and whoami. Partly on purpose.
-- **Telegram replies from a kin without tools don't appear as they're written**; they arrive whole. Kin with tools, and Discord, show the reply growing. Room replies also arrive whole. Drift.
-- **Rooms are the thinnest surface:** no images, voice, regenerate, park, or saving files from fenced blocks. Mostly on purpose, written down as "not yet".
-- **Scheduled wake-ups delivered into the desktop chat are counted as desktop use** in the usage log, so they can't be told apart there. Drift; small.
+- **Telegram groups don't read text files people send.** Private chats do. Drift; to do.
+- **Discord has no commands** like regenerate, undo, clear or status. Telegram groups only have help and whoami. Partly on purpose.
+- **Some replies arrive whole instead of growing as they're written:** Telegram replies from a kin without tools, and room replies. Drift.
+- **Rooms are the barest place to talk:** no images, voice, regenerate, or saving files written out in a reply. Mostly on purpose, marked "not yet".
+- **Wake-ups that land in your open chat are counted as desktop use** in the usage log. Drift; small.
 
 ## Keeping this true
 
-The code already has a check that compares four surfaces (desktop, Telegram, Discord, scheduled wake-ups) on about thirty features: `tests/_surface_matrix.py` and `tests/test_surface_parity.py`. It doesn't yet cover rooms, heartbeats, or the Telegram group/private split, and it doesn't know about the features added on 11 and 12 November (stopping between tool calls, mid-reply messages, the tool-call limits, the long-reply warning, folder rules for fenced saves). The next step is to extend that check, so that every difference on this page is either written down as on purpose, with its reason, or makes the tests fail and say so in a sentence.
+Hearthkin's tests include a check that compares the surfaces feature by feature. It doesn't yet cover rooms or every feature on this page. The plan is for every difference here to be either written down as on purpose, with its reason, or to make that check fail with a plain sentence saying what drifted. The details for developers are in surface-differences-technical.md.

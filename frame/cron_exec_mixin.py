@@ -97,7 +97,8 @@ class CronExecMixin:
         wrapped["exec"] = _wrapped
         return wrapped
 
-    def _wrap_exec_for_remote(self, executors, agent_name, surface_key):
+    def _wrap_exec_for_remote(self, executors, agent_name, surface_key,
+                              user_id=None):
         """Exec-approval wrapper for a REMOTE surface (Discord, and any
         future non-Telegram remote surface) whose approval pops on the
         OPERATOR's desktop. Deliberately stricter than the desktop wrapper
@@ -135,8 +136,12 @@ class CronExecMixin:
                 cfg = load_agent_config(agent_name)
             except Exception:
                 cfg = {}
-            if (cfg.get("remote_unattended_exec")
-                    and cfg.get("tool_trust") in ("trusted", "full")):
+            # Per person since 12 Nov 2026: the person's own "Commands this
+            # person asks for" setting wins, else the kin-wide box. Same
+            # rule as Telegram (tools._buckets.resolve_exec_approval).
+            from tools._buckets import resolve_exec_approval
+            _per_user = (cfg.get(surface_key) or {}).get("user_exec_approval")
+            if resolve_exec_approval(_per_user, user_id, cfg) == "auto":
                 return raw_exec(args)
             reason = (
                 f"Remote request from the {surface_key} surface. Exec calls "

@@ -69,12 +69,8 @@ from kin_persistence import (
 # UI approval, that hold open processes, or that capture the user's
 # webcam can't safely fire from here.
 #
-# - exec: needs the harness-side approval dialog (wxPython); a cron
-#   subprocess can't show one. Even with the kin's exec_allowlist.json
-#   matched, running arbitrary commands unattended overnight is the
-#   wrong default. If a kin needs scheduled exec, the operator can run
-#   the same command manually or build it into a separate scheduled
-#   task.
+# - exec: allowed since 12 Nov 2026, under its own rule; see
+#   _wrap_cron_exec below.
 # - kill_process / list_processes: the process tracking set is held on
 #   the running frame; a cron subprocess has no access to it.
 # - use_webcam: captures from the user's webcam. Not appropriate
@@ -85,8 +81,59 @@ from kin_persistence import (
 # recent_thinking) is safe-for-cron and is exactly the set the kin's
 # nightly tending prompt expects to use.
 _CRON_TOOL_DENYLIST = frozenset({
-    "exec", "kill_process", "list_processes", "use_webcam",
+    "kill_process", "list_processes", "use_webcam",
 })
+
+# exec on a wake-up (12 Nov 2026, at the operator's asking: "doing stuff on
+# wake-ups is the entire point of wake-ups"). It used to be taken away here
+# while the SAME wake-up, delivered into the open desktop chat, kept it. Now a
+# wake-up gets it either way, under the desktop's own rule, minus the parts
+# that need someone there:
+#   - never-run list: refused (nobody is watching to catch it);
+#   - a command the operator remembered for this kin: runs;
+#   - kin trust "full" or "trusted": runs;
+#   - otherwise: not run, and the kin is told nobody was there to ask, so it
+#     doesn't report a refusal that never happened;
+#   - background=True: refused, because this process ends with the wake-up
+#     and nothing could track or stop what it started.
+_CRON_EXEC_NOT_ASKED = (
+    "[NOT RUN — this is a scheduled wake-up and this kin's commands need "
+    "approval, but nobody was there to ask. Nobody refused it. Mention the "
+    "command next time you talk to them if it still matters.]"
+)
+_CRON_EXEC_NO_BACKGROUND = (
+    "[NOT RUN — background commands can't run on a scheduled wake-up: "
+    "nothing would be left to watch or stop them. Run it without "
+    "background (up to 10 minutes) instead.]"
+)
+
+
+def _wrap_cron_exec(kin, raw_exec):
+    from tools._exec_denylist import match_denylist
+    from tools._exec_state import is_in_allowlist
+
+    def _wrapped(args):
+        args = args if isinstance(args, dict) else {}
+        command = args.get("command") or ""
+        if not command:
+            return ("exec: no command provided — nothing to run. Pass the "
+                    "shell command in the `command` argument.")
+        hit = match_denylist(command)
+        if hit:
+            return f"[denied by denylist: {hit}]"
+        if args.get("background"):
+            return _CRON_EXEC_NO_BACKGROUND
+        if is_in_allowlist(kin, command):
+            return raw_exec(args)
+        try:
+            trust = (load_agent_config(kin) or {}).get("tool_trust")
+        except Exception:
+            trust = None
+        if trust in ("full", "trusted"):
+            return raw_exec(args)
+        return _CRON_EXEC_NOT_ASKED
+
+    return _wrapped
 
 
 def _load_cron_tools(kin):
@@ -120,6 +167,9 @@ def _load_cron_tools(kin):
             f"failed to build cron tool environment: {e}",
         )
         return [], {}, []
+    if "exec" in executor:
+        executor = dict(executor)
+        executor["exec"] = _wrap_cron_exec(kin, executor["exec"])
     return schemas, executor, safe_names
 
 

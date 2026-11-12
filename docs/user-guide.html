@@ -1324,7 +1324,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <dd>No gating <em>on the desktop</em>. The kin runs whatever it wants. Only set this for kin you genuinely trust.</dd>
 </dl>
 
-<p><strong>Remote surfaces (Telegram / Discord) are stricter, by design.</strong> A command that arrives over Telegram or Discord always asks for approval — a chat reply on Telegram, a dialog on your desktop for Discord — <em>even when the kin is Trusted or Full</em>. Your local convenience setting shouldn't silently let a remote request run a command unattended. If a kin is really just you over Telegram and the approval prompts for harmless things (listing a folder, reading a file) are in your way, turn on <strong>Settings → Tools → "Tool behaviour settings…" → "Run remote (Telegram/Discord) exec without asking"</strong> for that kin — then a Trusted/Full kin runs remote commands with no prompt, exactly like on the desktop. Either way the denylist (drive wipes, <code>rm -rf /</code>, force-push to a main branch) is <em>always</em> enforced remotely, and it now catches those shapes even when they're hidden behind a prefix or a <code>;</code> / <code>&amp;&amp;</code> chain.</p>
+<p><strong>Remote surfaces (Telegram / Discord) are set per person.</strong> In each person's window (Telegram users or Discord people), <strong>"Commands this person asks for"</strong> has three choices. <strong>Use the kin's setting</strong> follows <strong>Settings → Tools → "Tool behaviour settings…" → "Run remote (Telegram/Discord) exec without asking"</strong>: with that box on and the kin Trusted or Full, commands run with no prompt; otherwise they ask. <strong>Ask me first</strong> always asks. <strong>Run without asking</strong> never asks, for that one person. When a command asks, it asks <em>you</em>, never the person who wanted it: if that person is you on Telegram (the one sharing the desktop conversation) you're asked in the chat, which works from your phone; anyone else's request pops a window on your desktop. A command you told it to remember runs without asking. Either way the denylist (drive wipes, <code>rm -rf /</code>, force-push to a main branch) is <em>always</em> enforced remotely, and it now catches those shapes even when they're hidden behind a prefix or a <code>;</code> / <code>&amp;&amp;</code> chain.</p>
 
 <p>The "remember this command" approval writes the exact command string to <code>~/.hearthkin/kin/&lt;kin&gt;/exec_allowlist.json</code>. Future runs of that exact command skip the dialog. (Remembered commands are scoped to where you approved them — a command you remembered at the desktop won't silently auto-run for a remote user.)</p>
 
@@ -1936,17 +1936,18 @@ understood, exactly as it does for you at the console.</p>
 
 <h3 id="cron-tools">Which tools work in cron</h3>
 
-<p>The cron-fired kin can use almost all of its enabled tools — read_file, write_file, edit_file, note, read_staging, archive_staging, memory_search, context_status, fetch_url, web_search, and recent_thinking are all available. This is what makes nightly tending actually work: the kin reads staging notes, updates depth logs, and archives finished scopes via tool calls, the same way it would in a live conversation.</p>
+<p>The cron-fired kin can use almost all of its enabled tools — read_file, write_file, edit_file, note, read_staging, archive_staging, memory_search, context_status, fetch_url, web_search, recent_thinking, and shell commands (exec) are all available. This is what makes nightly tending actually work: the kin reads staging notes, updates depth logs, and archives finished scopes via tool calls, the same way it would in a live conversation.</p>
 
 <p>A small set of tools is intentionally <em>excluded</em> in cron context, even if they're on the kin's allowlist:</p>
 
 <ul>
-  <li><code>exec</code> — needs the wxPython approval dialog, which can't be shown from a headless subprocess.</li>
   <li><code>kill_process</code> and <code>list_processes</code> — process tracking lives on the running Hearthkin frame, not the cron worker.</li>
   <li><code>use_webcam</code> — never appropriate unattended.</li>
 </ul>
 
-<p>If a kin's cron prompt assumes one of these (e.g. "run <code>exec</code> to fetch git status"), the tool simply won't be in scope for that call — the model can't see it, can't call it, and will need to find another approach or report what it would have done. The denylist is a safety floor, not configurable per-kin.</p>
+<p>Shell commands on a wake-up follow the desktop's rule, without the asking, because nobody is there to ask. A command runs if the kin is trusted or full, or if you told it to remember that command. Otherwise it doesn't run, and the kin is told nobody was there to ask, so it won't claim you refused. The never-run list always applies, and background commands can't run on a wake-up, because the wake-up ends and nothing would be left to stop them. (Before 12 November 2026, a wake-up that ran on its own had no shell commands at all, while one delivered into the open chat did.)</p>
+
+<p>If a kin's cron prompt assumes one of the excluded tools, the tool simply won't be in scope for that call — the model can't see it, can't call it, and will need to find another approach or report what it would have done. The denylist is a safety floor, not configurable per-kin.</p>
 
 <h3 id="heartbeat">Proactive heartbeat (the kin reaches out on its own)</h3>
 

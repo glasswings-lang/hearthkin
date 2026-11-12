@@ -47,19 +47,21 @@ def _bot(timeout_secs=600, send=None):
 check("every outcome has its own result string",
       len(set(tb._DENY_RESULTS.values())) == len(tb._DENY_RESULTS))
 
-check("all four outcomes are present",
-      set(tb._DENY_RESULTS) == {"deny", "timeout", "undelivered", "superseded"})
+check("all five outcomes are present",
+      set(tb._DENY_RESULTS) == {"deny", "timeout", "undelivered", "superseded",
+                                "unavailable"})
 
 # The load-bearing bit: a model reading a not-run result will narrate it as a
 # refusal unless told otherwise. Only a real deny may imply the operator said no.
-for _k in ("timeout", "undelivered", "superseded"):
+for _k in ("timeout", "undelivered", "superseded", "unavailable"):
     check(f"'{_k}' tells the kin nobody refused",
           "obody refused" in tb._DENY_RESULTS[_k])
 
 check("only a real deny claims the operator said no",
       "said no" in tb._DENY_RESULTS["deny"]
       and not any("said no" in tb._DENY_RESULTS[k]
-                  for k in ("timeout", "undelivered", "superseded")))
+                  for k in ("timeout", "undelivered", "superseded",
+                            "unavailable")))
 
 
 # ─── Undeliverable prompt: fail fast, don't block then cry denial ──────────────
