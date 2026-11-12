@@ -870,8 +870,13 @@ class DiscordBot:
         try:
             import turn_steering
             notes = []
+            # Same folder rule as this surface's file tools: a fenced save
+            # must not reach where write_file was deliberately stopped.
+            # Read from the kin config, never from anything the model sets.
+            _bridge_confine = not bool(
+                (self.get_config() or {}).get("remote_unconfined_files"))
             kin_note, human_note = turn_steering.authoring_bridge_notes(
-                self.agent_name, text, tool_names)
+                self.agent_name, text, tool_names, confine=_bridge_confine)
             if kin_note:
                 notes.append(kin_note)
             if human_note:

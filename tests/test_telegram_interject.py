@@ -97,6 +97,14 @@ def main():
     check("the same person in a different chat is not taken",
           bot._maybe_interject_from_poll(upd("hi", chat=-100, private=False)) is False)
 
+    # In a group, a message from the person whose reply is running may be
+    # meant for someone else: it is not pulled into the kin's turn.
+    bot = FakeBot()
+    bot._begin_turn(7, -100)
+    check("in a group, the same person's message is not taken",
+          bot._maybe_interject_from_poll(upd("lol same", chat=-100, private=False)) is False)
+    check("...and nothing is posted in the group", bot.sent == [])
+
     # Never lost: a held message the reply never reached is queued at the end.
     bot = FakeBot()
     bot._begin_turn(7, 7)

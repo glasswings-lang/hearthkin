@@ -243,7 +243,7 @@ def log_unsent_reach(kin, model, reply, *, asked, delivered):
         pass
 
 
-def authoring_bridge_notes(kin, reply, tools, shown_scopes=()):
+def authoring_bridge_notes(kin, reply, tools, shown_scopes=(), confine=False):
     """Commit file content a kin wrote out in its reply instead of calling a
     write tool. Returns ``(kin_note, human_confirm)``, either may be None.
 
@@ -266,7 +266,12 @@ def authoring_bridge_notes(kin, reply, tools, shown_scopes=()):
         writes = authoring_bridge.extract_authoring_writes(reply)
         if not writes:
             return None, None
-        results = authoring_bridge.commit_authoring_writes(kin, writes)
+        # `confine` is the remote-surface folder rule: a surface whose file
+        # tools are kept inside the kin's folder must keep a fenced save
+        # there too, or the fence is a way round it (Discord was, until
+        # this was passed through).
+        results = authoring_bridge.commit_authoring_writes(
+            kin, writes, confine=confine)
         saved = [(p, n) for (p, ok, n) in results if ok]
         failed = [(p, n) for (p, ok, n) in results if not ok]
         note_bits, human_bits = [], []

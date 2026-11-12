@@ -1902,6 +1902,11 @@ class TelegramBot:
         text = (msg.get("text") or "").strip()
         if not text or text.startswith("/"):
             return False
+        # Private chats only. In a group, the person whose reply is running
+        # may be talking to someone else entirely; pulling that into the
+        # kin's turn, and posting "Got it" in the group, would be wrong.
+        if (msg.get("chat") or {}).get("type") != "private":
+            return False
         user_id = (msg.get("from") or {}).get("id")
         chat_id = (msg.get("chat") or {}).get("id")
         if user_id is None or chat_id is None:

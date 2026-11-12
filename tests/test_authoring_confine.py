@@ -118,6 +118,35 @@ note_on, _chat_on = _fence_save_through_telegram(tg_on, checkbox_on=True)
 check("Telegram, checkbox ON: the same kind of fence save lands outside, "
       "exactly as the file tools would", tg_on.exists())
 
+# --- Discord: the same rule, through its own path ---------------------------
+# Discord saves fences via turn_steering.authoring_bridge_notes. It used to
+# call that without confine=, so a fence on Discord reached anywhere while
+# Discord's file tools were confined (found by the 12 Nov 2026 surface audit).
+import turn_steering  # noqa: E402
+
+for path_rel in ("turn_steering.py", "discord_bot.py"):
+    t = ast.parse((ROOT / path_rel).read_text(encoding="utf-8"))
+    want = ("commit_authoring_writes" if path_rel == "turn_steering.py"
+            else "authoring_bridge_notes")
+    cs = [n for n in ast.walk(t) if isinstance(n, ast.Call)
+          and getattr(n.func, "attr", getattr(n.func, "id", "")) == want]
+    check(f"{path_rel}: every {want} call passes confine=",
+          bool(cs) and all(any(k.arg == "confine" for k in c.keywords) for c in cs))
+
+FENCE = "Here.\n```write:%s\nfrom discord\n```\n"
+dc_out = outside / "via-discord-confined.txt"
+note_dc, _h = turn_steering.authoring_bridge_notes(
+    KIN, FENCE % dc_out.as_posix(),
+    ["write_file", "edit_file"], confine=True)
+check("Discord-style confined fence to a path outside the kin folder is refused",
+      not dc_out.exists())
+dc_in = outside / "via-discord-unconfined.txt"
+turn_steering.authoring_bridge_notes(
+    KIN, FENCE % dc_in.as_posix(),
+    ["write_file", "edit_file"], confine=False)
+check("...and with the checkbox on (unconfined) the same save lands",
+      dc_in.exists())
+
 # Control for the syntax check: a call without the keyword must be seen as
 # missing it, or the check above proves nothing.
 probe = ast.parse("authoring_bridge.commit_authoring_writes(kin, writes)")
