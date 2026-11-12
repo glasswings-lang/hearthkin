@@ -106,13 +106,23 @@ def _stable_history_window(turns, cap):
     return list(turns[start:])
 
 
+def _cfg_count(cfg, key, default):
+    """A non-negative whole-number setting, or the default if it's missing
+    or not a number."""
+    try:
+        return max(0, int((cfg or {}).get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
+
 class DiscordBot:
     """Per-kin Discord bot. One live Gateway connection, mention-only
     replies, all inference off the event loop."""
 
     def __init__(self, agent_name, get_config, get_soul, get_memory,
                  get_model_options, on_status, on_activity=None,
-                 wrap_exec=None, request_webcam_approval=None):
+                 wrap_exec=None, request_webcam_approval=None,
+                 on_long_reply=None):
         self.agent_name = agent_name
         self.get_config = get_config
         self.get_soul = get_soul
@@ -123,6 +133,8 @@ class DiscordBot:
         # can tick per-(kin, scope) distillation counters, same as
         # Telegram. kind="discord", identifier=channel_id. Safe as None.
         self.on_activity = on_activity
+        # on_long_reply(kin, surface, who, count): see TelegramBot.
+        self.on_long_reply = on_long_reply
         # wrap_exec(executors, agent_name) -> executors: the frame's
         # exec-approval wrapper. A shell command a Discord user triggers
         # must pop approval on the OPERATOR's desktop (never the server),
@@ -271,6 +283,19 @@ class DiscordBot:
                 return False
             entry["stop"] = True
             return True
+
+    def _announce_long_reply(self, channel_id, count):
+        """Tell the desktop, once, that a reply here is running long."""
+        cb = getattr(self, "on_long_reply", None)
+        if cb is None:
+            return
+        with self._turn_lock:
+            entry = self._active_turns.get(channel_id) or {}
+        who = entry.get("who") or "someone"
+        try:
+            cb(self.agent_name, "Discord", who, count)
+        except Exception:
+            pass
 
     def stop_any_turn(self):
         """Stop every reply this bot is writing (operator's desktop command,
@@ -964,10 +989,15 @@ class DiscordBot:
         import llm_backend
 
         if schemas:
+            _remote_cap = _cfg_count(cfg, "remote_max_tool_calls", 15)
+            _notice_at = _cfg_count(cfg, "remote_tool_call_notice", 10)
+
             def on_tool_call(name, args, result, is_error):
                 # Append-only tool display, same discipline as Telegram:
                 # a call posts what it did + a result preview; never edits.
                 tool_names_called.append(name)
+                if len(tool_names_called) == _notice_at:
+                    self._announce_long_reply(channel_id, len(tool_names_called))
                 try:
                     self._post_from_thread(
                         channel, f"🔧 {name}({self._short_args(args)})")
@@ -993,6 +1023,9 @@ class DiscordBot:
                 model, messages, tools=schemas, tool_executor=executor,
                 on_tool_call=on_tool_call,
                 should_stop=lambda: self._turn_cancelled(channel_id),
+                # Everyone on Discord is someone other than the operator's
+                # own desktop, so the ceiling always applies here.
+                max_tool_calls=_remote_cap or None,
                 on_content=ed.feed, on_turn=_on_turn,
                 surface=f"{self._surface_label}-tool",
                 tool_result_cap=int(cfg.get("tool_result_cap", 8000) or 8000),

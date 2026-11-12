@@ -29,7 +29,11 @@ class ToolSettingsDialog(wx.Dialog):
         self._save_param = save_param
         self._save_telegram_param = save_telegram_param
 
-        panel = wx.Panel(self)
+        # Scrolls: the list of settings outgrew a fixed-size window, and a
+        # control drawn off the bottom is a control a sighted user can't
+        # reach. Tab order is unaffected either way.
+        import wx.lib.scrolledpanel as _scrolled
+        panel = _scrolled.ScrolledPanel(self)
         sizer = wx.BoxSizer(wx.VERTICAL)
 
         def row(label, make_field):
@@ -156,17 +160,43 @@ class ToolSettingsDialog(wx.Dialog):
              "here (num_ctx still applies downstream).")
 
         self.max_tool_iter_field = row(
-            "&Max tool calls per reply:",
+            "&Max tool rounds per reply:",
             lambda: _IntField(
                 panel, value=cfg.get("max_tool_iterations", 8),
                 min_val=1, max_val=2000, size=(100, -1),
                 on_commit=lambda v: self._save_param("max_tool_iterations", v)))
-        help("How many tool call → result cycles one reply may run before it "
-             "stops. Default 8. On a LOCAL model each cycle is just time, not "
+        help("How many rounds of tool calls one reply may run before it "
+             "stops. One round can hold several calls at once, so this is "
+             "not a count of calls; the limit for other people below is. "
+             "Default 8. On a LOCAL model each cycle is just time, not "
              "money — raise it freely for a game-playing kin or long agentic "
              "work (the dig-and-build grind in the tff park game, for instance, "
              "wants a high cap). On a PAID model (OpenRouter) each cycle is "
              "another billable call, so keep it modest there.")
+
+        self.remote_cap_field = row(
+            "Most tool calls in one reply for &other people:",
+            lambda: _IntField(
+                panel, value=cfg.get("remote_max_tool_calls", 15),
+                min_val=0, max_val=2000, size=(100, -1),
+                on_commit=lambda v: self._save_param("remote_max_tool_calls", v)))
+        help("For anyone who isn't you: Discord members, and Telegram users "
+             "not sharing your desktop conversation. Counts every call, one "
+             "by one. When a reply reaches it, the rest don't run and the "
+             "kin answers with what it has. This is what keeps a stranger "
+             "from making a kin spin through dozens of commands while nobody "
+             "is watching. Your own desktop and Telegram are not limited. "
+             "Default 15; 0 means no limit.")
+
+        self.remote_notice_field = row(
+            "&Warn me aloud after this many calls in a remote reply:",
+            lambda: _IntField(
+                panel, value=cfg.get("remote_tool_call_notice", 10),
+                min_val=0, max_val=2000, size=(100, -1),
+                on_commit=lambda v: self._save_param("remote_tool_call_notice", v)))
+        help("When a reply on Telegram or Discord, yours included, reaches "
+             "this many tool calls, Hearthkin says so once, out loud, and "
+             "tells you how to stop it. Default 10; 0 means never.")
 
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         close_btn = wx.Button(panel, wx.ID_CLOSE, "&Close")
@@ -178,6 +208,7 @@ class ToolSettingsDialog(wx.Dialog):
         self.SetEscapeId(wx.ID_CLOSE)
         self.Bind(wx.EVT_CLOSE, self._on_close)
         panel.SetSizer(sizer)
+        panel.SetupScrolling(scroll_x=False)
         outer = wx.BoxSizer(wx.VERTICAL)
         outer.Add(panel, proportion=1, flag=wx.EXPAND)
         self.SetSizer(outer)

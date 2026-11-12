@@ -55,6 +55,15 @@ _LEGACY_SENDER_RE = re.compile(r'^\[([^\[\]\n]{1,40})\]:\s*')
 
 # ─── Approval state ─────────────────────────────────────────────────────────
 
+
+def _cfg_count(cfg, key, default):
+    """A non-negative whole-number setting, or the default if it's missing
+    or not a number."""
+    try:
+        return max(0, int((cfg or {}).get(key, default)))
+    except (TypeError, ValueError):
+        return default
+
 @dataclass
 class _PendingApproval:
     """Per-user pending exec approval state. The worker thread that fired
@@ -836,6 +845,7 @@ class TelegramBot:
     def __init__(self, agent_name, get_config, get_soul, get_memory,
                  get_model_options, on_status, on_activity=None,
                  request_webcam_approval=None, on_approval_needed=None,
+                 on_long_reply=None,
                  get_busy_label=None):
         self.agent_name = agent_name
         self.get_config = get_config
@@ -877,6 +887,9 @@ class TelegramBot:
         # until it timed out and the kin reported it as a refusal.
         # Fire-and-forget: never blocks and never affects the decision.
         self.on_approval_needed = on_approval_needed
+        # on_long_reply(kin, surface, who, count): a reply here has run
+        # remote_tool_call_notice tool calls; the desktop says so aloud.
+        self.on_long_reply = on_long_reply
         # Optional callback returning a short phrase for whatever currently has
         # the model — a distillation, a scheduled wake-up, a heartbeat, a room
         # round, a kin mid-reply to somebody else — or "" when nothing does.
@@ -1949,6 +1962,23 @@ class TelegramBot:
                 return False
             self._cancelled_turns.add(user_id)
             return True
+
+    def _announce_long_reply(self, user_id, chat_id, count):
+        """Tell the desktop, once, that a reply here is running long."""
+        cb = getattr(self, "on_long_reply", None)
+        if cb is None:
+            return
+        try:
+            labels = (self.get_config() or {}).get("user_labels") or {}
+            who = (labels.get(str(user_id)) or labels.get(user_id) or "").strip()
+        except Exception:
+            who = ""
+        if not who:
+            who = "a group" if str(chat_id).startswith("-") else f"user {user_id}"
+        try:
+            cb(self.agent_name, "Telegram", who, count)
+        except Exception:
+            pass
 
     def stop_any_turn(self):
         """Stop whatever reply this bot is writing, for whoever it's for.
@@ -5986,10 +6016,16 @@ class TelegramBot:
         # invisible to the user. Either way, the progress-ping check
         # runs on every call so a long quiet loop becomes a periodic
         # "still working" message.
+        # Say aloud on the desktop once a reply here has run this many calls.
+        _notice_at = _cfg_count(full_cfg, "remote_tool_call_notice", 10)
+
         def on_tool_call(name, args, result, is_error):
             try:
                 progress_state["call_count"] += 1
                 progress_state["tool_names"].append(name)
+                if progress_state["call_count"] == _notice_at:
+                    self._announce_long_reply(
+                        user_id, chat_id, progress_state["call_count"])
                 if show_tool_calls:
                     args_str = self._format_tool_args(args)
                     self._send_chunked(chat_id, f"🔧 {name}({args_str})")
@@ -6074,6 +6110,11 @@ class TelegramBot:
 
         ed = _TelegramStreamEditor(_stream_send, _stream_edit,
                                    clean=_stream_clean)
+        # Ceiling on calls for anyone who isn't the operator (see
+        # remote_max_tool_calls); the operator's own Telegram is uncapped,
+        # same as the desktop.
+        _remote_cap = (0 if self._user_shares_desktop(user_id)
+                       else _cfg_count(full_cfg, "remote_max_tool_calls", 15))
         result = llm_backend.run_tool_loop(
             model, messages,
             tools=schemas, tool_executor=executor,
@@ -6093,6 +6134,7 @@ class TelegramBot:
             should_stop=lambda: self._turn_cancelled(user_id),
             # A message sent mid-turn lands between steps.
             interject=lambda: self._take_interjections(user_id),
+            max_tool_calls=_remote_cap or None,
             ollama_host=resolve_kin_ollama_host(
                 (full_cfg or {}).get("ollama_host_name", "")),
         )

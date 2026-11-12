@@ -139,6 +139,37 @@ def main():
     check("with nothing running it says so",
           spoken[-1] == "Nothing was running, so there was nothing to stop.")
 
+    # The ceiling for other people, and the spoken warning.
+    tgsrc = src("telegram_bot.py")
+    check("Telegram passes a call ceiling to the tool loop",
+          "max_tool_calls=_remote_cap or None" in tgsrc)
+    check("...which is 0 (none) for the operator's own Telegram",
+          "_remote_cap = (0 if self._user_shares_desktop(user_id)" in tgsrc)
+    check("Discord always passes the ceiling",
+          "max_tool_calls=_remote_cap or None" in src("discord_bot.py"))
+
+    heard = []
+    tg3 = TG()
+    tg3.on_long_reply = lambda *a: heard.append(a)
+    tg3._announce_long_reply(7, 7, 10)
+    check("Telegram tells the desktop who and how many",
+          heard == [("Wren", "Telegram", "Juniper", 10)])
+    heard.clear()
+    dc2 = DC()
+    dc2.on_long_reply = lambda *a: heard.append(a)
+    dc2._active_turns[11] = {"who": "Rook", "stop": False}
+    dc2._announce_long_reply(11, 10)
+    check("Discord tells the desktop who and how many",
+          heard == [("Wren", "Discord", "Rook", 10)])
+
+    from frame import bot_integration_mixin as BI
+    spoken2 = []
+    BI.nvda_speak = spoken2.append
+    BI.BotIntegrationMixin._notify_long_remote_reply(f, "Wren", "Discord", "Rook", 10)
+    check("the desktop says it aloud, with how to stop it",
+          spoken2 and "Wren has run 10 tool calls in one reply to Rook on "
+          "Discord" in spoken2[-1] and "Control Shift X" in spoken2[-1])
+
     print()
     if _fails:
         print(f"{len(_fails)} FAILED")

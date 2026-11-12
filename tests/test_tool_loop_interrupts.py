@@ -46,10 +46,12 @@ class FakeModel:
     def __init__(self):
         self.turns = 0
         self.seen = []
+        self.last_kwargs = None
 
     def __call__(self, model, history, **kw):
         self.turns += 1
         self.seen.append(list(history))
+        self.last_kwargs = kw
         if self.turns == 1:
             return ChatResult(content="Reading everything.", thinking="",
                               tool_calls=batch(6), usage={})
@@ -165,6 +167,31 @@ def main():
         llm_backend.chat = real
     check("an early message is in front of the model's first turn",
           fake.seen[0][-1]["content"] == "also, the left hand")
+
+    # A ceiling on calls holds even when the model batches them.
+    progress = []
+    fake = FakeModel()
+    llm_backend.chat = fake
+    try:
+        res = llm_backend.run_tool_loop(
+            "stub", [{"role": "user", "content": "tend, please"}],
+            tools=[{"type": "function", "function": {"name": "peek"}}],
+            tool_executor={"peek": lambda a: progress.append(a.get("n")) or "ok"},
+            max_tool_calls=3, max_iterations=50)
+    finally:
+        llm_backend.chat = real
+    check("limit: only three of the six calls ran", progress == [1, 2, 3])
+    tr = tool_results(res)
+    check("limit: every call still has a result", len(tr) == 6)
+    check("limit: the rest say the reply used its calls",
+          all("allowed" in t["content"] for t in tr[3:]))
+    check("limit: the result says the limit was hit",
+          getattr(res, "hit_tool_limit", False) is True)
+    check("limit: the kin still answers, with no tools offered",
+          (res.content or "").startswith("Answering")
+          and "tools" not in (fake.last_kwargs or {}))
+    check("limit: and it was told why",
+          "limit of 3 tool calls" in fake.seen[-1][-1]["content"])
 
     # A broken callback never breaks the turn.
     def boom():

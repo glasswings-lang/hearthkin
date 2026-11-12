@@ -71,6 +71,10 @@ class BotIntegrationMixin:
                 on_approval_needed=lambda kin, cmd, secs: wx.CallAfter(
                     self._notify_remote_approval, kin, cmd, secs
                 ),
+                # A reply here is running long: say so on the desktop.
+                on_long_reply=lambda kin, surface, who, n: wx.CallAfter(
+                    self._notify_long_remote_reply, kin, surface, who, n
+                ),
             )
             self.bots[agent_name] = bot
         bot.start()
@@ -92,6 +96,27 @@ class BotIntegrationMixin:
                 vol = 0.8
             if vol > 0:
                 play_alert(volume=vol)
+        except Exception:
+            pass
+
+    def _notify_long_remote_reply(self, kin_name, surface, who, count):
+        """A reply on Telegram or Discord has made `count` tool calls (the
+        kin's remote_tool_call_notice). Say so, once, with how to stop it.
+
+        A runaway on a remote surface is invisible from the desktop, and
+        nobody should have to know a shortcut exists to find out. So the
+        warning carries the way out in the same breath. Speech first, the
+        Activity line second; never raises."""
+        spoken = (f"{kin_name} has run {count} tool calls in one reply to "
+                  f"{who} on {surface}. Press Control Shift X to stop it.")
+        try:
+            self._set_status(
+                f"{kin_name}: {count} tool calls in one reply to {who} on "
+                f"{surface}. Ctrl+Shift+X stops it.")
+        except Exception:
+            pass
+        try:
+            nvda_speak(spoken)
         except Exception:
             pass
 
@@ -226,6 +251,9 @@ class BotIntegrationMixin:
                 # as "ask", never as "auto".
                 request_webcam_approval=lambda label, uid, an=agent_name:
                     self._request_webcam_approval(an, label, uid),
+                on_long_reply=lambda kin, surface, who, n: wx.CallAfter(
+                    self._notify_long_remote_reply, kin, surface, who, n
+                ),
             )
             self.discord_bots[agent_name] = bot
         bot.start()

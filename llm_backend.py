@@ -5275,6 +5275,17 @@ _NOT_RUN_INTERJECTED = (
 )
 
 
+_NOT_RUN_LIMIT = (
+    "[not run: this reply has used all the tool calls it is allowed. Nothing "
+    "in this call happened.]"
+)
+_LIMIT_REACHED_NOTE = (
+    "[hearthkin: this reply has reached its limit of {n} tool calls, so no "
+    "more will run this turn. Answer now with what you have. If there's more "
+    "to do, say what, and it can carry on next message.]"
+)
+
+
 def _take_interjections(interject):
     """Ask the `interject` callback for any messages that arrived mid-turn.
     Returns a list of message dicts, empty when there are none or the
@@ -5292,7 +5303,7 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                   on_tool_call=None, on_content=None, on_turn=None,
                   max_iterations=MAX_TOOL_ITERATIONS,
                   tool_result_cap=8000, should_stop=None, interject=None,
-                  **kwargs):
+                  max_tool_calls=None, **kwargs):
     """Run a non-streaming chat-with-tools loop. Blocks until no more tool calls
     or max_iterations is reached. Returns the final ChatResult.
 
@@ -5342,6 +5353,16 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
         `messages_added` exactly as given, so the caller shapes them the
         way it persists its own user turns.
 
+    max_tool_calls: optional ceiling on how many tool calls this one reply
+        may RUN, counted call by call across every round. `max_iterations`
+        counts rounds, and one round can hold dozens of calls, so it is no
+        ceiling at all against a model that batches. When the ceiling is
+        reached, the remaining calls are answered "not run", and the model
+        gets one last turn with no tools to answer with what it has. The
+        result carries `hit_tool_limit=True`. None or 0 means no ceiling.
+        Surfaces use it for people other than the operator, so a stranger
+        can't make a kin spin with nobody watching.
+
     tool_result_cap: per-tool-result character ceiling before truncation.
         Default 8000 (~2000 tokens) — preserves the original behavior.
         Callers pass the kin's per-config value so the operator can
@@ -5364,6 +5385,7 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
     """
     history = list(messages)
     messages_added = []
+    _calls_run = 0
     last_signature = None
     last_results = None
     retried_empty_reply = False
@@ -5505,13 +5527,16 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
         for _ci, tc in enumerate(_calls):
             if _loop_should_stop(should_stop):
                 _cut = ("stop", None)
+            elif max_tool_calls and _calls_run >= max_tool_calls:
+                _cut = ("limit", None)
             else:
                 _late = _take_interjections(interject)
                 if _late:
                     _cut = ("interject", _late)
             if _cut is not None:
-                _note = (_NOT_RUN_STOPPED if _cut[0] == "stop"
-                         else _NOT_RUN_INTERJECTED)
+                _note = {"stop": _NOT_RUN_STOPPED,
+                         "limit": _NOT_RUN_LIMIT}.get(_cut[0],
+                                                      _NOT_RUN_INTERJECTED)
                 for _held in _calls[_ci:]:
                     _held_turn = {
                         "role": "tool",
@@ -5521,6 +5546,7 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                     history.append(_held_turn)
                     messages_added.append(_held_turn)
                 break
+            _calls_run += 1
             fn = _tc_field(tc, "function") or {}
             name = _tc_field(fn, "name", "")
             args_value = _tc_field(fn, "arguments", "{}")
@@ -5598,6 +5624,21 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                     content="", thinking="", tool_calls=[],
                     usage={}, messages_added=messages_added, stopped=True,
                 )
+            if _cut[0] == "limit":
+                # Out of calls for this reply: one last turn, no tools, so
+                # the person gets an answer rather than silence.
+                final = chat(model, history + [{
+                    "role": "system",
+                    "content": _LIMIT_REACHED_NOTE.format(n=max_tool_calls)}],
+                    options=dict(options or {}), stream=False, cache=cache,
+                    **kwargs)
+                final.content = _strip_extracted_tool_calls(final.content or "")
+                if not final.content:
+                    final.content = (f"[Stopped: this reply reached its "
+                                     f"limit of {max_tool_calls} tool calls.]")
+                final.messages_added = messages_added
+                final.hit_tool_limit = True
+                return final
             history.extend(_cut[1])
             messages_added.extend(_cut[1])
             # A held batch is not a repeat of anything; don't let the

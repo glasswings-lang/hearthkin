@@ -936,6 +936,16 @@ DEFAULT_AGENT_CONFIG = {
     # multi-step task. Each cycle is another billable model call, so the
     # default stays 8 (cost-safe); raise deliberately. Settings → Tools.
     "max_tool_iterations": 8,
+    # Ceiling on tool calls (counted one by one, not by round) in a single
+    # reply for anyone who isn't the operator: Discord members, and Telegram
+    # users not sharing the desktop conversation. max_tool_iterations counts
+    # rounds, and one round can carry dozens of calls -- a model once put
+    # sixty in one. 0 = no ceiling. Settings -> Tools.
+    "remote_max_tool_calls": 15,
+    # After this many tool calls in one remote reply (any remote person,
+    # the operator's own Telegram included), the desktop says so aloud once,
+    # with how to stop it. 0 = never. Settings -> Tools.
+    "remote_tool_call_notice": 10,
     # How many of the most recent image-bearing user turns to send to
     # the model verbatim. Older image turns send their caption text
     # only — the image itself is stripped from the outgoing payload.
