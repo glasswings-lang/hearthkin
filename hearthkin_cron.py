@@ -692,6 +692,84 @@ def _read_staging_fired(result):
         return True
 
 
+def gesture_retry_enabled(entry):
+    """Is "one more try if no tool runs" switched on for this scheduled job?
+    Off unless the job says so."""
+    return bool(isinstance(entry, dict) and entry.get("gesture_retry"))
+
+
+# Said to the kin when a job meant to use tools ended without any. Plain on
+# purpose: the kin has no one to ask, so it needs to know exactly what did and
+# didn't happen, and that "nothing to do" is an acceptable answer.
+NO_TOOL_RAN_NOTE = (
+    "[hearthkin: this scheduled run ended without any tool actually running. "
+    "If your reply said you would write, read, check or save something, it "
+    "did not happen -- nothing was written or read. Do it now with a real "
+    "tool call. If there is genuinely nothing to do this time, say so in one "
+    "line.]"
+)
+
+
+def _maybe_gesture_retry(kin, result, messages, safe_tools, model, rerun):
+    """Give a scheduled job ONE more go when it ended without any tool
+    running, for a job whose operator has said it is meant to use them.
+
+    The tending retry only knew one shape -- staging had work and
+    read_staging never fired. Any other job could narrate and do nothing: on
+    11 Nov 2026 a journal job replied "Let me check the journal and write
+    February 26" and called no tool, and nobody was awake to notice.
+
+    This judges by OUTCOME, not by matching the reply's wording. That exact
+    sentence slipped past every gesture detector we have -- it names no tool
+    and acts nothing out -- and there will always be another phrasing. "Did
+    any tool run?" can't be talked round. The detectors still help: when one
+    recognises the shape, its more specific note is used instead of the
+    general one.
+
+    Opt-in per job, because a job that just chats has nothing to retry, and
+    the reminder says plainly that "nothing to do" is an acceptable answer.
+    One retry only, not a loop -- a kin that misses twice running needs a
+    person, not a third prod in the small hours. `rerun(messages)` re-runs
+    the job's own tool loop with the same settings. Returns the result to
+    keep: the retry's if one ran, else the original."""
+    try:
+        if not safe_tools:
+            return result
+        added = getattr(result, "messages_added", None) or []
+        import turn_steering
+        if turn_steering._real_tools_fired(added):
+            return result
+        reply = (getattr(result, "content", "") or "").strip()
+        # A file written out as a fenced block in the reply IS the work: the
+        # authoring bridge saves it after this. Prodding the kin to "use a
+        # tool" there would ask it to do the same thing twice.
+        if reply:
+            try:
+                import authoring_bridge
+                if authoring_bridge.extract_authoring_writes(reply):
+                    return result
+            except Exception:
+                pass
+        note = ""
+        if reply:
+            note = turn_steering.roleplay_corrective_note(
+                kin, reply, safe_tools, added,
+                surface="cron-gesture-retry", model=model)
+            if not note:
+                note = turn_steering.read_gesture_note(
+                    kin, reply, safe_tools, added)
+        retry_messages = (list(messages) + list(added)
+                          + [{"role": "system",
+                              "content": note or NO_TOOL_RAN_NOTE}])
+        return rerun(retry_messages)
+    except Exception as e:
+        try:
+            cron_helpers.log_cron_error(kin, "gesture_retry", str(e))
+        except Exception:
+            pass
+        return result
+
+
 def _inject_staging_status(kin, messages, safe_tools=None, model=None):
     """Insert an ephemeral system note (not persisted) telling the kin the
     current staging state, right before the final user turn. Lets the kin
@@ -856,7 +934,7 @@ def _maybe_authoring_bridge_cron(kin, reply, safe_tools, shown_scopes=(),
 
 
 def _run_isolated(kin, cfg, time_label, prompt, tend_retry=0, destinations=None,
-                  history_path=None):
+                  history_path=None, gesture_retry=False):
     """Announce this run to the desktop app, then do it.
 
     A wake-up here happens in a SEPARATE PROCESS from Hearthkin, sharing no
@@ -878,7 +956,7 @@ def _run_isolated(kin, cfg, time_label, prompt, tend_retry=0, destinations=None,
         return _run_isolated_inner(
             kin, cfg, time_label, prompt,
             tend_retry=tend_retry, destinations=destinations,
-            history_path=history_path)
+            history_path=history_path, gesture_retry=gesture_retry)
     finally:
         try:
             cron_helpers.clear_cron_running(marker)
@@ -887,7 +965,8 @@ def _run_isolated(kin, cfg, time_label, prompt, tend_retry=0, destinations=None,
 
 
 def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
-                        destinations=None, history_path=None):
+                        destinations=None, history_path=None,
+                        gesture_retry=False):
     """Lock-absent path: run the LLM call directly from this subprocess,
     persist the result everywhere (conversation + journal + Telegram).
 
@@ -1066,6 +1145,21 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
                 max_iterations=_max_iter,
                 ollama_host=_kin_host,
             )
+    # Any job: one more go if the reply only described an action.
+    if schemas and gesture_retry:
+        result = _maybe_gesture_retry(
+            kin, result, messages, safe_tools, model,
+            lambda msgs: llm_backend.run_tool_loop(
+                model, msgs,
+                tools=schemas, tool_executor=executor,
+                options=options, cache=cache, cache_ttl=cache_ttl,
+                show_thinking=show_thinking,
+                max_context_tokens=max_ctx,
+                tool_result_cap=int(cfg.get("tool_result_cap", 8000) or 8000),
+                kin_name=kin, surface="cron-gesture-retry",
+                max_iterations=_max_iter,
+                ollama_host=_kin_host,
+            ))
     reply = (result.content or "").strip()
     # Pull any inline <thinking>...</thinking> markup out of content
     # before persistence / journal / Telegram post. The other four
@@ -1519,6 +1613,7 @@ def main(argv=None):
     # that was handed pending staging but called no tools gets re-prompted.
     tend_retry = 0
     destinations = None
+    gesture_retry = gesture_retry_enabled(entry)
     if isinstance(entry, dict):
         try:
             tend_retry = max(0, int(entry.get("tend_retry", 0) or 0))
@@ -1677,6 +1772,24 @@ def main(argv=None):
                         max_iterations=_max_iter,
                         ollama_host=_kin_host,
                     )
+            # Any job: one more go if the reply only described an action.
+            if schemas and gesture_retry:
+                result = _maybe_gesture_retry(
+                    kin, result, messages, safe_tools, model,
+                    lambda msgs: llm_backend.run_tool_loop(
+                        model, msgs,
+                        tools=schemas, tool_executor=executor,
+                        options=options,
+                        cache=bool(cfg.get("cache", True)),
+                        cache_ttl=cache_ttl,
+                        show_thinking=bool(cfg.get("show_thinking", False)),
+                        max_context_tokens=max_ctx,
+                        tool_result_cap=int(
+                            cfg.get("tool_result_cap", 8000) or 8000),
+                        kin_name=kin, surface="cron-gesture-retry",
+                        max_iterations=_max_iter,
+                        ollama_host=_kin_host,
+                    ))
             raw_reply = (result.content or "").strip()
             if not raw_reply:
                 _log_empty_cron_reply(
@@ -1728,7 +1841,8 @@ def main(argv=None):
     # we own the conversation file.
     try:
         _run_isolated(kin, cfg, time_label, prompt, tend_retry=tend_retry,
-                      destinations=destinations, history_path=history_path)
+                      destinations=destinations, history_path=history_path,
+                      gesture_retry=gesture_retry)
     except Exception as e:
         tb = traceback.format_exc()
         cron_helpers.log_cron_error(kin, type(e).__name__, f"{e}\n{tb}")

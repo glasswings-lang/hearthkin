@@ -119,6 +119,28 @@ class CronEntryDialog(wx.Dialog):
         retry_hint.SetMinSize((-1, 40))
         retry_hint.SetName("When tend retry applies")
 
+        # One more try, for ANY job (see hearthkin_cron._maybe_gesture_retry).
+        # The tend retry above only covers tending; a journal job that says
+        # "let me write today's entry" and calls nothing had no second chance.
+        # Judged by whether a tool ran, not by the wording. Off by default: a
+        # check-in job that just talks has nothing to retry.
+        self.gesture_retry_check = wx.CheckBox(
+            self,
+            label="&Give it one more try if no tool runs",
+        )
+        self.gesture_retry_check.SetValue(bool(defaults.get("gesture_retry")))
+        gesture_retry_hint = wx.TextCtrl(
+            self,
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP | wx.TE_NO_VSCROLL,
+            value="(For jobs meant to use tools, like writing a journal "
+                  "entry. If a run ends without any tool actually running, "
+                  "say it only described the writing, it gets one reminder "
+                  "and one more turn. If there was really nothing to do, it "
+                  "can just say so. Only once, so it can't loop.)",
+        )
+        gesture_retry_hint.SetMinSize((-1, 56))
+        gesture_retry_hint.SetName("What one more try does")
+
         # --- Where does this wake-up's message go? (destination addressing) ---
         # A cron reply is always recorded in the kin's own chat history +
         # journal. This picks where it's ALSO sent outward. The kin's Telegram
@@ -175,7 +197,7 @@ class CronEntryDialog(wx.Dialog):
         # Created here, immediately before the list, because that is the only
         # position wxMSW will take a label from. Still added to the sizer above
         # the explainer, so nothing moves on screen.
-        dest_label = wx.StaticText(self, label="Send this message &to:")
+        dest_label = wx.StaticText(self, label="&Send this message to:")
         self.dest_list = TickList(self, "Send to", choices)
         self.dest_list.SetMinSize((-1, 110))
         _existing = {
@@ -226,6 +248,13 @@ class CronEntryDialog(wx.Dialog):
             flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8,
         )
         sizer.Add(retry_hint, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
+        sizer.Add(
+            self.gesture_retry_check, flag=wx.LEFT | wx.RIGHT, border=8,
+        )
+        sizer.Add(
+            gesture_retry_hint,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8,
+        )
         sizer.Add(dest_label, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         sizer.Add(
             dest_help, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
@@ -326,6 +355,7 @@ class CronEntryDialog(wx.Dialog):
             "prompt": self.prompt_field.GetValue().strip(),
             "enabled": bool(self.enabled_check.GetValue()),
             "tend_retry": int(self.retry_choice.GetSelection()),
+            "gesture_retry": bool(self.gesture_retry_check.GetValue()),
         })
         # Own history keeps ONE name for the job's life, so unticking and
         # ticking again picks the same history back up instead of starting

@@ -2,9 +2,15 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
-## Unreleased
+## v0.11.1 — 2026-11-11
+
+### Added
+
+- **A scheduled job can get one more try when no tool runs.** A new box in the job's window, **Give it one more try if no tool runs** (Alt+G), off by default. The tending retry only covered tending; any other job could say what it was about to do and do nothing. A journal job replied "Let me check the journal and write February 26" and called no tool, and nobody was awake to see. With the box ticked, a run that ends with no tool having run gets a plain reminder that nothing was written or read, and one more turn, where "there was nothing to do" is an accepted answer. It goes by outcome, not wording: that exact sentence slips past every phrase detector the app has, since it names no tool and acts nothing out. When a detector does recognise the reply, its more specific note is used instead. A reply that saves a file as a fenced block counts as the work. Once per run only. It applies when the job runs on its own, not when a wake-up is sent into the open desktop chat. `hearthkin_cron._maybe_gesture_retry`; pinned by `tests/test_cron_gesture_retry.py` (including a whole run with the model stubbed) and `tests/test_cron_entry_gesture_box.py`.
 
 ### Fixed
+
+- **The job window had two controls on Alt+T.** **Times** and **Send this message to** shared the letter, so Alt+T could land on either. The destination list is now Alt+S. Found by the new dialog test, which checks that every shortcut letter in the window is different.
 
 - **A kin can no longer erase a file it hasn't read.** `write_file` replaces a file whole. A scheduled run used it to add one entry to a months-long journal, and every earlier entry was gone; the kin's own notes already said "never write_file on an accumulating file." It knew the rule, and a rule did nothing. Now the tool refuses instead: to replace a file that already has something in it, the kin must have read all of it earlier in the same turn (a slice, or a read cut off at the 64K cap, doesn't count), and it must not have changed on disk since. The refusal changes nothing and tells the kin to use `note` or `edit_file` to add, or to read the whole file first if it really means to replace it. New files, empty files, and a file the kin itself wrote that turn need no read. "That turn" is deliberate: older tool results are compacted on later turns, so a read from yesterday is a memory of the file, not the file. `edit_file` still needs no read (its exact-once match already proves the kin knows the text), but refuses if the kin read the file that turn and it changed since. Only kin are guarded: the read record is created per turn inside `load_tools`, hidden from the model's schema, and can't be supplied by the model; the app and scripts calling the tools directly are unchanged. `tools/_read_ledger.py`.
 

@@ -1003,6 +1003,8 @@ DEFAULT_AGENT_CONFIG = {
     # per-entry fields:
     #   "tend_retry"   — int 0-3, outcome-based re-prompt if a tending wake-up
     #                    called no tools.
+    #   "gesture_retry" — bool, any job: one more turn if the run ended with
+    #                    no tool having run at all.
     #   "destinations" — list of {"surface": "telegram_dm" | "telegram_group" |
     #                    "desktop", "id": <chat_id>}: where the wake-up's reply
     #                    is sent OUTWARD (the reply is always recorded in the

@@ -629,7 +629,8 @@ class CronExecMixin:
             hearthkin_cron._run_isolated(
                 kin, cfg, time_label, prompt, tend_retry=tend_retry,
                 destinations=destinations,
-                history_path=hearthkin_cron.own_history_path(kin, entry, entry_index))
+                history_path=hearthkin_cron.own_history_path(kin, entry, entry_index),
+                gesture_retry=hearthkin_cron.gesture_retry_enabled(entry))
         except Exception as e:
             cron_helpers.log_cron_error(kin, type(e).__name__, str(e))
             try:
