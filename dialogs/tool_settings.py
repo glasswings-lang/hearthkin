@@ -199,6 +199,19 @@ class ToolSettingsDialog(wx.Dialog):
              "this many tool calls, Hearthkin says so once, out loud, and "
              "tells you how to stop it. Default 10; 0 means never.")
 
+        # Was settable only by editing config.json until 12 Nov 2026.
+        self.staging_read_field = row(
+            "&Staging notes: most the kin reads at once (characters):",
+            lambda: _IntField(
+                panel, value=cfg.get("staging_read_max_chars", 6000),
+                min_val=500, max_val=100000, size=(100, -1),
+                on_commit=lambda v: self._save_param("staging_read_max_chars", v)))
+        help("When the kin reads its staging notes to tend its memory, it "
+             "gets them in pieces this size, cut where a note ends, and is "
+             "told there's more. Keep it below the Tool result cap above, "
+             "or a piece gets cut off mid-sentence. Default 6000; the "
+             "smallest is 500.")
+
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         close_btn = wx.Button(panel, wx.ID_CLOSE, "&Close")
         close_btn.Bind(wx.EVT_BUTTON, self._on_close)

@@ -3,6 +3,7 @@
 """dialogs.edit_kin - extracted from the former monolithic dialogs.py."""
 
 import datetime
+import re
 import subprocess
 import threading
 import time
@@ -1278,6 +1279,32 @@ class EditKinDialog(wx.Dialog):
         ])
         self.dc_policy_choice.Bind(wx.EVT_CHOICE, self._on_dc_policy_changed)
 
+        # Where it listens. These lists were settable only by editing
+        # config.json until 12 Nov 2026. IDs separated by commas or spaces;
+        # blank means anywhere (the people list still decides who).
+        dc_guilds_lbl = wx.StaticText(
+            host, label="Only answer in these &servers (IDs, blank means any):")
+        self.dc_guilds_field = wx.TextCtrl(host, style=wx.TE_PROCESS_ENTER)
+        self.dc_guilds_field.Bind(wx.EVT_KILL_FOCUS, self._on_dc_where_changed)
+        self.dc_guilds_field.Bind(wx.EVT_TEXT_ENTER, self._on_dc_where_changed)
+        dc_channels_lbl = wx.StaticText(
+            host, label="Only answer in these c&hannels (IDs, blank means any):")
+        self.dc_channels_field = wx.TextCtrl(host, style=wx.TE_PROCESS_ENTER)
+        self.dc_channels_field.Bind(wx.EVT_KILL_FOCUS, self._on_dc_where_changed)
+        self.dc_channels_field.Bind(wx.EVT_TEXT_ENTER, self._on_dc_where_changed)
+        dc_where_hint = wx.TextCtrl(
+            host,
+            value=("To find an ID, turn on Developer Mode in Discord "
+                   "(Settings, Advanced), then right-click a server or channel "
+                   "and choose Copy ID. Separate several with commas. If you "
+                   "list servers, the kin stops answering direct messages, "
+                   "since those aren't in a server. Anything that isn't a "
+                   "number is dropped when you leave the box."),
+            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
+            | wx.TE_WORDWRAP)
+        dc_where_hint.SetName("How the server and channel lists work")
+        dc_where_hint.SetMinSize((-1, 80))
+
         # Was a plain multi-line box of IDs labelled "empty = anyone", which
         # was untrue in the one direction that matters: empty means NOBODY,
         # deliberately, and the box also silently dropped the "*" that means
@@ -1351,9 +1378,13 @@ class EditKinDialog(wx.Dialog):
 
         # The people list and the token field stretch with the tab; everything
         # else keeps its natural width.
-        _wide = (self.dc_token_field, self.dc_users_list)
+        _wide = (self.dc_token_field, self.dc_users_list,
+                 self.dc_guilds_field, self.dc_channels_field, dc_where_hint)
         for _w in (dc_label, dc_token_lbl, self.dc_token_field, dc_policy_lbl,
-                   self.dc_policy_choice, dc_allow_lbl, self.dc_users_list,
+                   self.dc_policy_choice,
+                   dc_guilds_lbl, self.dc_guilds_field,
+                   dc_channels_lbl, self.dc_channels_field, dc_where_hint,
+                   dc_allow_lbl, self.dc_users_list,
                    dc_users_btn_row,
                    self.dc_share_check, self.dc_enabled_check,
                    self.dc_status_label, dc_help):
@@ -1685,6 +1716,10 @@ class EditKinDialog(wx.Dialog):
         self.dc_policy_choice.SetSelection(
             1 if (dc.get("policy") or "mention_only") == "always" else 0)
         self._refresh_dc_users_list()
+        self.dc_guilds_field.SetValue(
+            ", ".join(str(x) for x in (dc.get("guilds") or [])))
+        self.dc_channels_field.SetValue(
+            ", ".join(str(x) for x in (dc.get("channels") or [])))
         self.dc_share_check.SetValue(bool(dc.get("share_desktop", False)))
         self.dc_enabled_check.SetValue(bool(dc.get("enabled", False)))
 
@@ -3477,6 +3512,31 @@ class EditKinDialog(wx.Dialog):
             return
         val = "always" if self.dc_policy_choice.GetSelection() == 1 else "mention_only"
         self._save_discord_param("policy", val)
+
+    @staticmethod
+    def _parse_discord_ids(text):
+        """IDs from a box: split on commas and spaces, keep only the
+        all-digit ones, no repeats, in the order typed."""
+        out = []
+        for tok in re.split(r"[\s,;]+", text or ""):
+            if tok.isdigit() and tok not in out:
+                out.append(tok)
+        return out
+
+    def _on_dc_where_changed(self, event):
+        if event is not None:
+            event.Skip()
+        if self._loading:
+            return
+        for key, field in (("guilds", self.dc_guilds_field),
+                           ("channels", self.dc_channels_field)):
+            ids = self._parse_discord_ids(field.GetValue())
+            shown = ", ".join(ids)
+            if field.GetValue() != shown:
+                field.ChangeValue(shown)
+            dc_now = (self.cfg.get("discord") or {}).get(key) or []
+            if [str(x) for x in dc_now] != ids:
+                self._save_discord_param(key, ids)
 
     def _on_dc_share_toggle(self, _event):
         if self._loading:
