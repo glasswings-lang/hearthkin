@@ -73,6 +73,12 @@ for path in sorted(list(ROOT.rglob("*.py")) + list(ROOT.rglob("*.pyw"))):
     parts = set(path.parts)
     if ".git" in parts or "tests" in parts or "__pycache__" in parts:
         continue
+    # Build output and its bundled copies aren't the app's own source. A
+    # local release build leaves dist/, build/ and .bundle_game/ (a clone of
+    # the park game) in the repo; scanning them failed this test on code the
+    # app never runs from here. All three are gitignored.
+    if path.relative_to(ROOT).parts[0] in {"dist", "build", ".bundle_game"}:
+        continue
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:

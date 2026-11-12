@@ -289,7 +289,7 @@ def looks_like_write_gesture(reply_text, extra_verbs=None):
 
 
 def commit_authoring_writes(agent_name, writes, *, max_bytes=512 * 1024,
-                            confine=False):
+                            confine=False, guard=True):
     """Write each ``AuthoringWrite`` to disk, kin-scoped exactly like the
     ``write_file`` tool (relative → inside the kin's dir; absolute → as-is;
     ``..`` traversal rejected by ``resolve_kin_path``). Missing parent dirs
@@ -303,12 +303,34 @@ def commit_authoring_writes(agent_name, writes, *, max_bytes=512 * 1024,
     went through here unconfined — so the fence could write anywhere on the
     host that the tools were deliberately stopped from reaching.
 
+    ``guard=True`` (every kin with write tools) holds a replace-form fence to
+    the same rule as ``write_file``: an existing, non-empty file is replaced
+    only if the kin read all of it this turn and it hasn't changed since (see
+    tools/_read_ledger.py). Without this, a fence was a way round the guard --
+    and a scheduled run that writes a journal entry as a fenced block is just
+    as able to erase the journal as one that calls write_file. ``append:``
+    fences are never refused. ``guard=False`` is for the tool-less memory
+    path, whose kin have no read tool at all; refusing there would only lose
+    the note. Either way, a file that gets replaced is backed up first.
+
     Returns a list of ``(display_path, ok, detail)`` — ``detail`` is the
     byte count on success or an error string on failure. Never raises; a
     per-write failure is captured in its tuple so one bad write can't sink
     the batch or the surrounding reply.
     """
-    from tools._io import resolve_kin_path, atomic_write_text, path_within_kin
+    from tools._io import (atomic_write_text, backup_file_before_change,
+                           backup_identity_file, path_within_kin,
+                           resolve_kin_path)
+    from tools._read_ledger import ReadLedger, overwrite_refusal
+    ledger = None
+    if guard:
+        try:
+            import tools as _kin_tools
+            ledger = _kin_tools.current_ledger(agent_name)
+        except Exception:
+            ledger = None
+        if ledger is None:
+            ledger = ReadLedger()  # nothing read: only new/empty files pass
 
     results = []
     for w in writes:
@@ -356,7 +378,20 @@ def commit_authoring_writes(agent_name, writes, *, max_bytes=512 * 1024,
                 if not data.endswith("\n"):
                     data += "\n"
                 nbytes = len(data.encode("utf-8", "replace"))
+            else:
+                refusal = overwrite_refusal(
+                    ledger, target, tool="saving from your reply",
+                    again="save it from your reply again")
+                if refusal:
+                    results.append((w.path, False, refusal + (
+                        " (To add to the file from your reply instead, label "
+                        "the fence `append:` plus the path.)")))
+                    continue
+                (backup_identity_file(target, agent_name)
+                 or backup_file_before_change(target, agent_name))
             atomic_write_text(str(target), data)
+            if ledger is not None:
+                ledger.record_write(target, whole=(w.form != "append"))
             results.append((str(target), True, nbytes))
         except Exception as e:  # IO error, permission, …
             results.append((w.path, False, str(e)))

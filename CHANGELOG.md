@@ -2,6 +2,15 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
+## Unreleased
+
+### Fixed
+
+- **A kin can no longer erase a file it hasn't read.** `write_file` replaces a file whole. A scheduled run used it to add one entry to a months-long journal, and every earlier entry was gone; the kin's own notes already said "never write_file on an accumulating file." It knew the rule, and a rule did nothing. Now the tool refuses instead: to replace a file that already has something in it, the kin must have read all of it earlier in the same turn (a slice, or a read cut off at the 64K cap, doesn't count), and it must not have changed on disk since. The refusal changes nothing and tells the kin to use `note` or `edit_file` to add, or to read the whole file first if it really means to replace it. New files, empty files, and a file the kin itself wrote that turn need no read. "That turn" is deliberate: older tool results are compacted on later turns, so a read from yesterday is a memory of the file, not the file. `edit_file` still needs no read (its exact-once match already proves the kin knows the text), but refuses if the kin read the file that turn and it changed since. Only kin are guarded: the read record is created per turn inside `load_tools`, hidden from the model's schema, and can't be supplied by the model; the app and scripts calling the tools directly are unchanged. `tools/_read_ledger.py`.
+
+  **Saving a file from a fenced block in a reply follows the same rule.** That path (`authoring_bridge`) wrote files without going through `write_file`, so it would have walked straight round the guard: a scheduled run that writes its journal entry as a fenced block can erase the journal just as well. A replace-form fence over an existing, non-empty file now saves only if the kin read all of it this turn; the refusal names `append:` as the way to add instead. `append:` fences are never held back. Kin with no tools at all, whose only way to keep memory is a fence and who have no way to read first, are not refused, but whatever they replace is backed up.
+- **Every file a kin replaces is backed up first, not only the soul and memory index.** `write_file` (and a fenced save from a reply) copies any existing file to `<kin>/backups/files/` before replacing it, and `edit_file` does the same when an edit makes a file shorter. The name keeps the file's path (`memory__journal.md.<time>-01.bak`), so the folder is readable at a glance, and the newest five copies per file are kept. The `.bak` ending keeps them out of memory search and recall. A failed backup never blocks the write. Pinned, with a passing case beside every refusal, by `tests/test_tool_guards_overwrite.py`.
+
 ## v0.11.0 — 2026-11-11
 
 ### Added

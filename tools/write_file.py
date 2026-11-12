@@ -2,13 +2,15 @@
 
 """Write text to a file atomically, creating it if missing."""
 
-from ._io import (atomic_write_text, backup_identity_file, heal_parent_dirs,
+from ._io import (atomic_write_text, backup_file_before_change,
+                  backup_identity_file, heal_parent_dirs,
                   identity_misplacement_note, path_within_kin,
                   resolve_kin_path)
+from ._read_ledger import overwrite_refusal
 
 
 def write_file(path: str, content: str, agent_name: str = "",
-               confine_paths: bool = False) -> str:
+               confine_paths: bool = False, read_ledger=None) -> str:
     """Write `content` to the file at `path`. Creates the file (and any
     missing parent directories) if it doesn't exist. Overwrites the file
     completely if it does — there is no "append" mode here; use `note`
@@ -20,6 +22,14 @@ def write_file(path: str, content: str, agent_name: str = "",
     on POSIX) go wherever they point. You cannot traverse out of your
     folder with `..` in a relative path — use an absolute path if that's
     really what you want.
+
+    Replacing a file that already has something in it: you must have read
+    ALL of it with read_file earlier in this same turn, and it must not have
+    changed since. Otherwise the call is refused and nothing is changed --
+    a whole-file write over a file you haven't seen erases whatever you
+    didn't know was there. Creating a new file, or writing a file you
+    already wrote this turn, needs no read. The previous version of any
+    file you replace is kept in your backups folder.
 
     The write is atomic: it goes to a temp file first, then renames over
     the destination. If anything fails partway through, the original
@@ -61,13 +71,23 @@ def write_file(path: str, content: str, agent_name: str = "",
         return (f"write_file: {p} is a directory, not a file. "
                 f"Pass a file path that includes a filename, "
                 f"e.g. {p / 'note.md'}.")
+    # Refuse to replace what the kin hasn't seen. See tools/_read_ledger.py
+    # for the incident this exists for. `read_ledger` is None outside a kin's
+    # turn (scripts, tests, the app), which leaves those callers unguarded.
+    refusal = overwrite_refusal(read_ledger, p)
+    if refusal:
+        return refusal
     # This tool replaces a file whole, so one call can end a kin's identity
-    # with no error and no undo. Copy the soul / memory index aside first.
-    backup_note = backup_identity_file(p, agent_name)
+    # with no error and no undo. Copy the soul / memory index aside first --
+    # and any other file too, into a short rolling backup.
+    backup_note = (backup_identity_file(p, agent_name)
+                   or backup_file_before_change(p, agent_name))
     try:
         atomic_write_text(p, content)
     except Exception as e:
         return f"write_file: could not write {p}: {e}"
+    if read_ledger is not None:
+        read_ledger.record_write(p, whole=True)
     return (f"write_file: wrote {len(content.encode('utf-8'))} bytes to "
             f"{p}{path_heal_note}{backup_note}"
             f"{identity_misplacement_note(p, agent_name)}")

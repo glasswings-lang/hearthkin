@@ -73,6 +73,7 @@ def read_file(
     line_count: int = 0,
     agent_name: str = "",
     confine_paths: bool = False,
+    read_ledger=None,
 ) -> str:
     """Read the text file at `path` and return its contents. Use this
     when you need to see what's actually in a file before reasoning
@@ -158,6 +159,11 @@ def read_file(
         except DocxExtractionError as e:
             return f"read_file: {e}"
         total_bytes = len(text.encode("utf-8"))
+        if read_ledger is not None:
+            # What the kin saw is extracted text, not the file. It must never
+            # count as having seen the file whole -- writing that text back
+            # with write_file would turn a Word document into plain text.
+            read_ledger.record_read(p, whole=False)
         return _sliced_result(text, total_bytes, start_line, line_count,
                               "bytes of extracted text (the .docx itself is "
                               "smaller on disk, it's a compressed zip)",
@@ -179,8 +185,16 @@ def read_file(
         # for a fitting slice and skips the byte cap. robust_decode
         # handles UTF-8 → cp1252 → UTF-8-with-replace gracefully.
         text = robust_decode(data)
-        return _sliced_result(text, total_bytes, start_line, line_count,
-                              "bytes", heal_note)
+        result = _sliced_result(text, total_bytes, start_line, line_count,
+                                "bytes", heal_note)
+        if read_ledger is not None and not result.startswith("read_file:"):
+            # A slice counts as the whole file only when it ran from the
+            # first line to the last.
+            total_lines = len(text.splitlines(keepends=True))
+            whole = (start_line <= 1 and (
+                line_count <= 0 or int(line_count) >= total_lines))
+            read_ledger.record_read(p, whole=whole)
+        return result
 
     # Whole-file mode: apply the byte cap to keep context safe, working on
     # the raw bytes first (matches the on-disk size the footer reports).
@@ -189,6 +203,8 @@ def read_file(
     if truncated:
         data = data[:_MAX_BYTES]
     text = robust_decode(data)
+    if read_ledger is not None:
+        read_ledger.record_read(p, whole=not truncated)
     if truncated:
         text += (
             f"\n\n[read_file: showing first {_MAX_BYTES:,} bytes of "

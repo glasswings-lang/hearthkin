@@ -370,3 +370,87 @@ def backup_identity_file(p, agent_name):
         return f"  (previous {src.name} saved to backups/{dest.name})"
     except Exception:
         return ""
+
+
+# ─── Any other file: a short rolling backup before it is replaced ─── #
+
+# How many earlier copies of one file to keep. Enough to undo a bad morning
+# (a scheduled run that clobbered something, then a second run on top of it),
+# small enough that a file a kin rewrites every hour doesn't fill the disk.
+FILE_BACKUPS_KEEP = 5
+
+
+def _backup_label(src, agent_name):
+    """A flat, readable name for `src` inside backups/files/.
+
+    A file in the kin's own folder keeps its path, with the folder breaks
+    turned into "__" (`memory/plurality-journal.md` becomes
+    `memory__plurality-journal.md`), so a person looking in the folder can
+    tell what each backup is without opening it. A file outside the kin's
+    folder gets its own name plus a short tag from its folder, so two
+    different `notes.md` files elsewhere never share backups."""
+    src = Path(src)
+    try:
+        rel = src.resolve().relative_to(kin_dir(agent_name).resolve())
+        return "__".join(rel.parts)
+    except Exception:
+        import hashlib
+        tag = hashlib.sha1(
+            os.path.normcase(str(src.resolve().parent)).encode("utf-8")
+        ).hexdigest()[:8]
+        return f"outside-{tag}__{src.name}"
+
+
+def backup_file_before_change(p, agent_name, keep=FILE_BACKUPS_KEEP):
+    """Copy `p` aside before a tool replaces or shrinks it.
+
+    The soul and memory index already had this (`backup_identity_file`).
+    Every other file had nothing -- and the file that was actually lost was
+    an ordinary one, a journal in the kin's memory folder. Copies go to
+    `<kin>/backups/files/<label>.<ts>-NN.bak`; only the newest `keep` per
+    file are kept. The `.bak` ending keeps them out of memory search and
+    recall, which read only .md and .txt.
+
+    Best-effort, like the identity backup: a failed backup never blocks the
+    change. Returns a short note for the tool result, or "" when nothing was
+    copied (no kin, no file, an empty file, or an identity file -- those
+    have their own backup above)."""
+    if not agent_name:
+        return ""
+    src = Path(p)
+    try:
+        if not src.is_file() or src.stat().st_size == 0:
+            return ""
+    except OSError:
+        return ""
+    if is_canonical_identity_file(src, agent_name):
+        return ""
+    try:
+        import shutil
+        import time
+        bdir = kin_dir(agent_name) / "backups" / "files"
+        bdir.mkdir(parents=True, exist_ok=True)
+        label = _backup_label(src, agent_name)
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        # Count on from the HIGHEST counter used this second, not the first
+        # free one: pruning deletes the low numbers, and reusing "-01" would
+        # make the newest copy sort as the oldest and be pruned at once.
+        prefix = f"{label}.{stamp}-"
+        used = [int(q.name[len(prefix):-4]) for q in bdir.iterdir()
+                if q.name.startswith(prefix) and q.name.endswith(".bak")
+                and q.name[len(prefix):-4].isdigit()]
+        n = max(used, default=0) + 1
+        dest = bdir / f"{prefix}{n:02d}.bak"
+        shutil.copy2(str(src), str(dest))
+        # Prune: names sort oldest-first (zero-padded stamp and counter).
+        mine = sorted(q for q in bdir.iterdir()
+                      if q.name.startswith(label + ".") and q.suffix == ".bak"
+                      and q.name[len(label) + 1:len(label) + 2].isdigit())
+        for old in mine[:-keep] if keep > 0 else []:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+        return f"  (previous version saved to backups/files/{dest.name})"
+    except Exception:
+        return ""

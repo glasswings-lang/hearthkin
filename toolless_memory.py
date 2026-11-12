@@ -397,7 +397,8 @@ def commit(kin_name, reply_text, enabled_tools, *, shown_scopes=(),
                     "use 'memory.md' or 'memory/<topic>.md'"))
 
         results = refused + (
-            authoring_bridge.commit_authoring_writes(kin_name, allowed)
+            authoring_bridge.commit_authoring_writes(kin_name, allowed,
+                                                     guard=False)
             if allowed else [])
         landed = any(ok for (_p, ok, _d) in results)
 

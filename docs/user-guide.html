@@ -1266,10 +1266,10 @@ Willow would end up with 1200 turns in all.</code></pre>
   <dd>List the files and subfolders inside a folder, so the kin can look before guessing a filename. Same path rules as <code>read_file</code>. In the Read tool bucket.</dd>
 
   <dt><code>write_file</code></dt>
-  <dd>Atomic write. Same path semantics as <code>read_file</code>. Refuses directory targets.</dd>
+  <dd>Atomic write. Same path semantics as <code>read_file</code>. Refuses directory targets. <strong>It won't replace a file the kin hasn't read.</strong> If the file already has something in it, the kin must have read all of it earlier in the same turn, and it must not have changed since; otherwise the write is refused, nothing changes, and the kin is pointed to <code>note</code> or <code>edit_file</code> instead. This exists because a scheduled run once used <code>write_file</code> to add one entry to a long journal and erased every earlier entry, though the kin's own notes said not to. A rule is something a model has to remember; a refusal isn't. New files, empty files, and files the kin wrote itself that turn need no read. And every file it does replace is copied first to <code>backups/files/</code> in the kin's folder (the last five copies of each are kept), so a bad write is one copy back.</dd>
 
   <dt><code>edit_file</code></dt>
-  <dd>Replace a unique substring in a file.</dd>
+  <dd>Replace a unique substring in a file. No read needed first, because the text has to match exactly, but if the kin read the file that turn and something else changed it since, the edit is refused until it reads again. An edit that makes a file shorter backs it up to <code>backups/files/</code> first.</dd>
 
   <dt><code>note</code></dt>
   <dd>Append a timestamped note to a file in the kin folder.</dd>
@@ -2258,7 +2258,8 @@ understood, exactly as it does for you at the console.</p>
 │       ├── telegram_history.json # per-Telegram-user histories
 │       ├── telegram_archive/     # conversations filed away by /new (private ones)
 │       ├── backups/              # copies of soul.md / memory.md from before a kin
-│       │                         #   overwrote them, plus import/restore backups
+│       │   │                     #   overwrote them, plus import/restore backups
+│       │   └── files/            # the last 5 copies of any other file a kin replaced
 │       ├── voice_history.md      # voice-model swap audit log (per-kin)
 │       ├── cron_history/
 │       │   └── &lt;job&gt;.jsonl       # past runs of a scheduled job that keeps its own history

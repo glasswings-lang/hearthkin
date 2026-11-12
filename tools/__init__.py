@@ -29,6 +29,7 @@ Two-line registration is a small price for "build.bat just works."
 import inspect
 
 from ._schema import build_schema
+from ._read_ledger import ReadLedger
 
 
 # Per-tool imports — populate as tools land:
@@ -148,6 +149,21 @@ _REQUIRES_VISION = frozenset({"use_webcam"})
 _STAGING_TOOLS = frozenset({"read_staging", "archive_staging"})
 
 
+# The newest turn's ledger per kin, for the one write path that doesn't run
+# through a tool: a file saved from a fenced block in the kin's reply
+# (authoring_bridge). That save happens just after the same turn's tool loop,
+# so the newest ledger is that turn's. Two surfaces running one kin at the
+# same moment could see each other's ledger; the worst that does is let a
+# read on one count on the other, or refuse a save that would have been fine.
+_CURRENT_LEDGERS = {}
+
+
+def current_ledger(agent_name):
+    """This kin's newest turn ledger, or None if no tool set was built for
+    it in this process."""
+    return _CURRENT_LEDGERS.get(agent_name)
+
+
 def list_available():
     """Names of all tools registered in this build. The per-kin allowlist
     can only enable names that appear here."""
@@ -167,7 +183,8 @@ _PROACTIVE_TOOLS = frozenset({"reach_out"})
 # Params that are supplied by the framework (never by the model) and must be
 # stripped from every model-facing schema regardless of whether the caller
 # passed them in `context`. See the hide logic in `load_tools`.
-_FRAMEWORK_HIDDEN_PARAMS = frozenset({"agent_name", "confine_paths"})
+_FRAMEWORK_HIDDEN_PARAMS = frozenset({"agent_name", "confine_paths",
+                                      "read_ledger"})
 
 
 def load_tools(allowed_names, *, context=None, model=None, cron_turn=False,
@@ -203,7 +220,15 @@ def load_tools(allowed_names, *, context=None, model=None, cron_turn=False,
       executor_dict: {name: callable(args_dict) -> str}. Pass as
                      `tool_executor=` to `run_tool_loop()`.
     """
-    context = context or {}
+    context = dict(context or {})
+    # One ledger per tool set = one turn (or one scheduled run). read_file
+    # records what the kin was shown; write_file refuses to replace a file the
+    # kin hasn't seen in full this turn. See tools/_read_ledger.py. Always
+    # bound here, never left to the caller, so a kin's tools are always
+    # guarded and the model can't supply its own.
+    context["read_ledger"] = ReadLedger()
+    if context.get("agent_name"):
+        _CURRENT_LEDGERS[context["agent_name"]] = context["read_ledger"]
     # Capability gate: drop vision-only tools when model can't see.
     # Done up here (before the per-tool loop) so the same filtering
     # applies whether the caller passed model explicitly or buried

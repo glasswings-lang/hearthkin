@@ -6,6 +6,7 @@ import re
 
 from ._io import (
     atomic_write_text,
+    backup_file_before_change,
     backup_identity_file,
     find_existing_path,
     identity_misplacement_note,
@@ -13,6 +14,7 @@ from ._io import (
     resolve_kin_path,
     robust_read_text,
 )
+from ._read_ledger import edit_refusal
 
 
 # Several tools append an out-of-band marker onto the content they return,
@@ -77,7 +79,7 @@ def _find_stripped_line_span(text, old_string):
 
 
 def edit_file(path: str, old_string: str, new_string: str, agent_name: str = "",
-              confine_paths: bool = False) -> str:
+              confine_paths: bool = False, read_ledger=None) -> str:
     """Replace `old_string` with `new_string` in the file at `path`.
     `old_string` must appear exactly once in the file — if it's not
     there, the call fails; if it appears more than once, the call
@@ -121,6 +123,11 @@ def edit_file(path: str, old_string: str, new_string: str, agent_name: str = "",
         path_heal_note = f" (matched path {p}, ignoring whitespace/case)"
     if p.is_dir():
         return f"edit_file: {p} is a directory, not a file."
+    # If the kin read this file earlier in the turn and it has changed on
+    # disk since, it is editing a picture of the file that's no longer true.
+    refusal = edit_refusal(read_ledger, p)
+    if refusal:
+        return refusal
     try:
         # robust_read_text falls back UTF-8 → cp1252 → UTF-8-with-replace
         # so a Markdown file with Windows smart-character bytes (em-dash
@@ -208,11 +215,18 @@ def edit_file(path: str, old_string: str, new_string: str, agent_name: str = "",
         else text.replace(old_string, new_string, 1)
     # Surgical by nature, but a wrong old_string can still swallow most of a
     # file -- and this is the soul. Cheap insurance, same as write_file.
+    # Any other file: back it up when the edit takes away more than it adds.
+    # An append or a small fix can't lose much; an old_string that swallows
+    # half a journal can, and that's exactly the case worth an undo.
     backup_note = backup_identity_file(p, agent_name)
+    if not backup_note and len(new_text) < len(text):
+        backup_note = backup_file_before_change(p, agent_name)
     try:
         atomic_write_text(p, new_text)
     except Exception as e:
         return f"edit_file: could not write {p}: {e}"
+    if read_ledger is not None:
+        read_ledger.record_write(p, whole=False)
     if healed:
         note = " (ignored a read_file footer in your old_string)"
     elif healed_ws:
