@@ -87,7 +87,8 @@ for surface in ("telegram", "discord"):
           not dup)
 
     for attr in ("id_field", "label_field", "share_desktop_check",
-                 "mirror_check", "cap_field", "exec_choice", "file_choice"):
+                 "mirror_check", "cap_field", "exec_choice", "file_choice",
+                 "is_me_check"):
         ctrl = getattr(d, attr, None)
         check(f"{surface}: {attr} is a tab stop", ctrl in st)
     check(f"{surface}: every tool level and webcam choice is a tab stop",
@@ -97,6 +98,7 @@ for surface in ("telegram", "discord"):
     # Each explainer is the very next Tab stop after its control, so Tab
     # from a setting lands on what it does.
     for attr, hint in (("label_field", "What the display name does"),
+                       ("is_me_check", "What This is me does"),
                        ("share_desktop_check", "What sharing with the desktop does"),
                        ("mirror_check", "What mirroring desktop messages does"),
                        ("cap_field", "What the tool call limit does"),
@@ -112,14 +114,14 @@ for surface in ("telegram", "discord"):
         check(f"{surface}: the question '{heading}' is itself a tab stop",
               any(n.startswith(heading) for n in names))
     check(f"{surface}: a new person starts on the safe settings",
-          d.get_settings() == {"label": "", "bucket": "none",
+          d.get_settings() == {"label": "", "is_me": False, "bucket": "none",
                                "share_desktop": False, "mirror": False,
                                "webcam": "ask", "tool_cap": None,
                                "exec_approval": "default",
                                "file_reach": "default"})
     d.Destroy()
 
-    full = {"label": "Alex", "bucket": "full", "share_desktop": True,
+    full = {"label": "Alex", "is_me": True, "bucket": "full", "share_desktop": True,
             "mirror": True, "webcam": "deny", "tool_cap": 7,
             "exec_approval": "auto", "file_reach": "inside"}
     d = PersonWindow(None, surface, "12345", full)

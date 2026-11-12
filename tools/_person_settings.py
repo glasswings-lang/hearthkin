@@ -37,6 +37,12 @@ No wx here: the bots import this.
 PERSON_SETTINGS = [
     {"key": "label", "kind": "text", "default": "",
      "store": "user_labels"},
+    # The ONLY setting that means "this person is the operator". Sharing the
+    # desktop conversation used to stand in for it, which mixed up where a
+    # conversation lives with who someone is (operator's correction, 12 Nov
+    # 2026). Never taken from a "*" (anyone) entry.
+    {"key": "is_me", "kind": "bool", "default": False,
+     "store": "user_is_operator", "no_wildcard": True},
     {"key": "bucket", "kind": "bucket", "default": "none",
      "store": "user_tools"},
     {"key": "share_desktop", "kind": "bool", "default": False,
@@ -174,7 +180,7 @@ def person_value(section, surface, uid, key, fallback=None):
     d = (section if isinstance(section, dict) else {}).get(
         store_key(s, surface)) or {}
     if isinstance(d, dict):
-        for k in (str(uid), "*"):
+        for k in ((str(uid),) if s.get("no_wildcard") else (str(uid), "*")):
             if k in d:
                 return _clean(s, d[k])
     return s["default"] if fallback is None else _clean(s, fallback)

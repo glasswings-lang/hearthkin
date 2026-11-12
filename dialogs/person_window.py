@@ -60,15 +60,24 @@ def _wording(surface):
         "share_hint": (
             "When on: this person's messages and the kin's replies to them "
             "go into the kin's main conversation, the same one the desktop "
-            "uses. Commands that ask first are asked right here in the "
-            "chat. It doesn't change their tool-call limit. Off: their "
-            "conversation is kept separate." if tg else
+            "uses. It doesn't make them you, and doesn't change their "
+            "tool-call limit. Off: their conversation is kept separate."
+            if tg else
             "When on: this person's messages and the kin's replies to them "
             "go into the kin's main conversation, the same one the desktop "
             "uses. On Discord the kin still only reads back this channel's "
             "part of the conversation, so your desktop chat is never shown "
-            "to a server. It doesn't change their tool-call limit. Off: "
-            "kept separate."),
+            "to a server. It doesn't make them you, and doesn't change their "
+            "tool-call limit. Off: kept separate."),
+        "is_me_hint": (
+            "Tick this only on your own entry. It's the one thing that tells "
+            "Hearthkin this person is you: commands that ask first are "
+            "asked right here in the chat (handy from your phone), you can "
+            "use /reset, and you see full error details. Everyone else's "
+            "commands are asked on this computer." if tg else
+            "Tick this only on your own entry. It's the one thing that tells "
+            "Hearthkin this person is you. On Discord, commands that ask "
+            "first are still asked on this computer, never in a server."),
         "mirror_label": (
             "&Mirror desktop messages to this person on Telegram" if tg else
             "&Mirror desktop messages to this person in Discord direct "
@@ -83,8 +92,8 @@ def _wording(surface):
             "setting\" follows the box \"Run remote (Telegram/Discord) exec "
             "without asking\" in Settings, Tools. \"Ask me first\" always "
             "asks you, never them: "
-            + ("in the chat if this is you (sharing with the desktop), "
-               "otherwise in a window on this computer." if tg else
+            + ("in the chat if \"This is me\" is ticked, otherwise in a "
+               "window on this computer." if tg else
                "in a window on this computer.")
             + " Commands on the never-run list are always refused."),
     }
@@ -152,6 +161,12 @@ class PersonWindow(wx.Dialog):
         self.label_field = wx.TextCtrl(p, value=value or "")
         add(self.label_field)
         add(_hint(p, w["label_hint"], "What the display name does"), wx.ALL)
+
+    def _build_is_me(self, p, add, w, value):
+        self.is_me_check = wx.CheckBox(p, label="&This is me (the operator)")
+        self.is_me_check.SetValue(bool(value))
+        add(self.is_me_check, wx.LEFT | wx.RIGHT | wx.TOP)
+        add(_hint(p, w["is_me_hint"], "What This is me does", 4), wx.ALL)
 
     def _build_bucket(self, p, add, w, value):
         add(_hint(p, "Tool access for this person:",
@@ -277,6 +292,7 @@ class PersonWindow(wx.Dialog):
         fi = self.file_choice.GetSelection()
         return {
             "label": self.label_field.GetValue().strip(),
+            "is_me": bool(self.is_me_check.GetValue()),
             "bucket": bucket,
             "share_desktop": bool(self.share_desktop_check.GetValue()),
             "mirror": bool(self.mirror_check.GetValue()),

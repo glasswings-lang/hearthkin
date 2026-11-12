@@ -38,7 +38,7 @@ def check(label, cond):
         _fails.append(label)
 
 
-FULL = {"label": "Alex", "bucket": "full", "share_desktop": True,
+FULL = {"label": "Alex", "is_me": True, "bucket": "full", "share_desktop": True,
         "mirror": True, "webcam": "auto", "tool_cap": 25,
         "exec_approval": "ask", "file_reach": "outside"}
 DEFAULTS = {s["key"]: s["default"] for s in PERSON_SETTINGS}
@@ -97,6 +97,14 @@ check("files: 'allow outside' wins over the kin's 'keep inside'",
 check("files: no setting follows the kin-wide box",
       resolve_file_reach({}, "discord", "1", KIN_OUT) is False
       and resolve_file_reach({}, "discord", "1", KIN_IN) is True)
+check("'This is me' is never taken from a '*' (anyone) entry",
+      person_value({"user_is_operator": {"*": True}}, "discord", "8",
+                   "is_me") is False
+      and person_value({"user_is_operator": {"8": True}}, "discord", "8",
+                       "is_me") is True)
+check("sharing doesn't make someone 'me'",
+      load_person({"user_share_desktop": {"8": True}}, "telegram",
+                  "8")["is_me"] is False)
 check("a '*' entry on Discord covers anyone without their own",
       person_value({"user_webcam_permission": {"*": "deny"}}, "discord",
                    "8", "webcam") == "deny")

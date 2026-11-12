@@ -62,7 +62,7 @@ from telegram_bot import TelegramBot, _DENY_RESULTS  # noqa: E402
 
 KIN = "Wren"
 kin_dir(KIN).mkdir(parents=True, exist_ok=True)
-OPERATOR, FRIEND = "100", "200"
+OPERATOR, FRIEND, SHARER = "100", "200", "300"
 
 
 def telegram_run(kin_box, per_user, who, desktop_answer="allow",
@@ -73,7 +73,8 @@ def telegram_run(kin_box, per_user, who, desktop_answer="allow",
     save_agent_config(KIN, cfg)
     bot = TelegramBot.__new__(TelegramBot)
     bot.agent_name = KIN
-    tg = {"user_share_desktop": {OPERATOR: True},
+    tg = {"user_is_operator": {OPERATOR: True},
+          "user_share_desktop": {OPERATOR: True, SHARER: True},
           "user_exec_approval": per_user}
     bot.get_config = lambda: tg
     seen = {"ran": False, "chat": 0, "desktop": 0, "sent": []}
@@ -108,8 +109,20 @@ check("Telegram: 'ask first' for a friend asks YOUR desktop, not them",
 check("...and tells them it's waiting on you",
       any("operator" in t for t in s["sent"]))
 s = telegram_run(True, {OPERATOR: "ask"}, OPERATOR)
-check("Telegram: 'ask first' for you asks you in the chat",
+check("Telegram: 'ask first' for you ('This is me') asks you in the chat",
       s["chat"] == 1 and s["desktop"] == 0 and s["ran"])
+s = telegram_run(True, {SHARER: "ask"}, SHARER)
+check("Telegram: someone you SHARE with, but who isn't you, is asked on "
+      "your desktop, not in their chat",
+      s["desktop"] == 1 and s["chat"] == 0)
+_b = TelegramBot.__new__(TelegramBot)
+_b.agent_name = KIN
+_b.get_config = lambda: {"user_is_operator": {OPERATOR: True},
+                         "user_share_desktop": {SHARER: True},
+                         "user_tools": {SHARER: "write"}}
+check("Telegram: only 'This is me' can wipe the kin's memory with /reset, "
+      "not someone you share with",
+      _b._user_is_privileged(OPERATOR) and not _b._user_is_privileged(SHARER))
 s = telegram_run(False, {}, FRIEND)
 check("Telegram: kin box off, a friend still can't approve their own",
       s["chat"] == 0 and s["desktop"] == 1)

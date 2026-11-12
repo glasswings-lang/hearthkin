@@ -3813,15 +3813,26 @@ class TelegramBot:
             return False
         return bool(share.get(str(user_id)) or share.get(user_id))
 
+    def _user_is_me(self, user_id):
+        """Has the operator marked this person "This is me" in their
+        window? The ONLY thing that makes Hearthkin treat a Telegram person
+        as the operator. Sharing the desktop conversation is separate: it's
+        about where the conversation is kept, and the operator may share
+        with someone else."""
+        from tools._person_settings import person_value
+        return bool(person_value(self._tg_section(), "telegram", user_id,
+                                 "is_me"))
+
     def _user_is_privileged(self, user_id):
         """Is this Telegram user trusted with kin-wide destructive
         operations (wiping memory.md via /reset)? True when the
-        operator has marked them share-with-desktop (they effectively
-        ARE the operator's surface) or given them the 'full' tool
-        bucket (the highest trust tier). Audit SH2: anything below
+        operator has marked them "This is me", or given them the 'full'
+        tool bucket (the highest trust tier). Audit SH2: anything below
         that is a chat-level guest and must not be able to destroy
-        state shared with every other surface."""
-        if self._user_shares_desktop(user_id):
+        state shared with every other surface. (Sharing the desktop
+        conversation used to count as "this is me"; since 12 Nov 2026
+        it doesn't — sharing is only about where the conversation lives.)"""
+        if self._user_is_me(user_id):
             return True
         bucket = self._user_tool_bucket(user_id)
         return isinstance(bucket, str) and bucket.strip().lower() == "full"
@@ -4897,12 +4908,12 @@ class TelegramBot:
                 # and local file paths — operator-relevant, but not
                 # something every allowlisted guest should see (audit
                 # L-S6; the group path doesn't post errors at all for
-                # the same reason). Share-with-desktop users are the
-                # operator's own surface and keep the details.
+                # the same reason). Only the operator ("This is me")
+                # keeps the details.
                 from chat_helpers import humanize_error
                 _host = resolve_kin_ollama_host(
                     full_cfg.get("ollama_host_name", "")) or None
-                if self._user_shares_desktop(user_id):
+                if self._user_is_me(user_id):
                     self._send_chunked(chat_id, "⚠️ " + humanize_error(
                         e, kin=self.agent_name, host=_host))
                 else:
@@ -6345,10 +6356,11 @@ class TelegramBot:
             if resolve_exec_approval(_per_user, user_id, _cfg) == "auto":
                 return inner_exec(args)
             # Ask first. Only the operator answers: if this person IS the
-            # operator (shares the desktop conversation), ask here in the
+            # operator ("This is me" in their window — NOT sharing, which is
+            # only about where the conversation lives), ask here in the
             # chat, which works from a phone. Anyone else's request goes to
             # the operator's desktop, so nobody approves their own command.
-            if self._user_shares_desktop(user_id):
+            if self._user_is_me(user_id):
                 decision = self._request_exec_approval_telegram(
                     user_id, chat_id, command,
                     f"background={background}" if background else "",
