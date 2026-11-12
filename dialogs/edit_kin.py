@@ -1303,9 +1303,12 @@ class EditKinDialog(wx.Dialog):
         dc_users_btn_row.Add(self.dc_edit_user_btn, flag=wx.RIGHT, border=6)
         dc_users_btn_row.Add(self.dc_remove_user_btn)
 
+        # Since 12 Nov 2026 sharing is per person, in each person's window,
+        # as on Telegram. This box only covers people saved before that.
         self.dc_share_check = wx.CheckBox(
             host, label="&Merge Discord history into this kin's main "
-                        "conversation")
+                        "conversation (older entries only; each person's "
+                        "window now has its own Share box)")
         self.dc_share_check.Bind(wx.EVT_CHECKBOX, self._on_dc_share_toggle)
 
         # "&r" belongs to "When to &respond" above — this checkbox had the
@@ -2963,62 +2966,68 @@ class EditKinDialog(wx.Dialog):
             saved_index=_prev_idx,
         )
 
-    def _on_tg_add_user(self, event):
-        dlg = _TelegramUserDialog(self, user_id="", label="", bucket="none",
-                                  share_desktop=False, mirror_to_telegram=False,
-                                  webcam_permission="ask")
-        if dlg.ShowModal() == wx.ID_OK:
-            (uid, label, bucket, share_desktop,
-             mirror_to_telegram, webcam_perm) = dlg.get_values()
-            cap = dlg.get_tool_cap()
-            if not dlg.tool_cap_is_valid():
-                wx.MessageBox("The tool call limit has to be a whole number, or "
-                              "blank to use the kin's setting. Nothing was saved.",
-                              "Add user", wx.OK | wx.ICON_WARNING)
-            elif not uid:
-                wx.MessageBox("User ID can't be empty.", "Add user",
+    # --- one person window for both surfaces (12 Nov 2026) --- #
+    #
+    # Telegram and Discord share one window (dialogs/person_window.py) and
+    # one list of per-person settings (tools/_person_settings.py), so adding
+    # or editing a person works the same way on both and a new setting
+    # reaches both at once.
+
+    def _person_window_flow(self, surface, uid_old=None):
+        from tools._person_settings import load_person, save_person
+        from .person_window import PersonWindow
+        tg = surface == "telegram"
+        default = DEFAULT_TELEGRAM_CONFIG if tg else DEFAULT_DISCORD_CONFIG
+        sec = self.cfg.get(surface) or {}
+        values = None
+        if uid_old:
+            # Discord's sharing used to be one box for the whole kin; a
+            # person saved before per-person sharing inherits it.
+            fb = ({} if tg else
+                  {"share_desktop": bool(sec.get("share_desktop", False))})
+            values = load_person(sec, surface, uid_old, fb)
+        title = "Edit person" if uid_old else "Add person"
+        dlg = PersonWindow(self, surface, uid_old or "", values)
+        try:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            v = dlg.get_settings()
+            uid = dlg.get_user_id()
+            if not dlg.cap_is_valid():
+                wx.MessageBox("The tool call limit has to be a whole number, "
+                              "or blank to use the kin's setting. Nothing "
+                              "was saved.", title, wx.OK | wx.ICON_WARNING)
+                return
+            if tg and not uid:
+                wx.MessageBox("User ID can't be empty.", title,
                               wx.OK | wx.ICON_WARNING)
-            else:
-                tg = dict(self.cfg.get("telegram") or DEFAULT_TELEGRAM_CONFIG)
-                allow = list(tg.get("allow_from") or [])
-                labels = dict(tg.get("user_labels") or {})
-                tools = dict(tg.get("user_tools") or {})
-                share = dict(tg.get("user_share_desktop") or {})
-                mirror = dict(tg.get("user_mirror_to_telegram") or {})
-                webcam = dict(tg.get("user_webcam_permission") or {})
-                if uid not in [str(x) for x in allow]:
-                    allow.append(uid)
-                labels[uid] = label
-                tools[uid] = bucket
-                share[uid] = share_desktop
-                mirror[uid] = mirror_to_telegram
-                webcam[uid] = webcam_perm
-                caps = dict(tg.get("user_tool_caps") or {})
-                if cap is None:
-                    caps.pop(uid, None)
-                else:
-                    caps[uid] = cap
-                tg["user_tool_caps"] = caps
-                ex = dict(tg.get("user_exec_approval") or {})
-                if dlg.get_exec_approval() == "default":
-                    ex.pop(uid, None)
-                else:
-                    ex[uid] = dlg.get_exec_approval()
-                tg["user_exec_approval"] = ex
-                tg["allow_from"] = allow
-                tg["user_labels"] = labels
-                tg["user_tools"] = tools
-                tg["user_share_desktop"] = share
-                tg["user_mirror_to_telegram"] = mirror
-                tg["user_webcam_permission"] = webcam
-                self._commit_telegram_dict(tg)
+                return
+            if not tg and not self._dc_valid_user_id(uid):
+                wx.MessageBox(
+                    "A Discord user ID is a string of digits — turn on "
+                    "Developer Mode in Discord, right-click someone and "
+                    "choose Copy User ID. Type * instead to let anyone talk "
+                    "to this kin.", title, wx.OK | wx.ICON_WARNING)
+                return
+            share_old = bool(values and values.get("share_desktop"))
+            new = save_person(dict(self.cfg.get(surface) or default),
+                              surface, uid_old, uid, v)
+            if tg:
+                self._commit_telegram_dict(new)
                 self._refresh_tg_users_list()
-                # Re-adding a user who was removed earlier? They might
-                # still have an orphaned slice in telegram_history.json.
-                # If they're now share=True, offer to migrate it in.
-                if share_desktop:
+                # Sharing just turned on: offer to bring this person's
+                # separate history into the main conversation, or the kin
+                # loses the earlier Telegram context the moment it does.
+                if v["share_desktop"] and not share_old:
                     self._maybe_offer_telegram_migration(uid)
-        dlg.Destroy()
+            else:
+                self._commit_discord_dict(new)
+                self._refresh_dc_users_list()
+        finally:
+            dlg.Destroy()
+
+    def _on_tg_add_user(self, event):
+        self._person_window_flow("telegram")
 
     def _on_tg_edit_user(self, event):
         idx = self.tg_users_list.GetSelection()
@@ -3026,87 +3035,7 @@ class EditKinDialog(wx.Dialog):
             wx.MessageBox("Pick a user from the list first.", "Edit user",
                           wx.OK | wx.ICON_INFORMATION)
             return
-        uid_old = self._tg_user_ids_in_order[idx]
-        tg = (self.cfg.get("telegram") or {})
-        labels = tg.get("user_labels") or {}
-        tools = tg.get("user_tools") or {}
-        share = tg.get("user_share_desktop") or {}
-        mirror = tg.get("user_mirror_to_telegram") or {}
-        webcam = tg.get("user_webcam_permission") or {}
-        dlg = _TelegramUserDialog(
-            self,
-            user_id=uid_old,
-            label=labels.get(uid_old, ""),
-            bucket=tools.get(uid_old, "none"),
-            share_desktop=bool(share.get(uid_old, False)),
-            mirror_to_telegram=bool(mirror.get(uid_old, False)),
-            webcam_permission=str(webcam.get(uid_old, "ask")),
-            tool_cap=(tg.get("user_tool_caps") or {}).get(uid_old),
-            exec_approval=(tg.get("user_exec_approval") or {}).get(
-                uid_old, "default"),
-        )
-        if dlg.ShowModal() == wx.ID_OK:
-            (uid_new, label_new, bucket_new, share_new,
-             mirror_new, webcam_new) = dlg.get_values()
-            cap_new = dlg.get_tool_cap()
-            share_old = bool((tg.get("user_share_desktop") or {}).get(uid_old, False))
-            if not dlg.tool_cap_is_valid():
-                wx.MessageBox("The tool call limit has to be a whole number, or "
-                              "blank to use the kin's setting. Nothing was saved.",
-                              "Edit user", wx.OK | wx.ICON_WARNING)
-            elif not uid_new:
-                wx.MessageBox("User ID can't be empty.", "Edit user",
-                              wx.OK | wx.ICON_WARNING)
-            else:
-                tg = dict(self.cfg.get("telegram") or DEFAULT_TELEGRAM_CONFIG)
-                allow = [str(x) for x in (tg.get("allow_from") or [])]
-                labels = dict(tg.get("user_labels") or {})
-                tools = dict(tg.get("user_tools") or {})
-                share = dict(tg.get("user_share_desktop") or {})
-                mirror = dict(tg.get("user_mirror_to_telegram") or {})
-                webcam = dict(tg.get("user_webcam_permission") or {})
-                # If the user_id changed, drop the old entries and add new.
-                if uid_new != uid_old:
-                    allow = [a for a in allow if a != uid_old]
-                    labels.pop(uid_old, None)
-                    tools.pop(uid_old, None)
-                    share.pop(uid_old, None)
-                    mirror.pop(uid_old, None)
-                    webcam.pop(uid_old, None)
-                if uid_new not in allow:
-                    allow.append(uid_new)
-                labels[uid_new] = label_new
-                tools[uid_new] = bucket_new
-                share[uid_new] = share_new
-                mirror[uid_new] = mirror_new
-                webcam[uid_new] = webcam_new
-                caps = dict(tg.get("user_tool_caps") or {})
-                caps.pop(uid_old, None)
-                if cap_new is not None:
-                    caps[uid_new] = cap_new
-                tg["user_tool_caps"] = caps
-                ex = dict(tg.get("user_exec_approval") or {})
-                ex.pop(uid_old, None)
-                if dlg.get_exec_approval() != "default":
-                    ex[uid_new] = dlg.get_exec_approval()
-                tg["user_exec_approval"] = ex
-                tg["allow_from"] = allow
-                tg["user_labels"] = labels
-                tg["user_tools"] = tools
-                tg["user_share_desktop"] = share
-                tg["user_mirror_to_telegram"] = mirror
-                tg["user_webcam_permission"] = webcam
-                self._commit_telegram_dict(tg)
-                self._refresh_tg_users_list()
-                # Toggling share from off to on for an existing user
-                # (or for a re-added user with the same id) — offer to
-                # migrate any orphaned per-user history into the kin's
-                # main conversation. Otherwise the kin would lose all
-                # context from the prior Telegram chat the moment
-                # sharing turns on.
-                if share_new and not share_old:
-                    self._maybe_offer_telegram_migration(uid_new)
-        dlg.Destroy()
+        self._person_window_flow("telegram", self._tg_user_ids_in_order[idx])
 
     def _on_tg_remove_user(self, event):
         idx = self.tg_users_list.GetSelection()
@@ -3122,29 +3051,10 @@ class EditKinDialog(wx.Dialog):
         )
         if confirm != wx.YES:
             return
-        tg = dict(self.cfg.get("telegram") or DEFAULT_TELEGRAM_CONFIG)
-        allow = [a for a in (tg.get("allow_from") or []) if str(a) != uid]
-        labels = dict(tg.get("user_labels") or {})
-        labels.pop(uid, None)
-        tools = dict(tg.get("user_tools") or {})
-        tools.pop(uid, None)
-        share = dict(tg.get("user_share_desktop") or {})
-        share.pop(uid, None)
-        mirror = dict(tg.get("user_mirror_to_telegram") or {})
-        mirror.pop(uid, None)
-        webcam = dict(tg.get("user_webcam_permission") or {})
-        webcam.pop(uid, None)
-        for _key in ("user_tool_caps", "user_exec_approval"):
-            _d = dict(tg.get(_key) or {})
-            _d.pop(uid, None)
-            tg[_key] = _d
-        tg["allow_from"] = allow
-        tg["user_labels"] = labels
-        tg["user_tools"] = tools
-        tg["user_share_desktop"] = share
-        tg["user_mirror_to_telegram"] = mirror
-        tg["user_webcam_permission"] = webcam
-        self._commit_telegram_dict(tg)
+        from tools._person_settings import remove_person
+        self._commit_telegram_dict(remove_person(
+            dict(self.cfg.get("telegram") or DEFAULT_TELEGRAM_CONFIG),
+            "telegram", uid))
         self._refresh_tg_users_list()
 
     # --- Telegram group list handlers --- #
@@ -3621,45 +3531,7 @@ class EditKinDialog(wx.Dialog):
         return bool(uid) and (uid == "*" or uid.isdigit())
 
     def _on_dc_add_user(self, event):
-        dlg = _DiscordUserDialog(self, user_id="", bucket="none")
-        if dlg.ShowModal() == wx.ID_OK:
-            uid, bucket = dlg.get_values()
-            cap = dlg.get_tool_cap()
-            if not dlg.tool_cap_is_valid():
-                wx.MessageBox("The tool call limit has to be a whole number, or "
-                              "blank to use the kin's setting. Nothing was saved.",
-                              "Add person", wx.OK | wx.ICON_WARNING)
-            elif not self._dc_valid_user_id(uid):
-                wx.MessageBox(
-                    "A Discord user ID is a string of digits — turn on "
-                    "Developer Mode in Discord, right-click someone and "
-                    "choose Copy User ID. Type * instead to let anyone talk "
-                    "to this kin.",
-                    "Add person", wx.OK | wx.ICON_WARNING)
-            else:
-                dc = dict(self.cfg.get("discord") or DEFAULT_DISCORD_CONFIG)
-                allow = [str(x) for x in (dc.get("allow_from") or [])]
-                tools = dict(dc.get("user_tools") or {})
-                if uid not in allow:
-                    allow.append(uid)
-                tools[uid] = bucket
-                caps = dict(dc.get("user_tool_caps") or {})
-                if cap is None:
-                    caps.pop(uid, None)
-                else:
-                    caps[uid] = cap
-                dc["user_tool_caps"] = caps
-                ex = dict(dc.get("user_exec_approval") or {})
-                if dlg.get_exec_approval() == "default":
-                    ex.pop(uid, None)
-                else:
-                    ex[uid] = dlg.get_exec_approval()
-                dc["user_exec_approval"] = ex
-                dc["allow_from"] = allow
-                dc["user_tools"] = tools
-                self._commit_discord_dict(dc)
-                self._refresh_dc_users_list()
-        dlg.Destroy()
+        self._person_window_flow("discord")
 
     def _on_dc_edit_user(self, event):
         idx = self.dc_users_list.GetSelection()
@@ -3667,50 +3539,7 @@ class EditKinDialog(wx.Dialog):
             wx.MessageBox("Pick a person from the list first.", "Edit person",
                           wx.OK | wx.ICON_INFORMATION)
             return
-        uid_old = self._dc_user_ids_in_order[idx]
-        dc = (self.cfg.get("discord") or {})
-        tools = dc.get("user_tools") or {}
-        dlg = _DiscordUserDialog(
-            self, user_id=uid_old, bucket=tools.get(uid_old, "none"),
-            tool_cap=(dc.get("user_tool_caps") or {}).get(uid_old),
-            exec_approval=(dc.get("user_exec_approval") or {}).get(
-                uid_old, "default"))
-        if dlg.ShowModal() == wx.ID_OK:
-            uid_new, bucket_new = dlg.get_values()
-            cap_new = dlg.get_tool_cap()
-            if not dlg.tool_cap_is_valid():
-                wx.MessageBox("The tool call limit has to be a whole number, or "
-                              "blank to use the kin's setting. Nothing was saved.",
-                              "Edit person", wx.OK | wx.ICON_WARNING)
-            elif not self._dc_valid_user_id(uid_new):
-                wx.MessageBox(
-                    "A Discord user ID is a string of digits, or * for "
-                    "anyone.", "Edit person", wx.OK | wx.ICON_WARNING)
-            else:
-                dc = dict(self.cfg.get("discord") or DEFAULT_DISCORD_CONFIG)
-                allow = [str(x) for x in (dc.get("allow_from") or [])]
-                tools = dict(dc.get("user_tools") or {})
-                if uid_new != uid_old:
-                    allow = [a for a in allow if a != uid_old]
-                    tools.pop(uid_old, None)
-                if uid_new not in allow:
-                    allow.append(uid_new)
-                tools[uid_new] = bucket_new
-                caps = dict(dc.get("user_tool_caps") or {})
-                caps.pop(uid_old, None)
-                if cap_new is not None:
-                    caps[uid_new] = cap_new
-                dc["user_tool_caps"] = caps
-                ex = dict(dc.get("user_exec_approval") or {})
-                ex.pop(uid_old, None)
-                if dlg.get_exec_approval() != "default":
-                    ex[uid_new] = dlg.get_exec_approval()
-                dc["user_exec_approval"] = ex
-                dc["allow_from"] = allow
-                dc["user_tools"] = tools
-                self._commit_discord_dict(dc)
-                self._refresh_dc_users_list()
-        dlg.Destroy()
+        self._person_window_flow("discord", self._dc_user_ids_in_order[idx])
 
     def _on_dc_remove_user(self, event):
         idx = self.dc_users_list.GetSelection()
@@ -3725,19 +3554,10 @@ class EditKinDialog(wx.Dialog):
                 f"Their past messages in the channel are not touched.",
                 "Remove person", wx.YES_NO | wx.ICON_QUESTION) != wx.YES:
             return
-        dc = dict(self.cfg.get("discord") or DEFAULT_DISCORD_CONFIG)
-        dc["allow_from"] = [str(x) for x in (dc.get("allow_from") or [])
-                            if str(x) != uid]
-        tools = dict(dc.get("user_tools") or {})
-        tools.pop(uid, None)
-        dc["user_tools"] = tools
-        caps = dict(dc.get("user_tool_caps") or {})
-        caps.pop(uid, None)
-        dc["user_tool_caps"] = caps
-        ex = dict(dc.get("user_exec_approval") or {})
-        ex.pop(uid, None)
-        dc["user_exec_approval"] = ex
-        self._commit_discord_dict(dc)
+        from tools._person_settings import remove_person
+        self._commit_discord_dict(remove_person(
+            dict(self.cfg.get("discord") or DEFAULT_DISCORD_CONFIG),
+            "discord", uid))
         self._refresh_dc_users_list()
 
     def _commit_discord_dict(self, dc):

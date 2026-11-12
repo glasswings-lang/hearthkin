@@ -708,12 +708,11 @@ CAPABILITIES = [
                                where="hearthkin_cron.py"),
             "telegram": Present(markers="_post_cron_reply_to_telegram",
                                 where="hearthkin_cron.py"),
-            "discord": Absent(
-                "A scheduled wake-up cannot reach a Discord channel at all — "
-                "hearthkin_cron.py has no notion of the surface. So a kin "
-                "whose person lives in a Discord server tends its memory "
-                "overnight and has nowhere to say so.",
-                markers="discord", where="hearthkin_cron.py"),
+            # Since 12 Nov 2026: to the direct messages of Discord people with
+            # "Mirror desktop messages" on, the same people-rule Telegram
+            # uses. Not yet to a chosen Discord channel.
+            "discord": Present(markers="discord_mirror",
+                               where="hearthkin_cron.py"),
             "cron": NotHere(
                 "It is the thing doing the delivering, so there is no code "
                 "anywhere that could indicate it delivering to itself, and "

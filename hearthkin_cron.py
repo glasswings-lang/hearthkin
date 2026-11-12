@@ -476,6 +476,13 @@ def _maybe_post_telegram(kin, cfg, text):
     telegram_failures.log so the user can tell why a cron post didn't
     land. The reply is still journaled locally regardless — Telegram
     is best-effort delivery for cron."""
+    # Discord's half of the same mirror box (12 Nov 2026): everyone with
+    # "Mirror desktop messages" on in their Discord window gets it too.
+    try:
+        import discord_mirror
+        discord_mirror.mirror(cfg, kin, [text], timeout=20)
+    except Exception:
+        pass
     tg = cfg.get("telegram") or {}
     if not isinstance(tg, dict):
         return

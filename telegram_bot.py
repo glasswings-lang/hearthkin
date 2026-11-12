@@ -3792,6 +3792,15 @@ class TelegramBot:
             return False
         return isinstance(model, str) and llm_backend.is_hosted_model(model)
 
+    def _tg_section(self):
+        """This kin's Telegram settings, or {} when they can't be read. A
+        settings fault must never turn a save into a silent failure."""
+        try:
+            got = self.get_config() if getattr(self, "get_config", None) else {}
+            return got if isinstance(got, dict) else {}
+        except Exception:
+            return {}
+
     def _user_shares_desktop(self, user_id):
         """Per-user opt-in for sharing the conversation with the
         desktop. False by default — sharing only makes sense when the
@@ -4725,7 +4734,7 @@ class TelegramBot:
                 # read-bucket user can't make the kin write via fence. The
                 # confirmation posts as its own message after the reply.
                 authoring_note, authoring_confirm = self._run_authoring_bridge_telegram(
-                    content, effective_tools, added_turns)
+                    content, effective_tools, added_turns, user_id=user_id)
                 if authoring_note:
                     new_turns.append({
                         "role": "system", "content": authoring_note, "ts": now_iso(),
@@ -5610,7 +5619,7 @@ class TelegramBot:
                 # content in text instead of a write_file call, perform the
                 # write. Gated on write tools being in the effective set.
                 authoring_note, authoring_confirm = self._run_authoring_bridge_telegram(
-                    content, effective_tools, added_turns)
+                    content, effective_tools, added_turns, user_id=user_id)
                 if authoring_note:
                     new_turns.append({
                         "role": "system", "content": authoring_note, "ts": now_iso(),
@@ -5931,7 +5940,11 @@ class TelegramBot:
         # operator can hand this kin desktop-equivalent reach by setting
         # `remote_unconfined_files` (Settings -> Tools -> Tool settings).
         # Read from the kin config, never from anything the model can set.
-        _confine = not bool((full_cfg or {}).get("remote_unconfined_files"))
+        # Per person since 12 Nov 2026 ("Files: kept inside the kin's folder,
+        # or allowed outside" in their window); the kin-wide box otherwise.
+        from tools._person_settings import resolve_file_reach
+        _confine = resolve_file_reach(self._tg_section(), "telegram",
+                                      user_id, full_cfg or {})
         schemas, executor = kin_tools.load_tools(
             effective_tools,
             context={"agent_name": self.agent_name, "confine_paths": _confine},
@@ -6126,14 +6139,15 @@ class TelegramBot:
 
         ed = _TelegramStreamEditor(_stream_send, _stream_edit,
                                    clean=_stream_clean)
-        # Ceiling on calls for anyone who isn't the operator (see
-        # remote_max_tool_calls); the operator's own Telegram is uncapped,
-        # same as the desktop.
+        # Ceiling on calls in one reply: this person's own number, else the
+        # kin's (remote_max_tool_calls). Sharing the desktop conversation has
+        # nothing to do with it — that's about where the conversation lives,
+        # not how far a reply may run (operator's correction, 12 Nov 2026).
+        # Want no limit for yourself? Put 0 in your own entry.
         from tools._buckets import resolve_tool_call_cap
         _remote_cap = resolve_tool_call_cap(
             (self.get_config() or {}).get("user_tool_caps"), user_id,
-            _cfg_count(full_cfg, "remote_max_tool_calls", 15),
-            is_operator=self._user_shares_desktop(user_id))
+            _cfg_count(full_cfg, "remote_max_tool_calls", 15))
         result = llm_backend.run_tool_loop(
             model, messages,
             tools=schemas, tool_executor=executor,
@@ -6582,7 +6596,8 @@ class TelegramBot:
                     return True
         return False
 
-    def _run_authoring_bridge_telegram(self, content, effective_tools, added_turns):
+    def _run_authoring_bridge_telegram(self, content, effective_tools, added_turns,
+                                       user_id=None):
         """Authoring bridge for the Telegram surfaces (DM + group — where the
         write-gesture bites most). If the kin authored file content in its
         natural text register — a ```write:<path>``` fence, or a *writes X*
@@ -6622,8 +6637,9 @@ class TelegramBot:
                     _bridge_cfg = load_agent_config(self.agent_name) or {}
                 except Exception:
                     _bridge_cfg = {}
-                _bridge_confine = not bool(
-                    _bridge_cfg.get("remote_unconfined_files"))
+                from tools._person_settings import resolve_file_reach
+                _bridge_confine = resolve_file_reach(
+                    self._tg_section(), "telegram", user_id, _bridge_cfg)
                 results = authoring_bridge.commit_authoring_writes(
                     self.agent_name, writes, confine=_bridge_confine)
                 oks = [(p, d) for (p, ok, d) in results if ok]

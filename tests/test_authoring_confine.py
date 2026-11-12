@@ -118,6 +118,29 @@ note_on, _chat_on = _fence_save_through_telegram(tg_on, checkbox_on=True)
 check("Telegram, checkbox ON: the same kind of fence save lands outside, "
       "exactly as the file tools would", tg_on.exists())
 
+# --- per person (12 Nov 2026): the person's own files setting wins ---------
+from tools._person_settings import save_person, load_person  # noqa: E402
+
+tg_sec = save_person({}, "telegram", None, "500",
+                     dict(load_person({}, "telegram", ""), file_reach="outside"))
+bot.get_config = lambda: tg_sec
+cfg = dict(DEFAULT_AGENT_CONFIG)
+cfg["remote_unconfined_files"] = False
+save_agent_config(KIN, cfg)
+tg_person = outside / "via-telegram-person-outside.txt"
+bot._run_authoring_bridge_telegram(
+    "Here.\n```write:%s\nper person\n```\n" % tg_person.as_posix(),
+    ["write_file", "edit_file"], [], user_id="500")
+check("Telegram: a person set to 'allow outside' saves outside, kin box off",
+      tg_person.exists())
+tg_other = outside / "via-telegram-other-person.txt"
+bot._run_authoring_bridge_telegram(
+    "Here.\n```write:%s\nnot them\n```\n" % tg_other.as_posix(),
+    ["write_file", "edit_file"], [], user_id="501")
+check("...while someone without that setting still can't",
+      not tg_other.exists())
+del bot.get_config
+
 # --- Discord: the same rule, through its own path ---------------------------
 # Discord saves fences via turn_steering.authoring_bridge_notes. It used to
 # call that without confine=, so a fence on Discord reached anywhere while

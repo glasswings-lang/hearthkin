@@ -175,18 +175,19 @@ class ToolSettingsDialog(wx.Dialog):
              "another billable call, so keep it modest there.")
 
         self.remote_cap_field = row(
-            "Most tool calls in one reply for &other people:",
+            "Most tool calls in one reply &over Telegram and Discord:",
             lambda: _IntField(
                 panel, value=cfg.get("remote_max_tool_calls", 15),
                 min_val=0, max_val=2000, size=(100, -1),
                 on_commit=lambda v: self._save_param("remote_max_tool_calls", v)))
-        help("For anyone who isn't you: Discord members, and Telegram users "
-             "not sharing your desktop conversation. Counts every call, one "
-             "by one. When a reply reaches it, the rest don't run and the "
-             "kin answers with what it has. This is what keeps a stranger "
-             "from making a kin spin through dozens of commands while nobody "
-             "is watching. Your own desktop and Telegram are not limited. "
-             "Default 15; 0 means no limit.")
+        help("For everyone on Telegram and Discord who doesn't have their own "
+             "number in their person window. Counts every call, one by one. "
+             "When a reply reaches it, the rest don't run and the kin answers "
+             "with what it has. This is what keeps a kin from spinning "
+             "through dozens of commands while nobody is watching. It covers "
+             "you too on those surfaces; to have no limit for yourself, put "
+             "0 in your own entry. The desktop is not limited. Default 15; 0 "
+             "means no limit.")
 
         self.remote_notice_field = row(
             "&Warn me aloud after this many calls in a remote reply:",

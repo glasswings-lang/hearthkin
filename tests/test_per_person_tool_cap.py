@@ -47,8 +47,17 @@ def main():
     tsrc = open(os.path.join(ROOT, "telegram_bot.py"), encoding="utf-8").read()
     check("Telegram does too", "resolve_tool_call_cap(" in tsrc and '"user_tool_caps"' in tsrc)
     esrc = open(os.path.join(ROOT, "dialogs", "edit_kin.py"), encoding="utf-8").read()
+    # Since 12 Nov 2026 both surfaces save through the shared person list
+    # (tests/test_person_settings.py checks that path end to end).
+    from tools._person_settings import PERSON_SETTINGS, save_person, load_person
     check("the settings window saves it for both surfaces",
-          esrc.count('"user_tool_caps"') >= 6)
+          any(s["store"] == "user_tool_caps" for s in PERSON_SETTINGS)
+          and "_person_window_flow" in esrc
+          and all(load_person(save_person({}, sf, None, "1",
+                                          dict(load_person({}, sf, ""),
+                                               tool_cap=9)),
+                              sf, "1")["tool_cap"] == 9
+                  for sf in ("telegram", "discord")))
 
     print()
     if _fails:

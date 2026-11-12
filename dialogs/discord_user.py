@@ -1,211 +1,23 @@
 # SPDX-License-Identifier: CC0-1.0
+"""dialogs.discord_user — the Discord person window.
 
-"""dialogs.discord_user — add or edit one Discord-user entry on a kin.
-
-The Discord tab used to carry a single multi-line box of numeric IDs, which
-made the surface's per-user tool access (`discord.user_tools`, which the bot
-has always read) reachable only by hand-editing JSON. In practice that meant
-every Discord user sat on the default bucket, `none`, and no kin ever had a
-tool on this surface — while the tab's own setup notes said "the kin uses its
-normal tools here". This dialog is that missing screen.
-
-Two fields, deliberately: the Discord user ID, and the tool-access bucket.
-There is no display-label field because Discord already gives every message a
-display name and the bot inlines that; a second name to keep in sync would
-only be a way for the two to disagree.
+Since 12 Nov 2026 this is the shared PersonWindow (dialogs/person_window.py)
+on the Discord surface, so it offers exactly the settings Telegram does. The
+class and its old get_values() stay for callers written against the old
+window.
 """
 
-import wx
+from .person_window import PersonWindow
 
 
-class _DiscordUserDialog(wx.Dialog):
-    """Modal for one Discord-user entry. Returns (user_id_str, bucket_name)
-    from get_values() when ShowModal returns wx.ID_OK; the caller writes back
-    to cfg and persists.
-
-    The bucket is a radio group rather than a dropdown — radios are
-    individually focusable, so NVDA reads each option's name and its
-    explainer as you arrow through, instead of announcing one collapsed
-    value you then have to open to inspect.
-    """
-
+class _DiscordUserDialog(PersonWindow):
     def __init__(self, parent, user_id="", bucket="none", tool_cap=None,
-                 exec_approval="default"):
-        super().__init__(parent, title="Discord user",
-                         style=wx.DEFAULT_DIALOG_STYLE)
-        self._bucket = bucket or "none"
-
-        outer = wx.BoxSizer(wx.VERTICAL)
-
-        id_lbl = wx.StaticText(
-            self, label="&User ID (numeric Discord ID, or * for anyone):")
-        self.id_field = wx.TextCtrl(self, value=user_id)
-        outer.Add(id_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
-        outer.Add(self.id_field,
-                  flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
-
-        # How to get the ID the field above wants, and what "*" means. A
-        # read-only TextCtrl rather than StaticText: the next control is a
-        # TextCtrl heading with its own name, so a StaticText here would
-        # label nothing and never be spoken.
-        id_hint = wx.TextCtrl(
-            self,
-            value=(
-                "To find someone's ID: turn on Developer Mode in Discord's "
-                "settings (Advanced), then right-click them and choose Copy "
-                "User ID. Entering * instead lets ANYONE in the servers this "
-                "bot has joined talk to the kin — fine on your own private "
-                "server, and worth thinking twice about anywhere else, "
-                "because the tool access you pick below applies to every one "
-                "of them."
-            ),
-            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
-            | wx.TE_WORDWRAP,
-        )
-        id_hint.SetName("How to find a Discord user ID, and what the star means")
-        id_hint.SetMinSize((-1, 96))
-        outer.Add(id_hint, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
-
-        # The radios name themselves from their own labels and ignore a
-        # preceding StaticText, so this question has to be in the tab order
-        # itself — otherwise you arrow through four options without ever
-        # hearing what they answer.
-        bucket_lbl = wx.TextCtrl(
-            self,
-            value="Tool access for this user:",
-            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
-            | wx.TE_WORDWRAP,
-        )
-        bucket_lbl.SetName(
-            "Tool access for this user — heading for the options below")
-        bucket_lbl.SetMinSize((-1, 24))
-        outer.Add(bucket_lbl, flag=wx.LEFT | wx.RIGHT, border=8)
-
-        from tools._buckets import BUCKET_ORDER, BUCKET_EXPLAINER
-        self._bucket_radios = {}
-        for i, name in enumerate(BUCKET_ORDER):
-            style = wx.RB_GROUP if i == 0 else 0
-            label_text = f"&{name.capitalize()} — {BUCKET_EXPLAINER.get(name, '')}"
-            rb = wx.RadioButton(self, label=label_text, style=style)
-            rb.SetValue(name == self._bucket)
-            self._bucket_radios[name] = rb
-            outer.Add(rb, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
-
-        # The bucket explainers are written for Telegram, which is where they
-        # first appeared. Two things genuinely differ here, and both are
-        # things a person would otherwise only discover by being surprised.
-        surface_hint = wx.TextCtrl(
-            self,
-            value=(
-                "Two differences from Telegram. When a shell command (exec) "
-                "asks first, it asks on THIS computer, in a dialog — never in "
-                "the Discord server, so nobody there can approve their own "
-                "request. And a webcam capture always asks you here too; "
-                "Discord has no per-person always-allow setting, so it asks "
-                "every time. The kin still only gets whatever tools you have "
-                "switched on for it in the Tools tab — this narrows that "
-                "list, it can't widen it."
-            ),
-            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
-            | wx.TE_WORDWRAP,
-        )
-        surface_hint.SetName("How tool approval works on Discord")
-        surface_hint.SetMinSize((-1, 112))
-        outer.Add(surface_hint, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
-
-        # Per person: does a shell command this person asks for run straight
-        # away, or wait for the operator? Same three choices on Telegram and
-        # Discord (tools._buckets.resolve_exec_approval).
-        from tools._buckets import EXEC_APPROVAL_CHOICES
-        exec_lbl = wx.StaticText(
-            self, label="&Commands this person asks for:")
-        self.exec_choice = wx.Choice(self, choices=[
-            "Use the kin's setting",
-            "Ask me first",
-            "Run without asking",
-        ])
-        self.exec_choice.SetSelection(
-            EXEC_APPROVAL_CHOICES.index(exec_approval)
-            if exec_approval in EXEC_APPROVAL_CHOICES else 0)
-        self.exec_choice.SetName("Commands this person asks for")
-        outer.Add(exec_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
-        outer.Add(self.exec_choice, flag=wx.LEFT | wx.RIGHT, border=8)
-        exec_hint = wx.TextCtrl(
-            self,
-            value=("Only matters if this person has Full tools. \"Use the "
-                   "kin's setting\" follows the box \"Run remote "
-                   "(Telegram/Discord) exec without asking\" in Settings, "
-                   "Tools. \"Ask me first\" always asks you, never them: "
-                   "in the chat if this is you on Telegram, otherwise in a "
-                   "window on this computer. Commands on the never-run list "
-                   "are always refused."),
-            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
-            | wx.TE_WORDWRAP,
-        )
-        exec_hint.SetName("What the commands setting does")
-        exec_hint.SetMinSize((-1, 80))
-        outer.Add(exec_hint, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
-
-        # Per-person ceiling on tool calls in one reply. Blank = the kin's
-        # own setting (Settings -> Tools); a number overrides it for this
-        # person only, 0 = no limit.
-        cap_lbl = wx.StaticText(
-            self, label="Tool call &limit in one reply for this person:")
-        self.cap_field = wx.TextCtrl(
-            self, value="" if tool_cap is None else str(tool_cap))
-        self.cap_field.SetName(
-            "Tool call limit in one reply for this person. Blank uses the "
-            "kin's setting; 0 means no limit.")
-        outer.Add(cap_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
-        outer.Add(self.cap_field, flag=wx.LEFT | wx.RIGHT, border=8)
-        cap_hint = wx.TextCtrl(
-            self,
-            value=("Leave blank to use the kin's own setting (Settings, Tools: "
-                   "Most tool calls in one reply for other people). A number "
-                   "here applies to this person only. 0 means no limit. Each "
-                   "call counts, even several asked for at once; past the "
-                   "limit the rest don't run and the kin answers with what "
-                   "it has."),
-            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
-            | wx.TE_WORDWRAP,
-        )
-        cap_hint.SetName("What the tool call limit does")
-        cap_hint.SetMinSize((-1, 80))
-        outer.Add(cap_hint, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
-
-        btn_row = wx.BoxSizer(wx.HORIZONTAL)
-        ok_btn = wx.Button(self, wx.ID_OK, label="&Save")
-        cancel_btn = wx.Button(self, wx.ID_CANCEL, label="Ca&ncel")
-        btn_row.Add(ok_btn, flag=wx.RIGHT, border=8)
-        btn_row.Add(cancel_btn)
-        outer.Add(btn_row, flag=wx.ALL | wx.ALIGN_RIGHT, border=8)
-
-        self.SetSizerAndFit(outer)
-        self.id_field.SetFocus()
-
-    def get_exec_approval(self):
-        """"default" (use the kin's setting), "ask" or "auto"."""
-        from tools._buckets import EXEC_APPROVAL_CHOICES
-        i = self.exec_choice.GetSelection()
-        return EXEC_APPROVAL_CHOICES[i] if 0 <= i < 3 else "default"
-
-    def get_tool_cap(self):
-        """The per-person tool-call limit: None for "use the kin's
-        setting", else a whole number (0 = no limit)."""
-        from tools._buckets import parse_tool_call_cap
-        return parse_tool_call_cap(self.cap_field.GetValue())
-
-    def tool_cap_is_valid(self):
-        t = self.cap_field.GetValue().strip()
-        return (not t) or t.isdigit()
+                 exec_approval="default", values=None):
+        if values is None:
+            values = {"bucket": bucket or "none", "tool_cap": tool_cap,
+                      "exec_approval": exec_approval}
+        super().__init__(parent, "discord", user_id, values)
 
     def get_values(self):
-        """(user_id, bucket). The ID is returned as typed apart from
-        surrounding whitespace — the caller validates, because it is the one
-        that can say which list the value was rejected from."""
-        bucket = "none"
-        for name, rb in self._bucket_radios.items():
-            if rb.GetValue():
-                bucket = name
-                break
-        return self.id_field.GetValue().strip(), bucket
+        """(user_id, bucket) — the old window's answer."""
+        return self.get_user_id(), self.get_settings()["bucket"]

@@ -225,6 +225,17 @@ class ChatStreamMixin:
             cfg = load_agent_config(kin_name)
         except Exception:
             return
+        # Discord's half of the same box (shared person window, 12 Nov 2026).
+        import discord_mirror
+        if discord_mirror.mirror_targets(cfg)[1]:
+            threading.Thread(
+                target=discord_mirror.mirror,
+                args=(cfg, kin_name, [
+                    f"💻 (desktop) you said:\n\n{user_text}" if user_text else "",
+                    f"💻 (desktop) {kin_name} replied:\n\n{reply_text}"
+                    if reply_text else ""]),
+                daemon=True,
+            ).start()
         tg = (cfg or {}).get("telegram") or {}
         bot_token = (tg.get("bot_token") or "").strip()
         if not bot_token:
@@ -325,16 +336,6 @@ class ChatStreamMixin:
             cfg = load_agent_config(kin_name)
         except Exception:
             return
-        tg = (cfg or {}).get("telegram") or {}
-        bot_token = (tg.get("bot_token") or "").strip()
-        if not bot_token:
-            return
-        mirror_map = tg.get("user_mirror_to_telegram") or {}
-        if not isinstance(mirror_map, dict):
-            return
-        targets = [str(uid) for uid, on in mirror_map.items() if on]
-        if not targets:
-            return
         # Pull the scheduled time out of the framed prompt for the
         # message text. cron_helpers.frame_wake_up_prompt produces
         # something like "[hearthkin: scheduled wake-up — fired at
@@ -349,6 +350,21 @@ class ChatStreamMixin:
             f"The wake-up prompt was saved; you can re-run it from "
             f"Hearthkin's chat when you get back."
         )
+        # Discord's half of the mirror box (12 Nov 2026).
+        import discord_mirror
+        if discord_mirror.mirror_targets(cfg)[1]:
+            threading.Thread(target=discord_mirror.mirror,
+                             args=(cfg, kin_name, [msg]), daemon=True).start()
+        tg = (cfg or {}).get("telegram") or {}
+        bot_token = (tg.get("bot_token") or "").strip()
+        if not bot_token:
+            return
+        mirror_map = tg.get("user_mirror_to_telegram") or {}
+        if not isinstance(mirror_map, dict):
+            return
+        targets = [str(uid) for uid, on in mirror_map.items() if on]
+        if not targets:
+            return
 
         def _worker():
             for uid in targets:

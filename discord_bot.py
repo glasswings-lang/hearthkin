@@ -551,7 +551,14 @@ class DiscordBot:
             options = {}
         model = cfg.get("model", "")
         channel_id = message.channel.id
-        share = bool(dcfg.get("share_desktop", False))
+        # Per-person settings, from the one list Telegram uses too
+        # (tools/_person_settings.py). Sharing used to be one box for the
+        # whole kin on Discord; that box is now the fallback for a person
+        # saved before per-person sharing existed.
+        from tools._person_settings import person_value
+        author_id = getattr(message.author, "id", "")
+        share = bool(person_value(dcfg, "discord", author_id, "share_desktop",
+                                  fallback=dcfg.get("share_desktop", False)))
 
         # Inline attribution, no colon — same anti-impersonation shape as
         # the Telegram group path (a "[Name]:" token is a speaker-turn
@@ -563,8 +570,11 @@ class DiscordBot:
         # copy is what keeps the old shape when the rule next changes. Every
         # surface that names a speaker to a model goes through one function.
         from chat_helpers import speaker_attribution_prefix
-        who = sanitize_for_prompt_literal(getattr(
-            message.author, "display_name", None) or message.author.name)
+        # The name you gave this person wins over the one Discord shows.
+        who = sanitize_for_prompt_literal(
+            person_value(dcfg, "discord", author_id, "label")
+            or getattr(message.author, "display_name", None)
+            or message.author.name)
         user_text = speaker_attribution_prefix(who) + content
 
         history = self._channel_history(channel_id, share)
@@ -582,8 +592,9 @@ class DiscordBot:
         # (self._wrap_exec); if no approval path is wired, exec is dropped
         # rather than run unguarded.
         schemas, executor = [], {}
-        author_id = getattr(message.author, "id", "")
-        bucket = (dcfg.get("user_tools") or {}).get(str(author_id), "none")
+        # A "*" entry (anyone) now really covers anyone without their own,
+        # as the person window always said; it used to be ignored here.
+        bucket = person_value(dcfg, "discord", author_id, "bucket")
         enabled = filter_tool_names(load_kin_tools(self.agent_name) or [], bucket)
         if enabled:
             from tools import load_tools
@@ -592,7 +603,9 @@ class DiscordBot:
             # `remote_unconfined_files` in the kin config (Settings -> Tools
             # -> Tool settings) hands this kin desktop-equivalent reach.
             # Read from the kin config, never from anything the model sets.
-            _confine = not bool(cfg.get("remote_unconfined_files"))
+            # Per person since 12 Nov 2026; the kin-wide box otherwise.
+            from tools._person_settings import resolve_file_reach
+            _confine = resolve_file_reach(dcfg, "discord", author_id, cfg)
             schemas, executor = load_tools(
                 enabled,
                 context={"agent_name": self.agent_name,
@@ -612,8 +625,21 @@ class DiscordBot:
             # operator is sitting in. Approval pops on the OPERATOR's desktop,
             # never in the server, exactly like exec. No approval channel
             # wired → drop the tool rather than fire it unasked.
+            # The person's webcam setting, same three answers as Telegram:
+            # always refuse, take it without asking, or ask the operator.
+            _cam = person_value(dcfg, "discord", author_id, "webcam")
             if "use_webcam" in executor:
-                if self._request_webcam_approval is not None:
+                if _cam == "deny":
+                    import json as _json
+                    executor = dict(executor)
+                    executor["use_webcam"] = lambda _a: _json.dumps({
+                        "ok": False,
+                        "error": "Webcam capture refused for this user "
+                                 "(per-user webcam permission is set to "
+                                 "'always deny')."})
+                elif _cam == "auto":
+                    pass        # their window says take it without asking
+                elif self._request_webcam_approval is not None:
                     executor = dict(executor)
                     executor["use_webcam"] = self._wrap_webcam_for_discord(
                         executor["use_webcam"], message)
@@ -751,6 +777,8 @@ class DiscordBot:
             _cap = resolve_tool_call_cap(
                 (cfg.get("discord") or {}).get("user_tool_caps"),
                 getattr(message.author, "id", ""),
+                # Their own number, else the kin's. Sharing with the desktop
+                # doesn't lift it; limits and sharing are separate things.
                 _cfg_count(cfg, "remote_max_tool_calls", 15))
             with self._turn_lock:
                 if channel_id in self._active_turns:
@@ -874,8 +902,11 @@ class DiscordBot:
             # Same folder rule as this surface's file tools: a fenced save
             # must not reach where write_file was deliberately stopped.
             # Read from the kin config, never from anything the model sets.
-            _bridge_confine = not bool(
-                (self.get_config() or {}).get("remote_unconfined_files"))
+            from tools._person_settings import resolve_file_reach
+            _all = self.get_config() or {}
+            _bridge_confine = resolve_file_reach(
+                _all.get("discord") or {}, "discord",
+                getattr(message.author, "id", ""), _all)
             kin_note, human_note = turn_steering.authoring_bridge_notes(
                 self.agent_name, text, tool_names, confine=_bridge_confine)
             if kin_note:
@@ -1045,8 +1076,9 @@ class DiscordBot:
                 model, messages, tools=schemas, tool_executor=executor,
                 on_tool_call=on_tool_call,
                 should_stop=lambda: self._turn_cancelled(channel_id),
-                # Everyone on Discord is someone other than the operator's
-                # own desktop, so the ceiling always applies here.
+                # The person's ceiling: theirs, else the kin's; none for
+                # someone who shares with the desktop (that's you), unless
+                # you gave them a number.
                 max_tool_calls=_remote_cap or None,
                 on_content=ed.feed, on_turn=_on_turn,
                 surface=f"{self._surface_label}-tool",

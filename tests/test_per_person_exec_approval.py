@@ -185,10 +185,17 @@ check("the desktop hands Telegram a way to ask you",
       "request_desktop_exec_approval" in kws)
 
 # The settings window saves and clears it for both surfaces.
+# Since 12 Nov 2026 that's the shared person list, used by both surfaces.
+from tools._person_settings import save_person, load_person, remove_person  # noqa: E402
 src = (ROOT / "dialogs" / "edit_kin.py").read_text(encoding="utf-8")
+ok = "_person_window_flow" in src and "remove_person" in src
+for sf in ("telegram", "discord"):
+    sec = save_person({}, sf, None, "1",
+                      dict(load_person({}, sf, ""), exec_approval="ask"))
+    ok = ok and load_person(sec, sf, "1")["exec_approval"] == "ask"
+    ok = ok and "1" not in remove_person(sec, sf, "1")["user_exec_approval"]
 check("the settings window saves the choice (Telegram and Discord, add and "
-      "edit) and clears it when a person is removed",
-      src.count('"user_exec_approval"') >= 6)
+      "edit) and clears it when a person is removed", ok)
 
 print()
 if _fails:

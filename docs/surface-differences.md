@@ -9,11 +9,11 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 - **Scheduled wake-ups can't be stopped once they start.** Drift. Nothing stops a wake-up that's running on its own, not even Control Shift X. To do, first.
 - **A message sent mid-reply only reaches the reply in Telegram private chats.** On Discord it waits until the reply is done. Discord also quietly drops a second message sent within three seconds of the first. Drift; to do. In Telegram groups the waiting is on purpose, because a message there might be meant for another person.
 - **The limit on tool calls in one reply covers Discord and Telegram, not the desktop, rooms or wake-ups.** On purpose for the desktop and rooms, since that's you. Open question for wake-ups.
-- **On Discord, that limit covers you too,** because Discord can't yet tell you apart from anyone else. On Telegram, it knows you're you when "share with desktop" is on for you. Drift; to do.
+- **The limit is the same rule on both.** Fixed 12 November 2026. Each person gets their own number if you gave them one, otherwise the kin's. That includes you: sharing a conversation with the desktop doesn't lift it, because those are separate things. Put 0 in your own entry for no limit.
 
 ## Per-person settings
 
-- **Discord has fewer per-person settings than Telegram.** Telegram lets you set, for each person: a name, which tools they get, a tool-call limit, whether their commands ask first, sharing with the desktop conversation, mirroring desktop replies to them, and the webcam (ask, always allow, never). Discord has which tools, the tool-call limit and whether commands ask first. Drift; to do. Discord should simply have what Telegram has.
+- **Telegram and Discord now have the same person window.** Fixed 12 November 2026. One window, built from one list, used by both. For each person: a name, which tools they get, sharing with the desktop, mirroring desktop messages to them, the webcam (ask me, auto-approve, always refuse), a tool-call limit, whether their commands ask first, and whether their files stay inside the kin's folder. Someone on both has an entry in each tab, set separately, but the choices are always the same. A new setting added to the list shows up on both.
 - **Commands are now set per person, the same on both.** Fixed 12 November 2026. Each person can be "use the kin's setting", "ask me first" or "run without asking". When a command asks, it asks you, never the person who wanted it. If that person is you on Telegram, you're asked in the chat. Anyone else's request comes to a window on your desktop. Before this, one box for the whole kin decided for everyone. With that box off, a Telegram person with full tools approved their own commands.
 
 ## Files and safety
