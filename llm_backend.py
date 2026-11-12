@@ -5261,10 +5261,38 @@ def _chat_collect_streaming(model, messages, *, on_content, should_stop=None, **
     )
 
 
+# Results given to tool calls the loop held back rather than ran. Every call
+# in a model's turn must be answered in history (providers reject a call with
+# no result), so held calls are answered with these.
+_NOT_RUN_STOPPED = (
+    "[not run: the person asked you to stop before this step. Nothing in "
+    "this call happened.]"
+)
+_NOT_RUN_INTERJECTED = (
+    "[not run: the person sent a message before this step, so it was held. "
+    "Read their message, which follows, then decide whether to carry on. "
+    "Nothing in this call happened.]"
+)
+
+
+def _take_interjections(interject):
+    """Ask the `interject` callback for any messages that arrived mid-turn.
+    Returns a list of message dicts, empty when there are none or the
+    callback fails -- a broken callback must never break the turn."""
+    if interject is None:
+        return []
+    try:
+        got = interject() or []
+    except Exception:
+        return []
+    return [m for m in got if isinstance(m, dict) and m.get("role")]
+
+
 def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=False,
                   on_tool_call=None, on_content=None, on_turn=None,
                   max_iterations=MAX_TOOL_ITERATIONS,
-                  tool_result_cap=8000, should_stop=None, **kwargs):
+                  tool_result_cap=8000, should_stop=None, interject=None,
+                  **kwargs):
     """Run a non-streaming chat-with-tools loop. Blocks until no more tool calls
     or max_iterations is reached. Returns the final ChatResult.
 
@@ -5295,6 +5323,24 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
         partway through would be worse than the wait. Only meaningful
         together with on_content for the mid-sentence case; without
         streaming, the granularity is one turn.
+
+        It is ALSO checked before every single tool call, not only between
+        model calls. A model can put dozens of calls in one reply (one did:
+        sixty `exec` reads in a single burst), and a stop that waited for
+        all of them to finish was no stop at all. Calls that never ran get
+        a "not run" result, so the history still pairs every call with an
+        answer, as providers require.
+
+    interject: optional callable() -> list of message dicts (or None). The
+        person spoke while the kin was working. Polled at the top of every
+        iteration and before every tool call; any messages it returns are
+        put into the conversation right there, the rest of the current
+        batch of calls is held (each gets a "not run -- read the new
+        message first" result), and the model's next turn sees the message
+        and decides what to do. It is how a person steers or halts a kin
+        mid-task without a stop button. The dicts go into history and
+        `messages_added` exactly as given, so the caller shapes them the
+        way it persists its own user turns.
 
     tool_result_cap: per-tool-result character ceiling before truncation.
         Default 8000 (~2000 tokens) — preserves the original behavior.
@@ -5337,6 +5383,12 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                 content="", thinking="", tool_calls=[],
                 usage={}, messages_added=messages_added, stopped=True,
             )
+        # The person said something while we were working: put it in front
+        # of the model before its next turn.
+        _late = _take_interjections(interject)
+        if _late:
+            history.extend(_late)
+            messages_added.extend(_late)
         # on_turn fires at the START of each turn so a streaming surface can
         # reset its live-paint buffer — the streamed reply then holds only the
         # FINAL talking turn's content, not any tool-turn preamble (which is
@@ -5444,9 +5496,31 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
         }
         history.append(assistant_turn)
         messages_added.append(assistant_turn)
-        # Execute each tool call
+        # Execute each tool call -- checking before EACH one whether the
+        # person asked to stop or sent a message, so a long batch can be
+        # interrupted between calls (see should_stop / interject above).
         iteration_results = []
-        for tc in result.tool_calls:
+        _calls = list(result.tool_calls)
+        _cut = None
+        for _ci, tc in enumerate(_calls):
+            if _loop_should_stop(should_stop):
+                _cut = ("stop", None)
+            else:
+                _late = _take_interjections(interject)
+                if _late:
+                    _cut = ("interject", _late)
+            if _cut is not None:
+                _note = (_NOT_RUN_STOPPED if _cut[0] == "stop"
+                         else _NOT_RUN_INTERJECTED)
+                for _held in _calls[_ci:]:
+                    _held_turn = {
+                        "role": "tool",
+                        "tool_call_id": _tc_field(_held, "id", ""),
+                        "content": _note,
+                    }
+                    history.append(_held_turn)
+                    messages_added.append(_held_turn)
+                break
             fn = _tc_field(tc, "function") or {}
             name = _tc_field(fn, "name", "")
             args_value = _tc_field(fn, "arguments", "{}")
@@ -5518,6 +5592,19 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                 if injected is not None:
                     history.append(injected)
                     messages_added.append(injected)
+        if _cut is not None:
+            if _cut[0] == "stop":
+                return ChatResult(
+                    content="", thinking="", tool_calls=[],
+                    usage={}, messages_added=messages_added, stopped=True,
+                )
+            history.extend(_cut[1])
+            messages_added.extend(_cut[1])
+            # A held batch is not a repeat of anything; don't let the
+            # stuck-loop guard compare against it.
+            last_signature = None
+            last_results = None
+            continue
         # Result-aware stuck-loop guard: bail only when this iteration's call
         # signature AND its results both match the previous iteration — same
         # call, same output, genuinely no progress. Repeatable tools that vary

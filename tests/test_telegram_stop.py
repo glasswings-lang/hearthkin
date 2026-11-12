@@ -228,9 +228,18 @@ check("...so the reply is not stopped by it", bot._turn_cancelled(7) is False)
 
 bot = FakeBot()
 bot._begin_turn(7, 7)
-for other in ("/clear", "/help", "hello", "cancel", ""):
+for other in ("/clear", "/help", "hello", "please cancel the trip", ""):
     check(f"{other!r} is not a stop command",
           bot._maybe_stop_turn_from_poll(cancel_upd(other)) is False)
+
+# A bare "stop" or "cancel", sent on its own, IS a stop: someone watching a
+# reply run away types the word, not the command.
+for word in ("stop", "Stop.", "cancel", "STOP!"):
+    bot = FakeBot()
+    bot._begin_turn(7, 7)
+    check(f"a bare {word!r} on its own stops the reply",
+          bot._maybe_stop_turn_from_poll(cancel_upd(word)) is True
+          and bot._turn_cancelled(7) is True)
 
 
 # --- the queued fallback ------------------------------------------------

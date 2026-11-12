@@ -282,7 +282,7 @@ python hearthkin.pyw</code></pre>
 <h3>Stopping, clearing, and starting fresh</h3>
 
 <ul>
-  <li><strong>Stop</strong> (<kbd>Alt</kbd>+<kbd>P</kbd>, or <kbd>Esc</kbd> in the main window) stops the reply being written and keeps what arrived so far. In a room, Stop ends the whole round and turns <strong>Auto-continue rounds</strong> off.</li>
+  <li><strong>Stop</strong> (<kbd>Alt</kbd>+<kbd>P</kbd>, or <kbd>Esc</kbd> in the main window) stops the reply being written and keeps what arrived so far. If the kin is partway through its tools, the stop lands before its next tool call, and the calls after it don't run. In a room, Stop ends the whole round and turns <strong>Auto-continue rounds</strong> off. Stop only reaches the reply on this screen; for a kin busy on Telegram or Discord, use <strong>Chat → Stop every reply, on every surface</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>).</li>
   <li><strong>Clear chat</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) wipes the conversation after asking. <strong>It keeps no copy.</strong></li>
   <li><strong>File → New conversation</strong> (<kbd>Ctrl</kbd>+<kbd>N</kbd>) is the gentler one. If there's anything in the conversation, it asks, files a copy away in <code>~/.hearthkin/conversations/</code>, and then empties the chat. If the copy can't be saved, nothing is cleared.</li>
 </ul>
@@ -321,6 +321,7 @@ python hearthkin.pyw</code></pre>
   <dd><ul>
     <li><strong>Regenerate last reply</strong> — <kbd>Ctrl</kbd>+<kbd>R</kbd> (the button is <kbd>Alt</kbd>+<kbd>G</kbd>).</li>
     <li><strong>Stop generating</strong> — <kbd>Esc</kbd> (the button is <kbd>Alt</kbd>+<kbd>P</kbd>).</li>
+    <li><strong>Stop every reply, on every surface</strong> — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>. Stops the reply here and any reply a kin is writing on Telegram or Discord, and says aloud what it stopped. For when a kin is busy somewhere you can't press Stop.</li>
     <li><strong>Continue room round</strong> — <kbd>Ctrl</kbd>+<kbd>Enter</kbd> with the message box empty.</li>
     <li><strong>Edit a message…</strong> — <kbd>Ctrl</kbd>+<kbd>E</kbd>.</li>
     <li><strong>What's it busy with?</strong> — <kbd>Ctrl</kbd>+<kbd>B</kbd>.</li>
@@ -1592,7 +1593,10 @@ understood, exactly as it does for you at the console.</p>
   <dd>Shows the reasoning block from the kin's last reply (if the kin has thinking enabled and the model exposes it).</dd>
 
   <dt><code>/cancel</code></dt>
-  <dd>Stops a reply that is being written for you, and keeps what was written so far. It also cancels a pending tool approval. <code>/stop</code> does the same while a reply is being written or an approval is waiting. It also stops a park visit in progress. If there's nothing to stop, the bot says so.</dd>
+  <dd>Stops a reply that is being written for you, and keeps what was written so far. <code>/stop</code> does the same, and so does the word <strong>stop</strong> or <strong>cancel</strong> sent on its own. The stop lands before the kin's next tool call, even in the middle of a long batch of them; a call that's already running finishes first, and the ones after it don't run. If a command is waiting for your approval, <code>/stop</code> refuses it <em>and</em> stops the whole reply (a plain "no" still refuses just that one command). It also stops a park visit in progress. If there's nothing to stop, the bot says so.</dd>
+
+  <dt>Saying something while it's still working</dt>
+  <dd>Any ordinary message you send while your reply is still being worked on goes <strong>to that reply</strong>, not into a queue behind it. The bot tells you it got it. Before the kin's next step, it holds the rest of what it was about to do and reads your message first, so "wait, that's the wrong file" or "you're going in circles" reaches it while it can still change course. If a command is waiting for your approval, your message refuses that command and is read the same way. If the reply has no next step (it was already writing its last words), your message is simply answered next, as usual. Nothing you send is lost.</dd>
 
   <dt><code>/allow</code>, <code>/deny</code>, <code>/remember</code></dt>
   <dd>Respond to a tool approval prompt. Plain-text equivalents (<code>yes</code> / <code>no</code> / <code>save</code>, and the other words listed under the <strong>Full</strong> bucket above) also work.</dd>

@@ -100,6 +100,11 @@ class MenusMixin:
         chat_menu = wx.Menu()
         self.mnu_regen = chat_menu.Append(wx.ID_ANY, "&Regenerate last reply\tCtrl+R")
         self.mnu_stop = chat_menu.Append(wx.ID_ANY, "Sto&p generating\tEsc")
+        # Stop only reaches the reply on THIS screen. A kin working on
+        # Telegram or Discord could not be stopped from the desktop at all;
+        # the only way was to close the app. This reaches every surface.
+        self.mnu_stop_everywhere = chat_menu.Append(
+            wx.ID_ANY, "Stop every reply, on every surface\tCtrl+Shift+X")
         self.mnu_continue = chat_menu.Append(wx.ID_ANY, "Continue room round\tCtrl+Enter")
         # Rewrite any past turn in place — the surgical alternative to
         # Clear chat when one bad reply is poisoning the room's context.
@@ -220,6 +225,7 @@ class MenusMixin:
         self.Bind(wx.EVT_MENU, self._on_delete_room, self.mnu_delete_room)
         self.Bind(wx.EVT_MENU, self._on_regen, self.mnu_regen)
         self.Bind(wx.EVT_MENU, self._on_stop, self.mnu_stop)
+        self.Bind(wx.EVT_MENU, self._on_stop_everywhere, self.mnu_stop_everywhere)
         self.Bind(wx.EVT_MENU, self._on_whats_busy, self.mnu_whats_busy)
         # Not _on_continue directly: this item's Ctrl+Enter accelerator is
         # also the default send key, and the accelerator wins before the

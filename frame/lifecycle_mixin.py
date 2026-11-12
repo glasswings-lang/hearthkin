@@ -62,6 +62,51 @@ class LifecycleMixin:
         except Exception:
             pass
 
+    def _on_stop_everywhere(self, event=None):
+        """Chat -> Stop every reply, on every surface (Ctrl+Shift+X).
+
+        Stop (Esc) only reaches the reply on this screen. A kin answering on
+        Telegram or Discord had no stop the operator could reach from here,
+        and when one ran away the only way out was to close Hearthkin. This
+        stops the desktop reply (if any) and every remote reply in flight,
+        and says what it stopped, aloud. Each stop lands before the next tool
+        call, so a call already running finishes first.
+
+        Never raises; the answer to a broken probe is to say so."""
+        stopped = []
+        try:
+            if getattr(self, "_streaming", False) or getattr(self, "_room_active", False):
+                self._on_stop(None)
+                stopped.append("the reply here")
+        except Exception:
+            pass
+        for _registry_name in ("bots", "discord_bots"):
+            try:
+                registry = getattr(self, _registry_name, None) or {}
+                for bot in list(registry.values()):
+                    try:
+                        line = bot.stop_any_turn()
+                    except Exception:
+                        line = None
+                    if line:
+                        stopped.append(line)
+            except Exception:
+                pass
+        if not stopped:
+            message = "Nothing was running, so there was nothing to stop."
+        elif len(stopped) == 1:
+            message = f"Stopping {stopped[0]}."
+        else:
+            message = "Stopping " + ", ".join(stopped[:-1]) + f", and {stopped[-1]}."
+        try:
+            self._set_status(message)
+        except Exception:
+            pass
+        try:
+            nvda_speak(message)
+        except Exception:
+            pass
+
     def _machine_busy(self):
         """Is a model call actually running right now? Narrower than
         `_work_in_flight`, which also counts things WAITING ON A HUMAN.

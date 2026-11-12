@@ -594,6 +594,12 @@ class ChatSendMixin:
             kin_name=self.current_agent,
             surface="desktop-tool",
             max_iterations=int((self.agent_cfg or {}).get("max_tool_iterations", 8) or 8),
+            # Stop, or a new Send, bumps _stream_id. Without this the screen
+            # stopped showing the turn but the loop carried on running the
+            # kin's tool calls in the background -- every call it had queued,
+            # unseen. Now it stops before the next call.
+            should_stop=lambda: bool(getattr(self, "_closing", False))
+            or my_gen != self._stream_id,
             ollama_host=resolve_kin_ollama_host(
                 (self.agent_cfg or {}).get("ollama_host_name", "")),
         )

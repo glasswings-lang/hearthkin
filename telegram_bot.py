@@ -922,6 +922,12 @@ class TelegramBot:
         self._turn_lock = threading.RLock()
         self._active_turn = None
         self._cancelled_turns = set()
+        # Messages the person sent WHILE their reply was being worked on,
+        # held for the running turn instead of queued behind it (see
+        # _maybe_interject_from_poll). user_id -> list of raw updates. Same
+        # lock as the stop state: written by the poll thread, drained by the
+        # inference thread between tool calls.
+        self._interjections = {}
         # Per-Telegram-user message histories. Loaded from disk so a hearthkin
         # restart doesn't wipe in-flight Telegram conversations. The
         # inference thread mutates _histories on every incoming message
@@ -1658,6 +1664,14 @@ class TelegramBot:
                             consumed = self._maybe_stop_turn_from_poll(upd)
                         except Exception:
                             consumed = False
+                    # A plain message from the person whose reply is being
+                    # worked on goes to that reply, between steps, instead of
+                    # waiting behind it.
+                    if not consumed:
+                        try:
+                            consumed = self._maybe_interject_from_poll(upd)
+                        except Exception:
+                            consumed = False
                     # Advance offset AFTER successful queue.put (audit
                     # T13). If put raised before this fix, the offset
                     # had already moved past an update that never
@@ -1727,11 +1741,48 @@ class TelegramBot:
                 pending.decision = decision
                 pending.event.set()
         if decision is not None:
+            # /stop and /cancel mean "stop", not just "not this one". Denying
+            # only the waiting call let the next call of the same burst step
+            # straight up and ask again -- one at a time, for as many calls
+            # as the model had made.
+            _tok = text.split(maxsplit=1)[0].lower().split("@", 1)[0]
+            if decision == "deny" and _tok.strip(" .!") in (
+                    "/stop", "/cancel", "stop", "cancel"):
+                self._request_turn_stop(user_id, chat_id)
+                try:
+                    self._send_chunked(
+                        chat_id, "Denied, and stopping — keeping what was "
+                                 "written so far.")
+                except Exception:
+                    pass
+                return True
             try:
                 self._send_chunked(chat_id, _APPROVAL_ACKS[decision])
             except Exception:
                 pass
             return True
+        # Not an answer to the approval: the person is saying something
+        # else. Treat that as "no, and listen to me" -- deny the waiting
+        # call and hand the message to the running turn, the same as a
+        # message sent mid-step. Before, it was refused with "respond to
+        # the approval first", which is no help to someone trying to say
+        # "stop, you're going in circles".
+        if self._active_turn is not None and self._active_turn[0] == user_id:
+            with self._pending_lock:
+                still = self._pending_approvals.get(user_id)
+                if still is pending:
+                    self._pending_approvals.pop(user_id, None)
+                    pending.decision = "deny"
+                    pending.event.set()
+            if self._hold_for_turn(upd, user_id):
+                try:
+                    self._send_chunked(
+                        chat_id,
+                        f"Skipped that command. {self.agent_name} will read "
+                        f"your message before its next step.")
+                except Exception:
+                    pass
+                return True
         if is_private:
             try:
                 self._send_chunked(
@@ -1772,6 +1823,90 @@ class TelegramBot:
         with self._turn_lock:
             self._active_turn = None
             self._cancelled_turns.discard(user_id)
+            leftover = self._held().pop(user_id, [])
+        # A message held for a turn that never reached another step (it was
+        # already writing its final words, or had no tools) is answered as an
+        # ordinary message next, rather than lost.
+        for upd in leftover:
+            try:
+                self._queue.put(upd)
+            except Exception:
+                pass
+
+    def _held(self):
+        """The held-message map, created on first use so a bot built
+        without __init__ (tests, older pickles) still works."""
+        held = self.__dict__.get("_interjections")
+        if held is None:
+            held = self.__dict__["_interjections"] = {}
+        return held
+
+    def _take_interjections(self, user_id):
+        """The interject poll, called from inside the tool loop: hand over
+        any messages this person sent mid-turn, as user turns shaped like
+        the ones this surface saves."""
+        with self._turn_lock:
+            held = self._held().pop(user_id, [])
+        if not held:
+            return []
+        from kin_persistence import now_iso
+        turns = []
+        for upd in held:
+            msg = upd.get("message") or {}
+            text = (msg.get("text") or "").strip()
+            if not text:
+                continue
+            turns.append({
+                "role": "user", "content": text, "ts": now_iso(),
+                "sender_id": (msg.get("from") or {}).get("id"),
+                "interjected": True,
+            })
+        return turns
+
+    def _hold_for_turn(self, upd, user_id):
+        """Keep `upd` for the running turn. Returns True when held."""
+        with self._turn_lock:
+            if self._active_turn is None or self._active_turn[0] != user_id:
+                return False
+            self._held().setdefault(user_id, []).append(upd)
+            return True
+
+    def _maybe_interject_from_poll(self, upd):
+        """Poll-thread handler for a plain message sent while the sender's
+        own reply is still being worked on. Returns True when consumed.
+
+        It used to queue BEHIND the reply, so "wait, stop" could only be
+        read after whatever it was meant to stop had finished. Now it is
+        handed to the running turn: the tool loop holds the rest of its
+        current batch of calls and puts the message in front of the model
+        before its next step (llm_backend.run_tool_loop's `interject`). If
+        the turn never takes another step, _end_turn queues it as an
+        ordinary message, so nothing is lost either way.
+
+        Plain text only, and only from the person whose reply is in flight,
+        in the same chat. Commands, photos and files keep their usual path."""
+        msg = upd.get("message") or {}
+        text = (msg.get("text") or "").strip()
+        if not text or text.startswith("/"):
+            return False
+        user_id = (msg.get("from") or {}).get("id")
+        chat_id = (msg.get("chat") or {}).get("id")
+        if user_id is None or chat_id is None:
+            return False
+        with self._turn_lock:
+            active = self._active_turn
+            if active is None or active != (user_id, chat_id):
+                return False
+        if not self._hold_for_turn(upd, user_id):
+            return False
+        try:
+            self._send_chunked(
+                chat_id,
+                f"Got it. {self.agent_name} will see this before its next "
+                f"step, or straight after this reply if there isn't one.")
+        except Exception:
+            pass
+        return True
 
     def _turn_cancelled(self, user_id):
         """The should_stop poll, called from inside the model call."""
@@ -1815,6 +1950,23 @@ class TelegramBot:
             self._cancelled_turns.add(user_id)
             return True
 
+    def stop_any_turn(self):
+        """Stop whatever reply this bot is writing, for whoever it's for.
+        Called from the desktop (Chat -> Stop every reply), where the person
+        at the keyboard is the operator and may stop anything. Returns a
+        human line naming what was stopped, or None if nothing was running."""
+        with self._turn_lock:
+            active = self._active_turn
+            if active is None:
+                return None
+            self._cancelled_turns.add(active[0])
+        label = self.active_turn_label() or ""
+        # "Wren is part-way through a reply to X on Telegram" -> "Wren's reply
+        # to X on Telegram", so the desktop can say "Stopping Wren's reply...".
+        return (label.replace(" is part-way through a reply", "'s reply", 1)
+                if " is part-way through a reply" in label
+                else f"{self.agent_name}'s reply on Telegram")
+
     def _maybe_stop_turn_from_poll(self, upd):
         """Poll-thread /cancel (and /stop) handler. Returns True when the
         update was consumed and must not be enqueued.
@@ -1825,9 +1977,14 @@ class TelegramBot:
         the accurate "nothing pending" answer."""
         msg = upd.get("message") or {}
         text = (msg.get("text") or "").strip()
-        if not text.startswith("/"):
-            return False
-        token = text.split(maxsplit=1)[0].lower().lstrip("/").split("@", 1)[0]
+        # "/stop" and "/cancel", and also a bare "stop" or "cancel" sent on
+        # its own: someone watching a reply run away types the word, not the
+        # command. A longer message that merely contains "stop" is not a
+        # stop -- it goes to the running turn as a message instead.
+        if text.startswith("/"):
+            token = text.split(maxsplit=1)[0].lower().lstrip("/").split("@", 1)[0]
+        else:
+            token = text.lower().strip(" .!")
         if token not in ("cancel", "stop"):
             return False
         user_id = (msg.get("from") or {}).get("id")
@@ -5934,6 +6091,8 @@ class TelegramBot:
             # calls, so /cancel lands mid-sentence instead of waiting out a
             # long tool loop.
             should_stop=lambda: self._turn_cancelled(user_id),
+            # A message sent mid-turn lands between steps.
+            interject=lambda: self._take_interjections(user_id),
             ollama_host=resolve_kin_ollama_host(
                 (full_cfg or {}).get("ollama_host_name", "")),
         )

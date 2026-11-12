@@ -955,6 +955,10 @@ class RoomsMixin:
             kin_name=kin_name,
             surface="room-tool",
             max_iterations=int(room_kin_cfg.get("max_tool_iterations", 8) or 8),
+            # Same as the desktop chat: Stop must stop the calls, not only
+            # the display of them.
+            should_stop=lambda: bool(getattr(self, "_closing", False))
+            or my_gen != self._stream_id,
             ollama_host=resolve_kin_ollama_host(
                 room_kin_cfg.get("ollama_host_name", "")),
         )

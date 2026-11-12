@@ -272,6 +272,21 @@ class DiscordBot:
             entry["stop"] = True
             return True
 
+    def stop_any_turn(self):
+        """Stop every reply this bot is writing (operator's desktop command,
+        Chat -> Stop every reply). Returns a human line, or None."""
+        label = self.active_turn_label()
+        with self._turn_lock:
+            if not self._active_turns:
+                return None
+            for entry in self._active_turns.values():
+                entry["stop"] = True
+        if label and " is part-way through a reply" in label:
+            return label.replace(" is part-way through a reply", "'s reply", 1)
+        if label and " is part-way through " in label:
+            return label.replace(" is part-way through ", "'s ", 1)
+        return f"{self.agent_name}'s replies on Discord"
+
     def active_turn_label(self):
         """One human line naming a reply being written right now, or None.
 

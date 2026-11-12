@@ -2,6 +2,21 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
+## Unreleased
+
+### Fixed
+
+- **Stop now lands between a kin's tool calls, not only between its replies.** A model put about sixty `exec` calls into a single reply. A stop was only checked between model replies, so it couldn't land until every one of them had run, and closing the app was the only way out. The tool loop now checks before every call. A call already running finishes (cutting a `write_file` or `exec` off halfway would be worse), the calls after it are answered "not run", and the reply ends. Every call still gets a result in the history, as providers require.
+- **The desktop Stop button stopped the display, not the work.** Pressing Stop (or sending again) on the desktop or in a room stopped showing the turn, but the tool loop was never told and kept running the kin's queued calls unseen in the background. Both loops are now told.
+- **On Telegram, /stop while a command waited for approval only refused that one command.** The next call of the same batch stepped up and asked again, one at a time. `/stop` and `/cancel` there now refuse the waiting command and stop the whole reply ("no" still refuses just the one). A bare `stop` or `cancel` sent on its own now stops a reply too, since someone watching a reply run away types the word, not the command; a longer message that merely contains it does not.
+
+### Added
+
+- **On Telegram, a message sent mid-reply reaches that reply.** It used to queue behind the reply it was about, so "wait, you're going in circles" was only read after the circling had finished. Now an ordinary message from the person whose reply is running is handed to the running reply. The bot says it got it, the kin's remaining calls are held ("not run: read their message first"), and the model's next step sees the message and decides what to do. A message sent while a command waits for approval refuses that command and is passed on the same way, instead of being told to answer the approval first. If the reply never takes another step, the message is answered next as usual, so nothing is lost. Built as `interject` on `llm_backend.run_tool_loop`, so other surfaces can use it.
+- **Chat → Stop every reply, on every surface (Ctrl+Shift+X).** Stop only ever reached the reply on the desktop screen. A kin working on Telegram or Discord had no stop the operator could reach from there. This stops the desktop reply and every Telegram and Discord reply in flight, and says aloud what it stopped.
+
+Pinned by `tests/test_tool_loop_interrupts.py` (a stand-in model making six calls at once), `tests/test_telegram_interject.py`, `tests/test_stop_everywhere.py`, and an updated `tests/test_telegram_stop.py`.
+
 ## v0.11.1 — 2026-11-11
 
 ### Added
