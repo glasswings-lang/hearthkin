@@ -25,8 +25,9 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 ## What a kin remembers of its own turns
 
 - **On Discord, a kin now sees its own past tool use and Hearthkin's notes.** Fixed 12 November 2026, in the order they happened, with "Tool history kept" applied like on the desktop.
-- **Rooms don't keep tool use.** On purpose for now.
-- **The "Tool history kept" setting works everywhere now.** Fixed 12 November 2026: desktop, Telegram and Discord all send older tool steps as short one-line markers.
+- **Rooms keep each kin's tool use now.** Fixed 12 November 2026. Before, a kin in a room could use tools, but next turn it couldn't see what they'd done. Now it can, and only that kin sees its own tool results; the others hear what it says. Hearthkin's notes to a kin in a room work the same way, and are now kept, where before they were dropped.
+- **A note to a kin in a room used to come back to it as its own words.** Fixed 12 November 2026. It now arrives as a note from Hearthkin, as everywhere else.
+- **The "Tool history kept" setting works everywhere now.** Fixed 12 November 2026: desktop, rooms, Telegram and Discord all send older tool steps as short one-line markers.
 
 ## Tidying a reply before it's kept
 
@@ -41,9 +42,10 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 - **A kin can reach you on Discord now.** Added 12 November 2026. When a kin reaches out on its own, or a wake-up is sent somewhere, the place can be a Discord person's direct messages or a Discord channel, as well as Telegram. You choose the places in the same windows as before. If two places have the same name, the kin sees which app each is on.
 - **A kin gets a whole park turn in Discord direct messages now.** Added 12 November 2026: it moves, sees what happened, and can move again, like on the desktop and in Telegram private chats. In a Discord server channel or a Telegram group it gets one reply's worth of moves, on purpose, because several people are reading there.
 - **Telegram replies now grow as they're written, tools or not.** Fixed 12 November 2026, in private chats and groups. **Room replies still arrive whole, on purpose:** in a room a kin sometimes starts writing as another kin, and that part is cut before the reply is shown. Shown live, your screen reader would already have read the wrong voice aloud, and that can't be taken back.
-- **Rooms are the barest place to talk:** no images, voice, regenerate, or saving files written out in a reply. Mostly on purpose, marked "not yet".
+- **Rooms save files written out in a reply now.** Fixed 12 November 2026. A kin in a room can write a file out in its reply, the way it can on the desktop, and it's saved. A kin with no tools can save to its own memory that way, as its instructions already told it. A kin that says it read a file it never opened is told so, like everywhere else.
+- **Rooms are still the barest place to talk:** no images, no sharing a file in, no park moves, no regenerate, no list of recalled memories under a reply, and the kin doesn't speak its replies aloud. Mostly on purpose, marked "not yet". Dictation does work in a room, because it's the same message box.
 - **Wake-ups that land in your open chat are logged as wake-ups** in the usage log now, not as your own desktop use. Fixed 12 November 2026.
 
 ## Keeping this true
 
-Hearthkin's tests include a check that compares the surfaces feature by feature. It doesn't yet cover rooms or every feature on this page. The plan is for every difference here to be either written down as on purpose, with its reason, or to make that check fail with a plain sentence saying what drifted. The details for developers are in surface-differences-technical.md.
+Hearthkin's tests include a check that compares the surfaces feature by feature: the desktop, rooms (since 12 November 2026), Telegram, Discord and wake-ups. Every feature has an answer for every place: it's there, it's missing and that's a gap, or it can't apply there and why. If something is built or lost without this map being updated, the check fails with a plain sentence saying what drifted. It doesn't yet treat Telegram groups separately from private chats. The details for developers are in surface-differences-technical.md.

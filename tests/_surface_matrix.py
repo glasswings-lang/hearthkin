@@ -4,8 +4,11 @@ and — where it can't — whether that is a gap or a closed question.
 
 WHY THIS EXISTS
 
-Hearthkin has four surfaces a kin actually talks through: the main window,
-Telegram, Discord, and the scheduled-wake-up subprocess. They were built at
+Hearthkin has five surfaces a kin actually talks through: the main window,
+rooms (several kin and the person in one conversation, in the main window,
+but with their own code path), Telegram, Discord, and the scheduled-wake-up
+subprocess. Rooms were added to this map on 12 Nov 2026; until then their
+code was counted as the main window's, so a room could never show a gap. They were built at
 different times, and every improvement since has landed on whichever one
 provoked it. Nothing anywhere held the whole picture, so the only way to find
 out that a surface had missed something was to run into it — which means the
@@ -76,21 +79,27 @@ ROOT = Path(__file__).resolve().parent.parent
 # wired in the same file, so folding it in would credit each of them with
 # whatever the other one got.
 
+_ROOM_FILES = ["frame/rooms_mixin.py"]
+
 SURFACES = {
     "desktop": sorted(str(p.relative_to(ROOT)).replace("\\", "/")
-                      for p in (ROOT / "frame").glob("*.py"))
+                      for p in (ROOT / "frame").glob("*.py")
+                      if str(p.relative_to(ROOT)).replace("\\", "/")
+                      not in _ROOM_FILES)
     + ["frame_shared.py", "hearthkin.pyw"],
+    "rooms": _ROOM_FILES,
     "telegram": ["telegram_bot.py"],
     "discord": ["discord_bot.py"],
     "cron": ["hearthkin_cron.py", "cron_helpers.py"],
 }
 
-SURFACE_ORDER = ("desktop", "telegram", "discord", "cron")
+SURFACE_ORDER = ("desktop", "rooms", "telegram", "discord", "cron")
 
 # How each surface is described in failure text, so a message reads as a
 # sentence about the app rather than a key from a dict.
 SURFACE_NAMES = {
     "desktop": "the main window",
+    "rooms": "a room",
     "telegram": "Telegram",
     "discord": "Discord",
     "cron": "a scheduled wake-up",
@@ -958,3 +967,130 @@ CAPABILITIES = [
         },
     ),
 ]
+
+
+# ── rooms ──────────────────────────────────────────────────────────────
+#
+# Rooms got their own column on 12 Nov 2026. Kept as one block rather than
+# spread through the list above, so a room's whole answer reads in one place;
+# the loop at the bottom refuses to run if any capability is missing one.
+#
+# What rooms are, for the reasons below: the person and several kin in one
+# conversation, at the desktop, in the main window. The person is present,
+# chose every kin's tools, and has Stop. Replies arrive whole, on purpose
+# (a reply that opens in another kin's voice is cut before it's shown, and
+# live text would already have been read aloud).
+
+ROOMS = {
+    "per_turn_recall": Present(),
+    "memory_index_repair": Present(),
+    "speaker_attribution": Present(
+        note="Through the shared helper since 12 Nov 2026; it was a "
+             "hand-built bracket of the same shape."),
+    "tool_use_hint": Present(),
+    "stable_prompt_window": NotHere(
+        "As in the main window: the whole room conversation is held and the "
+        "backend trims to fit. There's no separate store whose window could "
+        "shift under the cache."),
+    "reply_cleanup": Present(),
+    "inline_thinking": Present(),
+    "empty_reply_diagnostics": Present(),
+    "intermediate_salvage": Present(),
+    "roleplay_corrective": Present(
+        markers="_maybe_log_tool_name_as_text",
+        note="Since 12 Nov 2026 the note it leaves is kept with the kin's "
+             "tool steps; it used to be written and then dropped."),
+    "authoring_bridge": Present(
+        markers="authoring_bridge_notes",
+        note="Since 12 Nov 2026, through the shared turn_steering code, and "
+             "the kin is told about the fence."),
+    "toolless_memory": Present(
+        markers="authoring_bridge_notes",
+        note="authoring_bridge_notes hands a kin with no write tools to the "
+             "memory-only path, as on Discord."),
+    "read_nudge": Present(),
+    "tool_history_persisted": Present(
+        markers="tool_call_id",
+        note="Since 12 Nov 2026: kept in the room's history tagged with the "
+             "kin, read back to that kin only, with Tool history kept "
+             "applied."),
+    "stop_support": Present(),
+    "commands": Present(
+        markers="Continue room round", where="frame/menus_mixin.py",
+        note="The Room and Chat menus: continue a round, edit a message, "
+             "stop. No regenerate for a room turn yet."),
+    "message_coalescing": NotHere(
+        "One send, when the person presses it, in the main window's message "
+        "box. There is nothing to put back together."),
+    "park_turn": Absent(
+        "A `> ` line a kin writes in a room is never run. Several kin share "
+        "the room, so a whole turn would want the same care as a Telegram "
+        "group; even one move isn't wired."),
+    "dictation": Present(
+        where="frame/status_voice_mixin.py::_transcribe_worker",
+        note="The room uses the main window's message box, so dictation "
+             "fills it the same way and sends to the room."),
+    "inflight_visibility": Present(),
+    "busy_notice": Present(
+        markers="_own_background_on_the_model",
+        where="frame/chat_stream_mixin.py",
+        note="A room turn runs under the main window's watchdog, which "
+             "holds off and says what has the model."),
+    "reasoning_display": Present(
+        markers=" reasoning]",
+        note="Its own shape: '[Name reasoning]' above the reply."),
+    "recall_legibility": Absent(
+        "The main window can show which memories were brought up for a "
+        "reply; a room never does, so nobody can tell why a kin "
+        "remembered what it did."),
+    "scheduled_wake_reaches_here": NotHere(
+        "A wake-up belongs to one kin and lands in that kin's own chat. A "
+        "room is a conversation the person starts and sits in."),
+    "reach_out_delivery": NotHere(
+        "A kin reaching out lands in its own desktop chat, a few clicks "
+        "from any room, on the same screen. A room isn't a place someone "
+        "waits to be found.",
+        markers="room", where="reach_places.py"),
+    "tool_gating": NotHere(
+        "The person at the desktop chose each kin's tool list. As in the "
+        "main window, that list is the gate."),
+    "exec_approval": Present(
+        markers="_wrap_exec_executor",
+        note="The main window's own command approval, as in the main chat."),
+    "webcam_approval": NotHere(
+        "The person is at the desktop, in the window, as in the main chat; "
+        "the asking exists for people somewhere else."),
+    "image_attachments": Absent(
+        "No images in a room: the attach button is hidden there. Marked "
+        "'not yet' on the plain page."),
+    "text_attachments": Absent(
+        "No files can be shared into a room, so a kin there can't be shown "
+        "a document the way it can in the main window."),
+    "distillation_tick": Present(
+        note="Only when the room's 'Remember this room' is ticked; each kin "
+             "counts its own turns."),
+    "mid_reply_messages": NotHere(
+        "The message box is closed while a kin is replying, as in the main "
+        "window; the person has Stop, not a second message."),
+    "per_reply_tool_cap": NotHere(
+        "On purpose, as in the main window: the person is right there with "
+        "Stop. The limit is for replies nobody is watching."),
+    "long_reply_warning": NotHere(
+        "The warning exists to reach the desktop from elsewhere. A room is "
+        "on the desktop, being watched."),
+    "per_person_settings": NotHere(
+        "One person, the operator, at the desktop. There is no list of "
+        "people to read settings for."),
+    "fence_confinement": NotHere(
+        "As in the main window, a kin's file tools aren't confined at the "
+        "desktop, so there's no folder rule for a fence to match."),
+    "operator_identity": NotHere(
+        "The only person in a room is the operator, at the desktop; there "
+        "is no one else to tell apart."),
+}
+
+for _cap in CAPABILITIES:
+    if _cap.key not in ROOMS:
+        raise KeyError(f"rooms: no answer for {_cap.key!r}. Every capability "
+                       "needs one; add it to ROOMS.")
+    _cap.surfaces["rooms"] = ROOMS[_cap.key]

@@ -207,6 +207,12 @@ class RoomsMixin:
         exactly: "\\n[header]\\ncontent\\n" per message."""
         parts = []
         for msg in self.room_conversation:
+            # A kin's stored tool steps are for that kin's next read, not the
+            # transcript: they were shown live as they ran, and a re-render
+            # full of raw tool results would bury the conversation.
+            if msg.get("role") == "tool" or (
+                    msg.get("tool_calls") and not (msg.get("content") or "").strip()):
+                continue
             speaker = msg.get("speaker") or ("You" if msg.get("role") == "user" else "Model")
             ts = msg.get("ts", "")
             ts_obj = None
@@ -544,7 +550,12 @@ class RoomsMixin:
         # to see my new name everywhere" is the more useful
         # behavior than "freeze the old name in each turn").
         room_user_name = (self.config.get("user_name", "") or "").strip()
-        room_user_prefix = f"[{room_user_name}] " if room_user_name else ""
+        # Through the shared helper, like every other surface that names a
+        # speaker to a model (12 Nov 2026). The no-colon shape is an
+        # anti-impersonation rule; a hand-built copy here is what would keep
+        # the old shape the next time that rule changes.
+        from chat_helpers import speaker_attribution_prefix
+        room_user_prefix = speaker_attribution_prefix(room_user_name)
 
         history = []
         for m in self.room_conversation:
@@ -563,6 +574,27 @@ class RoomsMixin:
                     "role": "user",
                     "content": ts_prefix + room_user_prefix + content,
                 })
+            elif role in ("system", "tool") or m.get("tool_calls"):
+                # A kin's own tool steps and Hearthkin's notes to it, kept
+                # since 12 Nov 2026, go back to that kin only, in their
+                # native shape. Another kin's are its business. A note used
+                # to fall through to the branch below and come back to its
+                # kin as the kin's OWN words.
+                if speaker != kin_name:
+                    continue
+                if role == "system":
+                    if content:
+                        history.append({"role": "system", "content": content})
+                elif role == "tool":
+                    t = {"role": "tool", "content": content or "",
+                         "tool_call_id": m.get("tool_call_id", "")}
+                    if m.get("name"):
+                        t["name"] = m["name"]
+                    history.append(t)
+                else:
+                    history.append({"role": "assistant",
+                                    "content": content or "",
+                                    "tool_calls": m["tool_calls"]})
             else:
                 # OTHER kin go in the USER slot — the same way telegram_bot
                 # puts every other group member (human or not) in `user`
@@ -590,7 +622,9 @@ class RoomsMixin:
                 # telegram_bot's sender_prefix and dropping the script-
                 # transcript shape that invites continuation.
                 if speaker and speaker != kin_name:
-                    history.append({"role": "user", "content": ts_prefix + f"[{speaker}] {content}"})
+                    history.append({"role": "user", "content": ts_prefix
+                                    + speaker_attribution_prefix(speaker)
+                                    + content})
                 elif speaker == kin_name:
                     # Pass the kin its own prior thinking (native field) so it
                     # sees its own reasoning, not other kins'. No ts prefix
@@ -599,6 +633,19 @@ class RoomsMixin:
                     if m_thinking:
                         own_msg["thinking"] = m_thinking
                     history.append(own_msg)
+
+        # "Tool history kept" (Settings, Tools), as everywhere else: older
+        # tool steps go as one-line markers. And a result whose call isn't
+        # there can't be sent (providers reject it).
+        try:
+            from chat_helpers import compact_tool_history
+            keep = int((load_agent_config(kin_name) or {}).get(
+                "tool_history_keep", 5) or 0)
+            history = compact_tool_history(history, keep)
+        except Exception:
+            pass
+        while history and history[0].get("role") == "tool":
+            history.pop(0)
 
         if self._room_opened_by_kin():
             history.insert(0, {"role": "user",
@@ -896,14 +943,12 @@ class RoomsMixin:
             model=room_kin_model,
         )
         executor = self._wrap_exec_executor(executor, kin_name)
-        # Rooms get the tool-use hint but NOT the authoring-bridge hint — the
-        # bridge runs on the 1-on-1 completion path (_on_stream_done), not on
-        # _on_room_kin_done, so advertising the fence convention in a room
-        # would promise a save that never happens. (A follow-up can wire the
-        # bridge into the room path if room authoring becomes a real use.)
+        # Rooms get the authoring-bridge hint too since 12 Nov 2026, when
+        # _on_room_kin_done started running the bridge (turn_steering). It
+        # was withheld while a fenced save in a room would never happen.
         messages = self._inject_tool_use_hint(
             list(messages), [s["function"]["name"] for s in schemas],
-            with_authoring_hint=False,
+            with_authoring_hint=True,
         )
         # Per-turn memory recall for this room kin (its own depth, inlined on
         # the latest user turn; no tool call). Fail-soft.
@@ -1137,6 +1182,22 @@ class RoomsMixin:
             self._room_salvaged_tool_names = []
 
         ts = now_iso()
+        # The kin's tool steps this turn, kept in the room's history before
+        # its reply, in the order they happened, tagged with the kin so only
+        # it reads them back (12 Nov 2026). They used to be shown and then
+        # dropped, so next turn the kin couldn't see what its tools had
+        # done, and the note Hearthkin left it about a tool call it only
+        # described was dropped with them.
+        _turn_steps = list(getattr(self, "_pending_room_tool_history", []) or [])
+        for _t in _turn_steps:
+            if not isinstance(_t, dict) or _t.get("role") not in (
+                    "assistant", "tool", "system"):
+                continue
+            _row = {k: v for k, v in _t.items() if k in (
+                "role", "content", "tool_calls", "tool_call_id", "name")}
+            _row["ts"] = ts
+            _row["speaker"] = self._current_room_speaker
+            self.room_conversation.append(_row)
         room_msg = {
             "role": "assistant",
             "content": reply_to_save,
@@ -1169,6 +1230,36 @@ class RoomsMixin:
             })
             self._room_salvaged_intermediate = False
             self._room_salvaged_tool_names = []
+        # The notes every other surface gives a kin, from the same shared
+        # code (turn_steering), since 12 Nov 2026: a file it wrote out in a
+        # fenced block is saved and it's told what landed (a kin with no
+        # write tools gets the memory-only version its prompt already
+        # promised it), and a kin that says it read a file it never opened
+        # is told so. Each note is the speaking kin's alone. Best-effort: a
+        # steering fault must never cost a turn already shown.
+        try:
+            import turn_steering
+            _speaker = self._current_room_speaker
+            _tools = list(load_kin_tools(_speaker) or [])
+            _notes = []
+            if reply_to_save and reply_to_save != "[no reply produced]":
+                kin_note, human_note = turn_steering.authoring_bridge_notes(
+                    _speaker, reply_to_save, _tools)
+                if kin_note:
+                    _notes.append(kin_note)
+                if human_note:
+                    self.chat_display.AppendText(human_note + "\n")
+                _read = turn_steering.read_gesture_note(
+                    _speaker, reply_to_save, _tools, _turn_steps)
+                if _read:
+                    _notes.append(_read)
+            for _n in _notes:
+                self.room_conversation.append({
+                    "role": "system", "content": _n, "ts": ts,
+                    "speaker": _speaker})
+        except Exception as e:
+            append_failure_log("save_failures.log", self.current_room or "?",
+                               "room turn steering", e)
         # Clear stashed pending tool history so it doesn't carry into
         # the next kin's turn.
         self._pending_room_tool_history = []

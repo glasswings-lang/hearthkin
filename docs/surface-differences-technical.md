@@ -2,20 +2,19 @@
 
 The plain-words list is docs/surface-differences.md. This file is the part for people reading code.
 
-The parity check is `tests/_surface_matrix.py` with `tests/test_surface_parity.py`. It compares desktop, Telegram, Discord and cron (`hearthkin_cron.py`) by source markers. Each capability cell is `Present`, `Absent` (drift, with a sentence) or `NotHere` (on purpose, with the reason).
+The parity check is `tests/_surface_matrix.py` with `tests/test_surface_parity.py`. It compares five surfaces by source markers: desktop (`frame/*.py` except rooms), rooms (`frame/rooms_mixin.py`, added 12 Nov 2026), Telegram (`telegram_bot.py`), Discord (`discord_bot.py`) and cron (`hearthkin_cron.py`, `cron_helpers.py`). Each capability cell is `Present`, `Absent` (drift, with a sentence) or `NotHere` (on purpose, with the reason). Rooms' answers are one block, `ROOMS`, at the bottom of the matrix; the module refuses to load if a capability has no room answer.
 
 Not yet covered:
 
-- rooms and heartbeats as surfaces;
-- the Telegram private/group split;
-- the 11–12 Nov 2026 features: stop between tool calls (`should_stop`), mid-reply messages (`interject`), `max_tool_calls` and `resolve_tool_call_cap`, the long-reply warning (`on_long_reply`), fence confinement (`confine=`), per-person exec approval (`resolve_exec_approval`, `user_exec_approval`), cron exec (`_wrap_cron_exec`, now `Present` in the matrix).
+- heartbeats as a surface (they run through the desktop frame);
+- the Telegram private/group split (one column covers both).
 
-Goal: every item in the plain page is either a `NotHere` with its reason or a failing cell, so new drift breaks the suite instead of waiting for an audit.
+Open gaps the check lists every run (12 Nov 2026): rooms have no images, no shared files, no park moves, and no recalled-memories footer; Telegram and Discord have no voice-note transcription.
 
-Known code-level facts behind the plain items (checked 12 Nov 2026):
+Fixed on 12 Nov 2026, with the test that pins each:
 
-- Discord `_channel_history` keeps only plain user/assistant text; tool and system turns are dropped.
-- Discord's 3-second per-person cooldown drops the message rather than queueing it.
-- The cron isolated path passes no `should_stop`; Ctrl+Shift+X (`_on_stop_everywhere`) doesn't reach it.
-- The cron inject-off path skips the tidy chain (roleplay corrective, thinking-text strip, authoring bridge, read nudge).
-- Tool-history compaction runs on the desktop path only.
+- Discord reads back tool and system turns (`test_discord_catchup.py`), queues instead of dropping inside the cooldown, interjects, coalesces, says when it's busy, has commands (`test_discord_commands.py`) and whole park turns in DMs (`test_discord_park_turn.py`).
+- Reach-out, wake-up places and the heartbeat share `reach_places.py`, with Discord (`test_reach_discord.py`).
+- Cron: `should_stop` through `_cron_tool_loop` and Ctrl+Shift+X (`test_cron_stop.py`); both paths finish through `_finish_cron_reply` (`test_cron_finish.py`).
+- Tool-history compaction is `chat_helpers.compact_tool_history`, used by desktop, rooms, Telegram and Discord.
+- Rooms keep each kin's tool turns tagged with `speaker`, read back to that kin only; run the authoring bridge and read nudge through `turn_steering`; and route a stored `system` row to its kin as a note (it used to come back as the kin's own words). `test_room_tool_history.py`.
