@@ -552,6 +552,92 @@ def log_cron_error(agent_name, error_type, message):
         pass
 
 
+# --- Stopping a running wake-up (12 Nov 2026) ------------------------- #
+#
+# A wake-up that runs on its own is a separate process, so Stop and
+# Ctrl+Shift+X in the app couldn't reach it, and a runaway had no way out.
+# Two small files bridge that:
+#   - each running wake-up leaves a "running" marker, so the app can say
+#     WHOSE wake-up it stopped instead of guessing;
+#   - Ctrl+Shift+X writes the time into a "stop" file, and every wake-up
+#     that started before that time stops at its next check (before each
+#     tool call). A wake-up that starts later is unaffected.
+
+def running_wakeups_dir():
+    return hearthkin_dir() / "wakeups-running"
+
+
+def wakeup_stop_file():
+    return hearthkin_dir() / "stop-wakeups"
+
+
+def mark_wakeup_running(kin, pid=None):
+    """Record that this process is running a wake-up for `kin`. Returns the
+    marker path (pass it to clear_wakeup_running), or None on failure."""
+    pid = pid or os.getpid()
+    try:
+        d = running_wakeups_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / f"{pid}.json"
+        p.write_text(json.dumps({"kin": kin, "pid": pid,
+                                 "started": time.time()}), encoding="utf-8")
+        return p
+    except Exception:
+        return None
+
+
+def clear_wakeup_running(path):
+    try:
+        if path:
+            Path(path).unlink()
+    except Exception:
+        pass
+
+
+def list_running_wakeups():
+    """Kin names with a wake-up running right now. Markers left by a
+    process that has since died are removed, so a crash can't leave a
+    phantom behind."""
+    out = []
+    d = running_wakeups_dir()
+    try:
+        files = list(d.glob("*.json"))
+    except Exception:
+        return out
+    for p in files:
+        try:
+            info = json.loads(p.read_text(encoding="utf-8"))
+            if pid_is_running(int(info.get("pid", 0))):
+                out.append(str(info.get("kin") or "a kin"))
+            else:
+                p.unlink()
+        except Exception:
+            continue
+    return out
+
+
+def request_wakeup_stop(now=None):
+    """Ask every wake-up running now to stop. Returns True if written."""
+    try:
+        p = wakeup_stop_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(repr(float(now if now is not None else time.time())),
+                     encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
+def wakeup_stop_requested(since):
+    """True when a stop was asked for at or after `since` (this wake-up's
+    start time)."""
+    try:
+        asked = float(wakeup_stop_file().read_text(encoding="utf-8").strip())
+    except Exception:
+        return False
+    return asked >= float(since)
+
+
 # --- Windows Task Scheduler shell-outs -------------------------------- #
 
 def _cron_script_path():

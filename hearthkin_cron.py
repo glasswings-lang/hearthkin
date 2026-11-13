@@ -136,6 +136,51 @@ def _wrap_cron_exec(kin, raw_exec):
     return _wrapped
 
 
+# --- Stop and limit for every model call in a wake-up (12 Nov 2026) ---
+#
+# A wake-up running on its own used to have no stop at all, and no limit on
+# tool calls. Every model call here goes through these two wrappers:
+#   - before a call, and before each tool call inside one, a stop asked for
+#     from the app (Ctrl+Shift+X) ends the wake-up (cron_helpers'
+#     wakeup_stop_requested). The half-finished reply is not delivered.
+#   - the kin's "Most tool calls in one reply" setting applies, as it does on
+#     Telegram and Discord (operator's decision: wake-ups get the kin's limit).
+
+class WakeStopped(BaseException):
+    """The operator asked for this wake-up to stop. A BaseException, like
+    KeyboardInterrupt, on purpose: the wake-up code has broad `except
+    Exception` handlers that log a failure and carry on to deliver, and a
+    stop must go straight past them to main()."""
+
+
+_WAKE_STARTED = None        # set in main(); None = never stop (tests, imports)
+_WAKE_TOOL_CAP = None       # the kin's limit, set once the config is loaded
+
+
+def _cron_should_stop():
+    if _WAKE_STARTED is None:
+        return False
+    return cron_helpers.wakeup_stop_requested(_WAKE_STARTED)
+
+
+def _cron_tool_loop(*args, **kwargs):
+    if _cron_should_stop():
+        raise WakeStopped()
+    kwargs.setdefault("should_stop", _cron_should_stop)
+    if _WAKE_TOOL_CAP:
+        kwargs.setdefault("max_tool_calls", _WAKE_TOOL_CAP)
+    result = llm_backend.run_tool_loop(*args, **kwargs)
+    if getattr(result, "stopped", False) and _cron_should_stop():
+        raise WakeStopped()
+    return result
+
+
+def _cron_chat(*args, **kwargs):
+    if _cron_should_stop():
+        raise WakeStopped()
+    return llm_backend.chat(*args, **kwargs)
+
+
 def _load_cron_tools(kin):
     """Load the kin's enabled tools, filter out the unsafe-for-cron set,
     and build (schemas, executor) ready for run_tool_loop. Returns
@@ -1154,7 +1199,7 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     # tending was architecturally impossible.
     # (schemas/executor/safe_tools resolved above, before _build_messages.)
     if schemas:
-        result = llm_backend.run_tool_loop(
+        result = _cron_tool_loop(
             model, messages,
             tools=schemas, tool_executor=executor,
             options=options, cache=cache, cache_ttl=cache_ttl,
@@ -1166,7 +1211,7 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
             ollama_host=_kin_host,
         )
     else:
-        result = llm_backend.chat(
+        result = _cron_chat(
             model, messages,
             options=options, stream=False,
             cache=cache, cache_ttl=cache_ttl,
@@ -1191,7 +1236,7 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
                 + [{"role": "system",
                     "content": load_app_prompt("tend_missed_call", kin)}]
             )
-            result = llm_backend.run_tool_loop(
+            result = _cron_tool_loop(
                 model, retry_messages,
                 tools=schemas, tool_executor=executor,
                 options=options, cache=cache, cache_ttl=cache_ttl,
@@ -1206,7 +1251,7 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     if schemas and gesture_retry:
         result = _maybe_gesture_retry(
             kin, result, messages, safe_tools, model,
-            lambda msgs: llm_backend.run_tool_loop(
+            lambda msgs: _cron_tool_loop(
                 model, msgs,
                 tools=schemas, tool_executor=executor,
                 options=options, cache=cache, cache_ttl=cache_ttl,
@@ -1403,7 +1448,7 @@ def _run_cron_park_turn(kin, reply, messages, model, options, cache,
         # No tools offered here, on purpose -- same as the desktop and
         # Telegram continuations: this is asking for the next move in a
         # game, not a work session.
-        r = llm_backend.chat(
+        r = _cron_chat(
             model, turn_msgs,
             options=options, stream=False,
             cache=cache, cache_ttl=cache_ttl,
@@ -1532,7 +1577,7 @@ def run_heartbeat(kin, cfg, should_stop=None):
     max_ctx = max(2048, int(cfg.get("num_ctx", 8192) or 8192) - 2000)
     _kin_host = resolve_kin_ollama_host(cfg.get("ollama_host_name", ""))
     try:
-        result = llm_backend.run_tool_loop(
+        result = _cron_tool_loop(
             model, messages,
             tools=schemas, tool_executor=executor,
             options=options,
@@ -1585,7 +1630,7 @@ def run_heartbeat(kin, cfg, should_stop=None):
                 follow.append({"role": "assistant",
                                "content": getattr(result, "content", "") or ""})
                 follow.append({"role": "user", "content": note})
-                second = llm_backend.run_tool_loop(
+                second = _cron_tool_loop(
                     model, follow,
                     tools=schemas, tool_executor=executor,
                     options=options,
@@ -1634,7 +1679,36 @@ def run_heartbeat(kin, cfg, should_stop=None):
 
 
 def main(argv=None):
+    """Run one wake-up. Marks itself running (so the app can say whose
+    wake-up it stopped) and turns a stop from the app into a clean end:
+    logged, noted in the journal, nothing half-finished delivered."""
+    global _WAKE_STARTED
+    import time as _time
     args = _parse_args(argv if argv is not None else sys.argv[1:])
+    _WAKE_STARTED = _time.time()
+    marker = cron_helpers.mark_wakeup_running(args.kin)
+    try:
+        return _main(args)
+    except WakeStopped:
+        cron_helpers.log_cron_error(
+            args.kin, "stopped",
+            "stopped by the operator (Stop every reply, Ctrl+Shift+X); "
+            "the unfinished reply was not delivered")
+        try:
+            cron_helpers.append_journal(
+                args.kin, getattr(args, "time_label", None) or "wake-up",
+                "(scheduled wake-up)",
+                "[Stopped by the operator before it finished. Tools that had "
+                "already run did run; the unfinished reply was not sent.]")
+        except Exception:
+            pass
+        return 0
+    finally:
+        cron_helpers.clear_wakeup_running(marker)
+
+
+def _main(args):
+    global _WAKE_TOOL_CAP
     kin = args.kin
 
     # Point the Ollama client at the configured host BEFORE any LLM call.
@@ -1658,6 +1732,11 @@ def main(argv=None):
     except Exception as e:
         cron_helpers.log_cron_error(kin, "config_load", str(e))
         return 1
+    # The kin's tool-call limit applies to wake-ups too (0 = none).
+    try:
+        _WAKE_TOOL_CAP = max(0, int(cfg.get("remote_max_tool_calls", 15)))
+    except (TypeError, ValueError):
+        _WAKE_TOOL_CAP = 15
 
     entry, time_label, prompt = _resolve_entry(cfg, args.entry_index)
     # A multi-time entry stores no single `time`; the scheduler passes the
@@ -1777,7 +1856,7 @@ def main(argv=None):
             # to the provider's 5m default on this branch (audit M-P8).
             cache_ttl = str(cfg.get("cache_ttl", "auto"))
             if schemas:
-                result = llm_backend.run_tool_loop(
+                result = _cron_tool_loop(
                     model, messages,
                     tools=schemas, tool_executor=executor,
                     options=options,
@@ -1792,7 +1871,7 @@ def main(argv=None):
                     ollama_host=_kin_host,
                 )
             else:
-                result = llm_backend.chat(
+                result = _cron_chat(
                     model, messages,
                     options=options, stream=False,
                     cache=bool(cfg.get("cache", True)),
@@ -1815,7 +1894,7 @@ def main(argv=None):
                         + [{"role": "system",
                             "content": load_app_prompt("tend_missed_call", kin)}]
                     )
-                    result = llm_backend.run_tool_loop(
+                    result = _cron_tool_loop(
                         model, retry_messages,
                         tools=schemas, tool_executor=executor,
                         options=options,
@@ -1833,7 +1912,7 @@ def main(argv=None):
             if schemas and gesture_retry:
                 result = _maybe_gesture_retry(
                     kin, result, messages, safe_tools, model,
-                    lambda msgs: llm_backend.run_tool_loop(
+                    lambda msgs: _cron_tool_loop(
                         model, msgs,
                         tools=schemas, tool_executor=executor,
                         options=options,

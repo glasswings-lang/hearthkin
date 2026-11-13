@@ -6,9 +6,9 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 
 ## Stopping a kin, and talking to it mid-reply
 
-- **Scheduled wake-ups can't be stopped once they start.** Drift. Nothing stops a wake-up that's running on its own, not even Control Shift X. To do, first.
+- **Scheduled wake-ups can be stopped now.** Fixed 12 November 2026. Control Shift X reaches a wake-up running on its own, says whose it stopped, and the wake-up stops before its next tool call. It sends nothing half-finished, and the journal notes that you stopped it.
 - **A message sent mid-reply only reaches the reply in Telegram private chats.** On Discord it waits until the reply is done. Discord also quietly drops a second message sent within three seconds of the first. Drift; to do. In Telegram groups the waiting is on purpose, because a message there might be meant for another person.
-- **The limit on tool calls in one reply covers Discord and Telegram, not the desktop, rooms or wake-ups.** On purpose for the desktop and rooms, since that's you. Open question for wake-ups.
+- **The limit on tool calls in one reply covers Discord, Telegram and wake-ups, not the desktop or rooms.** On purpose for the desktop and rooms, since you're right there. Wake-ups got it 12 November 2026, at your decision: they use the kin's own limit.
 - **The limit is the same rule on both.** Fixed 12 November 2026. Each person gets their own number if you gave them one, otherwise the kin's. That includes you: sharing a conversation with the desktop doesn't lift it, because those are separate things. Put 0 in your own entry for no limit.
 
 ## Per-person settings

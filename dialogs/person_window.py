@@ -223,7 +223,7 @@ class PersonWindow(wx.Dialog):
             "kin's setting; 0 means no limit.")
         add(self.cap_field, expand=False)
         add(_hint(p, "Leave blank to use the kin's own setting (Settings, "
-                     "Tools: Most tool calls in one reply over Telegram and Discord). "
+                     "Tools: Most tool calls in one reply over Telegram, Discord and wake-ups). "
                      "A number here applies to this person only. 0 means no "
                      "limit. Each call counts, even several asked for at once; "
                      "past the limit the rest don't run and the kin answers "

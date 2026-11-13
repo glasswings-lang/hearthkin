@@ -92,6 +92,19 @@ class LifecycleMixin:
                         stopped.append(line)
             except Exception:
                 pass
+        # Scheduled wake-ups running on their own, in their own process
+        # (12 Nov 2026). Each stops before its next tool call and doesn't
+        # send its unfinished reply. Named from their "running" markers, so
+        # this only claims a stop that has something to stop.
+        try:
+            import cron_helpers
+            running = cron_helpers.list_running_wakeups()
+            if running:
+                cron_helpers.request_wakeup_stop()
+                for kin in running:
+                    stopped.append(f"{kin}'s scheduled wake-up")
+        except Exception:
+            pass
         if not stopped:
             message = "Nothing was running, so there was nothing to stop."
         elif len(stopped) == 1:

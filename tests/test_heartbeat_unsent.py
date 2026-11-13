@@ -198,7 +198,10 @@ check("turn_steering is imported statically, so the build follows it",
 _after_call = BODY.split("scan_intermediate_tool_content", 2)[-1]
 _nudge_region = BODY[BODY.find("unsent_reach_note"):]
 _assign = _nudge_region.find("asked = True")
-_call = _nudge_region.find("run_tool_loop")
+# "_tool_loop(" matches the model call however it's reached: directly, or
+# (since 12 Nov 2026) through hearthkin_cron._cron_tool_loop, which adds the
+# wake-up stop and limit.
+_call = _nudge_region.find("_tool_loop(")
 check("the kin is marked as asked only AFTER the call that asks it",
       _assign > _call > 0)
 check("...and a nudge that fails says so rather than passing silently",

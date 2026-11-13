@@ -175,13 +175,13 @@ class ToolSettingsDialog(wx.Dialog):
              "another billable call, so keep it modest there.")
 
         self.remote_cap_field = row(
-            "Most tool calls in one reply &over Telegram and Discord:",
+            "Most tool calls in one reply &over Telegram, Discord and wake-ups:",
             lambda: _IntField(
                 panel, value=cfg.get("remote_max_tool_calls", 15),
                 min_val=0, max_val=2000, size=(100, -1),
                 on_commit=lambda v: self._save_param("remote_max_tool_calls", v)))
         help("For everyone on Telegram and Discord who doesn't have their own "
-             "number in their person window. Counts every call, one by one. "
+             "number in their person window, and for scheduled wake-ups. Counts every call, one by one. "
              "When a reply reaches it, the rest don't run and the kin answers "
              "with what it has. This is what keeps a kin from spinning "
              "through dozens of commands while nobody is watching. It covers "
