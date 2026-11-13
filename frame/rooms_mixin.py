@@ -66,7 +66,9 @@ class RoomsMixin:
             self._refresh_load_older_button()
             self.continue_btn.Show()
             self._refresh_continue_button()
-            self.regen_btn.Disable()  # regen is a single-kin concept
+            # Regenerate in a room redoes the last kin's turn (12 Nov 2026;
+            # _regen_room_turn). It used to be switched off here.
+            self.regen_btn.Enable(True)
 
             # Visually clear and re-render existing transcript
             self.chat_display.Clear()
@@ -652,6 +654,84 @@ class RoomsMixin:
                                "content": load_app_prompt("room_opening_frame", kin_name)})
         return history
 
+    def _regen_room_turn(self):
+        """Regenerate in a room: the last kin to speak writes its turn again.
+        Its reply, the tool steps it took for it and Hearthkin's notes to it
+        are taken out; nobody else's words are touched. Then only that kin
+        speaks. A room without it could only edit a bad turn by hand, and
+        the next kin had already built on it."""
+        if self._room_active or self._streaming:
+            self._set_status("Wait for the round to finish, then regenerate.")
+            return
+        if getattr(self, "_room_auto_mode", False):
+            self._set_status("Turn off Auto-continue rounds first, so the "
+                             "regenerated turn isn't followed by a new round.")
+            return
+        convo = self.room_conversation
+        last = None
+        for i in range(len(convo) - 1, -1, -1):
+            m = convo[i]
+            if m.get("role") == "user":
+                break
+            if m.get("role") == "assistant" and not m.get("tool_calls") \
+                    and m.get("speaker"):
+                last = i
+                break
+        if last is None:
+            self._set_status("Nothing to regenerate: no kin has replied since "
+                             "your last message.")
+            return
+        kin = convo[last].get("speaker")
+        start = last
+        while start > 0 and convo[start - 1].get("speaker") == kin and (
+                convo[start - 1].get("role") in ("tool", "system")
+                or convo[start - 1].get("tool_calls")):
+            start -= 1
+        end = last + 1
+        while end < len(convo) and convo[end].get("speaker") == kin \
+                and convo[end].get("role") == "system":
+            end += 1
+        del convo[start:end]
+        try:
+            save_room_conversation(self.current_room, convo)
+        except Exception as e:
+            append_failure_log("save_failures.log", self.current_room or "?",
+                               "save_room_conversation (regenerate)", e)
+        self._render_room_conversation()
+        self._set_status(f"{kin} is writing its turn again.")
+        # One kin, one turn. _finish_round counts a round, so take one back:
+        # a regenerated turn isn't a new round.
+        self._room_round_count = max(0, self._room_round_count - 1)
+        self._room_paused = False
+        self._room_round_index = 0
+        self._room_active_order = [kin]
+        self._run_next_kin_in_round()
+
+    def _room_shared_file_block(self):
+        """The text of any file named in the person's latest room message,
+        while this round is still answering it, else "". A round is one turn
+        per member; past that, the file isn't read again."""
+        last_user = None
+        for i in range(len(self.room_conversation) - 1, -1, -1):
+            if self.room_conversation[i].get("role") == "user":
+                last_user = i
+                break
+        if last_user is None:
+            return ""
+        answered = sum(
+            1 for m in self.room_conversation[last_user + 1:]
+            if m.get("role") == "assistant" and not m.get("tool_calls"))
+        members = len(getattr(self, "_room_active_order", None) or []) or 1
+        if answered >= members:
+            return ""
+        import reading_bridge
+        paths = reading_bridge.extract_shared_paths(
+            self.room_conversation[last_user].get("content") or "")
+        if not paths:
+            return ""
+        return reading_bridge.build_shared_context_block(
+            reading_bridge.read_shared_files(paths))
+
     def _room_opened_by_kin(self):
         """True when the room is empty (so a kin would be first) or its
         stored conversation starts with a kin's turn."""
@@ -725,6 +805,19 @@ class RoomsMixin:
         history = self._room_history_for(kin_name)
 
         messages = [{"role": "system", "content": sys_prompt}] + history
+        # A file named in the person's latest message (typed, or put there
+        # by Share a document) is read and placed in front of each kin for
+        # the round that answers it, as in the main window (12 Nov 2026).
+        # At the END of the messages and for this turn only, so the front of
+        # the prompt never changes; not again in later rounds.
+        self._room_shared_this_turn = False
+        try:
+            block = self._room_shared_file_block()
+            if block:
+                messages.append({"role": "system", "content": block})
+                self._room_shared_this_turn = True
+        except Exception:
+            pass
 
         options = {
             "temperature": cfg.get("temperature", 0.8),
@@ -1250,7 +1343,9 @@ class RoomsMixin:
                 if human_note:
                     self.chat_display.AppendText(human_note + "\n")
                 _read = turn_steering.read_gesture_note(
-                    _speaker, reply_to_save, _tools, _turn_steps)
+                    _speaker, reply_to_save, _tools, _turn_steps,
+                    shared_this_turn=bool(
+                        getattr(self, "_room_shared_this_turn", False)))
                 if _read:
                     _notes.append(_read)
             for _n in _notes:
@@ -1310,8 +1405,80 @@ class RoomsMixin:
                 self._maybe_auto_distill, speaker, scope_key=room_scope)
 
         self._room_round_index += 1
-        # Brief pause between turns so the UI has room to breathe
-        wx.CallLater(150, self._run_next_kin_in_round)
+        # A `> ` park move in the reply runs (one per reply, as in a Telegram
+        # group, since several kin take turns here), then the next kin
+        # speaks. Brief pause between turns so the UI has room to breathe.
+        if not self._room_park_move(speaker, reply_to_save):
+            wx.CallLater(150, self._run_next_kin_in_round)
+
+    def _room_park_move(self, speaker, reply):
+        """Run the `> ` park move in a room kin's reply, if it plays its park
+        from chat (12 Nov 2026; a move used to sit there as words). ONE move,
+        never a run of them. Off the UI thread, since a shared park can be
+        slow; the next kin waits for it. Returns True when it took over
+        moving the round on, False when there was nothing to run."""
+        try:
+            import park_keeper
+            if park_keeper.kin_park_mode(speaker) not in ("chat", "keeper"):
+                return False
+            if not park_keeper.extract_command(reply or ""):
+                return False
+            from tools import get_game
+            host = get_game("tff")
+            if host is None:
+                return False
+        except Exception:
+            return False
+        room = self.current_room
+
+        def worker():
+            shown, note = "", ""
+            try:
+                ok, why = host.reachable(speaker)
+                if not ok:
+                    host.log_unreachable(speaker, why, "room")
+                    shown = ("🌳 The park isn't reachable right now, so that "
+                             "move didn't run and nothing was changed.")
+                else:
+                    cmd, res = park_keeper.route_reply(
+                        reply, lambda c, s="": host.run(speaker, c, say=s))
+                    if res:
+                        shown = "🌳 " + res
+                        try:
+                            kin_res = host.decorate(speaker, cmd, res)
+                        except Exception:
+                            kin_res = res
+                        note = (load_app_prompt("park_result_single", speaker)
+                                .replace("{command}", str(cmd))
+                                .replace("{result}", str(kin_res)))
+            except Exception as e:
+                append_failure_log("save_failures.log", room or "?",
+                                   f"room park move ({speaker})", e)
+            wx.CallAfter(self._room_park_done, room, speaker, shown, note)
+
+        threading.Thread(target=worker, daemon=True).start()
+        return True
+
+    def _room_park_done(self, room, speaker, shown, note):
+        if self._closing or room != self.current_room:
+            return
+        # Stopped meanwhile: show and keep what happened, but don't carry on.
+        stopped = not getattr(self, "_room_active", False)
+        if shown:
+            self.chat_display.AppendText(shown + "\n")
+        if note:
+            # The kin's own copy of what happened, read back to it alone.
+            self.room_conversation.append({
+                "role": "system", "content": note, "ts": now_iso(),
+                "speaker": speaker})
+            try:
+                save_room_conversation(self.current_room,
+                                       self.room_conversation)
+            except Exception as e:
+                append_failure_log("save_failures.log", room or "?",
+                                   "save_room_conversation (park)", e)
+        if not stopped:
+            wx.CallLater(150, self._run_next_kin_in_round)
 
     def _on_room_kin_error(self, gen, msg):
         if gen != self._stream_id:

@@ -313,6 +313,46 @@ class InputAttachMixin:
         nvda_speak(f"Image attached: {name}")
         self._set_status(f"Image staged for next send: {name}")
 
+    def _on_share_file(self, event):
+        """Share a document button: pick a file and write its path, quoted,
+        into the message at the cursor. The reading bridge does the rest at
+        send time, as it always did for a typed path: the file's text is put
+        in front of the kin for that reply. Nothing is copied or sent until
+        the person sends the message, and they can see and edit the path."""
+        if not self.current_agent and self.current_room is None:
+            self._set_status("Load a kin or a room first.")
+            return
+        dlg = wx.FileDialog(
+            self, message="Pick a document or text file to share",
+            wildcard=("Text and documents|*.txt;*.md;*.docx;*.json;*.csv;"
+                      "*.log;*.py;*.html;*.xml;*.yaml;*.yml;*.ini"
+                      "|All files (*.*)|*.*"),
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
+        try:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            path = dlg.GetPath()
+        finally:
+            dlg.Destroy()
+        self._insert_shared_path(path)
+
+    def _insert_shared_path(self, path):
+        import os
+        box = self.input_box
+        text = box.GetValue()
+        at = box.GetInsertionPoint()
+        before = "" if at == 0 or text[at - 1:at].isspace() else " "
+        box.WriteText(f'{before}"{path}" ')
+        box.SetFocus()
+        who = self.current_agent if self.current_room is None else "the room"
+        msg = (f"{os.path.basename(path)} will be shared with {who} when you "
+               "send. Its path is in your message.")
+        self._set_status(msg)
+        try:
+            nvda_speak(msg)
+        except Exception:
+            pass
+
     def _on_clear_attachment(self, event):
         if self._pending_attachment is None and self._pending_attachment_rel is None:
             return

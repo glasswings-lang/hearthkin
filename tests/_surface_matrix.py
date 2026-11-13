@@ -1018,14 +1018,15 @@ ROOMS = {
     "commands": Present(
         markers="Continue room round", where="frame/menus_mixin.py",
         note="The Room and Chat menus: continue a round, edit a message, "
-             "stop. No regenerate for a room turn yet."),
+             "stop, and since 12 Nov 2026 regenerate the last kin's turn "
+             "(_regen_room_turn)."),
     "message_coalescing": NotHere(
         "One send, when the person presses it, in the main window's message "
         "box. There is nothing to put back together."),
-    "park_turn": Absent(
-        "A `> ` line a kin writes in a room is never run. Several kin share "
-        "the room, so a whole turn would want the same care as a Telegram "
-        "group; even one move isn't wired."),
+    "park_turn": Present(
+        note="Since 12 Nov 2026: ONE move per reply, as in a Telegram group "
+             "or a Discord server channel, since several kin take turns "
+             "here (_room_park_move). Not a whole turn, on purpose."),
     "dictation": Present(
         where="frame/status_voice_mixin.py::_transcribe_worker",
         note="The room uses the main window's message box, so dictation "
@@ -1063,9 +1064,11 @@ ROOMS = {
     "image_attachments": Absent(
         "No images in a room: the attach button is hidden there. Marked "
         "'not yet' on the plain page."),
-    "text_attachments": Absent(
-        "No files can be shared into a room, so a kin there can't be shown "
-        "a document the way it can in the main window."),
+    "text_attachments": Present(
+        markers="build_shared_context_block",
+        note="Since 12 Nov 2026: a file named in the person's latest message "
+             "(or put there by Share a document) reaches each kin for the "
+             "round that answers it."),
     "distillation_tick": Present(
         note="Only when the room's 'Remember this room' is ticked; each kin "
              "counts its own turns."),

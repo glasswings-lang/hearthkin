@@ -1405,6 +1405,11 @@ class ChatStreamMixin:
         self._update_token_display()
 
     def _on_regen(self, event):
+        # In a room, Regenerate redoes the last kin's turn there. Ctrl+R
+        # used to reach the kin's one-on-one conversation instead.
+        if self.current_room is not None:
+            self._regen_room_turn()
+            return
         if self._streaming:
             return
         # A salvaged-empty-reply turn ends with a trailing role=system

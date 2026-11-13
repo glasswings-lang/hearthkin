@@ -1188,6 +1188,15 @@ class MenusMixin:
         self.take_photo_btn = wx.Button(parent, label="T&ake photo")
         self.take_photo_btn.Bind(wx.EVT_BUTTON, self._on_take_photo)
         self.take_photo_btn.Disable()
+        # Share a text file or document (12 Nov 2026). Sharing already
+        # worked by typing a file's full path into the message (the reading
+        # bridge reads it and puts its text in front of the kin), but nothing
+        # on screen said so. This picks the file and writes its path into the
+        # message, so you hear what's being shared before you send. Works for
+        # every kin, seeing or not, and in rooms. Alt+D: free in this window.
+        self.share_file_btn = wx.Button(parent, label="Share a &document…")
+        self.share_file_btn.SetName("Share a document or text file with the kin")
+        self.share_file_btn.Bind(wx.EVT_BUTTON, self._on_share_file)
         self.attached_label = wx.TextCtrl(
             parent,
             style=wx.TE_READONLY | wx.TE_NO_VSCROLL,
@@ -1204,6 +1213,8 @@ class MenusMixin:
         attach_row.Add(self.attach_btn,
                        flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
         attach_row.Add(self.take_photo_btn,
+                       flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
+        attach_row.Add(self.share_file_btn,
                        flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
         attach_row.Add(self.attached_label, proportion=1,
                        flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)

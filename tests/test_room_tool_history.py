@@ -93,6 +93,7 @@ class Room:
     _room_opened_by_kin = Frame._room_opened_by_kin
     _on_room_kin_done = Frame._on_room_kin_done
     _render_room_conversation = Frame._render_room_conversation
+    _room_park_move = Frame._room_park_move
 
     def __init__(self):
         self.room_conversation = [{"role": "user", "content": "Hello all.",

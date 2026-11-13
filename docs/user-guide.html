@@ -263,6 +263,7 @@ python hearthkin.pyw</code></pre>
   <li><strong>Send size</strong> — roughly how much the last send used, or the next one will use, against the kin's context window, with a percentage.</li>
   <li><strong>Keys</strong> — reminds you which key sends and which makes a new line.</li>
   <li><strong>Attach image…</strong> (<kbd>Alt</kbd>+<kbd>I</kbd>), <strong>Take photo</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) and <strong>Remove image</strong> (<kbd>Alt</kbd>+<kbd>M</kbd>) — see <a href="#images">Sending images</a>.</li>
+  <li><strong>Share a document…</strong> (<kbd>Alt</kbd>+<kbd>D</kbd>) — pick a text file or Word document, and its path is written into your message, in quotes. When you send, Hearthkin reads the file and puts its text in front of the kin for that reply. (Typing a file's full path yourself does the same.) It works for every kin, whether or not its model can see images, and in rooms, where each kin gets the file for the round that answers you. Files over 256 KB aren't read whole; the kin is told to use <code>read_file</code>.</li>
   <li><strong>Send</strong> (<kbd>Alt</kbd>+<kbd>S</kbd>), <strong>Stop</strong> (<kbd>Alt</kbd>+<kbd>P</kbd>), <strong>Regenerate</strong> (<kbd>Alt</kbd>+<kbd>G</kbd>), <strong>Clear chat</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) and <strong>Talk</strong> (dictation — it has no shortcut, so reach it with <kbd>Tab</kbd>).</li>
   <li>In room mode only: <strong>Continue round</strong> (between Stop and Regenerate; <strong>Let them begin</strong> while the room is empty), then <strong>Auto-continue rounds</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) and the <strong>Rounds</strong> field.</li>
 </ul>
@@ -1237,6 +1238,9 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>Stop</strong> ends the whole round, not just the kin speaking, and turns Auto-continue off.</li>
   <li>A kin's tool calls in a room are shown in the chat as they happen, and kept for that kin's next turn (since 12 November 2026). Only that kin reads its tool results back; the others hear what it says. Reopening the room shows the conversation without the raw tool results.</li>
   <li>A kin in a room can save a file by writing it out in its reply, as on the desktop, and the room shows what was saved.</li>
+  <li><strong>Regenerate</strong> (<kbd>Alt</kbd>+<kbd>G</kbd>, or <kbd>Ctrl</kbd>+<kbd>R</kbd>) has the last kin to speak write its turn again. Only that kin's reply, its tool steps and Hearthkin's notes to it are taken out; nobody else's words change, and it doesn't count as a new round. Not while a round is running, or with Auto-continue on.</li>
+  <li>A kin that plays its park from chat can make <strong>one</strong> park move per reply in a room, with a <code>&gt;</code> line, as in a Telegram group. The room sees what happened, and the next kin waits for it.</li>
+  <li><strong>Share a document</strong> works in a room: each kin gets the file's text for the round that answers your message.</li>
 </ul>
 
 <h3>Auto-room mode</h3>
