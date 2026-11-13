@@ -1416,31 +1416,52 @@ class DiscordBot:
             append_failure_log("discord_failures.log", self.agent_name,
                                "turn steering", e)
         # Text-in/text-out park bridge (per-kin `park` setting = chat|keeper):
-        # a `> command` in the reply runs. One move, never a loop -- see
-        # _route_park_command for why a Discord channel gets the same
-        # single-move treatment Telegram GROUP does rather than the full
-        # play_turn turn desktop/Telegram DM/cron get. After the reply, so a
-        # park error can never cost a message that already went out.
-        self._route_park_command(text, channel, channel_id, share)
+        # a `> command` in the reply runs. In a direct message, the kin's
+        # whole turn (play_turn, as on the desktop and in Telegram private
+        # chats); in a server channel, one move. See _route_park_command.
+        # After the reply, so a park error can never cost a message that
+        # already went out.
+        park_ask = None
+        park_msgs = list(messages) + [{"role": "assistant", "content": text}]
+        if getattr(message, "guild", None) is None:
+            def park_ask():
+                # The move's result is already in park_msgs (on_note below),
+                # so the kin answers the ground truth, not its own guess.
+                r = llm_backend.chat_collect(
+                    model, park_msgs,
+                    should_stop=lambda: self._turn_cancelled(channel_id),
+                    surface=self._surface_label, **common)
+                nxt = (getattr(r, "content", "") or "").strip()
+                nxt, _ = extract_inline_thinking(nxt, "")
+                nxt = (nxt or "").strip()
+                if not nxt or getattr(r, "stopped", False):
+                    return ""
+                park_msgs.append({"role": "assistant", "content": nxt})
+                self._post_sync(channel, nxt)
+                self._persist_turn(channel_id, "assistant", nxt, share)
+                return nxt
+        self._route_park_command(
+            text, channel, channel_id, share, ask=park_ask, who=who,
+            author_id=getattr(message.author, "id", None),
+            on_note=lambda n: park_msgs.append(
+                {"role": "system", "content": n}))
         return text
 
-    def _route_park_command(self, text, channel, channel_id, share):
-        """Run the `> command` a kin puts in its Discord reply -- ONE move,
-        never a whole turn.
+    def _route_park_command(self, text, channel, channel_id, share, ask=None,
+                            who="", author_id=None, on_note=None):
+        """Run the `> command` a kin puts in its Discord reply.
 
-        Discord is channel/guild-shaped, not DM-shaped: `dcfg["channels"]`/
-        `dcfg["guilds"]` gate WHERE the bot listens, but a listened-to
-        channel can still hold several people at once, same as a Telegram
-        group. `park_keeper.route_reply`'s own docstring names the exact
-        failure a multi-move loop risks there: a kin's turn landing under
-        another tenant's name in a feed everyone reads, because the loop
-        cannot tell "my move" from "the room". Telegram already drew this
-        line -- group chats get `_route_park_command` with no `ask` (one
-        move), while Telegram DM, desktop and the cron keeper get the full
-        `park_keeper.play_turn` loop. Discord has no DM path at all (see
-        discord_bot.py: every message here comes through a guild channel),
-        so it never qualifies for the loop side of that line -- it gets the
-        same single-move treatment as Telegram group, always.
+        With `ask` (direct messages only, since 12 Nov 2026): the kin's
+        whole turn, through the same `park_keeper.play_turn` loop the
+        desktop, Telegram private chats and wake-ups use. It sees each
+        result and moves again until it stops or its allowance runs out,
+        and "stop" reaches it between moves.
+
+        Without `ask` (server channels): ONE move. A channel can hold several
+        people at once, same as a Telegram group, and
+        `park_keeper.route_reply`'s docstring names what a loop risks there:
+        a kin's turn landing under another tenant's name in a feed everyone
+        reads. Telegram draws the same line for groups.
 
         Best-effort, after the reply already posted: a park error must
         never cost a message that already landed in the channel."""
@@ -1457,6 +1478,8 @@ class DiscordBot:
             # loudly about -- when there's a real move to run. A kin quoting
             # a document back (route_reply's own quote guard) never touches
             # the game, so it must not be blamed on the game being down.
+            # Checked once, before any move, so one failed reach can't
+            # become a whole turn's worth.
             if park_keeper.extract_command(text):
                 ok, why = host.reachable(self.agent_name)
                 if not ok:
@@ -1466,13 +1489,57 @@ class DiscordBot:
                         "🌳 The park isn't reachable right now, so that "
                         "move didn't run and nothing was changed.")
                     return
+        except Exception as e:
+            append_failure_log("discord_failures.log", self.agent_name,
+                               "park routing", e)
+            return
+        # Re-open the turn while the loop runs, so "stop" reaches it.
+        reopened = False
+        if ask is not None:
+            try:
+                self._begin_turn(channel_id, who, author_id=author_id)
+                reopened = True
+            except Exception:
+                reopened = False
+        try:
+            result = park_keeper.play_turn(
+                self.agent_name, text,
+                run_move=lambda t: self._route_one_park_move(
+                    t, channel, channel_id, share, host, on_note),
+                ask=ask,
+                awaiting=lambda: host.awaiting_answer(self.agent_name),
+                cancelled=lambda: self._turn_cancelled(channel_id))
+        except Exception as e:
+            append_failure_log("discord_failures.log", self.agent_name,
+                               "park turn", e)
+            result = None
+        finally:
+            if reopened:
+                try:
+                    self._end_turn(channel_id)
+                except Exception:
+                    pass
+        if result is not None and getattr(result, "spent_allowance", False):
+            try:
+                from kin_persistence import load_app_prompt
+                self._post_sync(channel, load_app_prompt(
+                    "park_moves_spent", self.agent_name).replace(
+                        "{moves}", str(result.moves)))
+            except Exception:
+                pass
+
+    def _route_one_park_move(self, text, channel, channel_id, share, host,
+                             on_note=None):
+        """Run one `> command` from `text`. True if a move actually ran.
+        The channel sees the plain result; the kin's own copy carries the
+        trimmings (what other tenants did, one thing worth doing on a look)
+        -- decorate(), never a bare result."""
+        try:
+            import park_keeper
             cmd, res = park_keeper.route_reply(
                 text, lambda c, s="": host.run(self.agent_name, c, say=s))
             if not res:
-                return
-            # The channel sees the plain result; the kin's own copy carries
-            # the trimmings (what other tenants did, one thing worth doing
-            # on a look) -- decorate(), never a bare result, per CLAUDE.md.
+                return False
             self._post_sync(channel, "🌳 " + res)
             try:
                 kin_res = host.decorate(self.agent_name, cmd, res)
@@ -1483,9 +1550,13 @@ class DiscordBot:
                     .replace("{command}", str(cmd))
                     .replace("{result}", str(kin_res)))
             self._persist_turn(channel_id, "system", note, share)
+            if on_note is not None:
+                on_note(note)
+            return True
         except Exception as e:
             append_failure_log("discord_failures.log", self.agent_name,
                                "park routing", e)
+            return False
 
     def _persist_tool_turn(self, channel_id, turn, share):
         """Store one tool round-trip turn. Kept apart from _persist_turn

@@ -562,21 +562,16 @@ CAPABILITIES = [
         surfaces={
             "desktop": Present(),
             "telegram": Present(),
-            "discord": Absent(
-                "A `> ` line now runs here (one move, same as Telegram "
-                "group -- see discord_bot._route_park_command), and the tff "
-                "tool remains directly callable too, but there is no "
-                "play_turn LOOP: a Discord channel is guild-shaped, not "
-                "DM-shaped, so an unattended multi-move turn risks the same "
-                "cross-tenant voice leak route_reply's docstring warns "
-                "about. One command per reply, deliberately.",
-                # The capability-level default marker ("park_keeper") now
-                # matches every surface, including this one -- Discord
-                # imports the module for its single-move routing too. What
-                # actually distinguishes "whole turn" is the LOOP call, so
-                # this cell probes for that specifically rather than the
-                # module import.
-                markers="play_turn"),
+            "discord": Present(
+                # The module import ("park_keeper") would match even the
+                # old single-move routing; the LOOP call is what makes it a
+                # whole turn, so this cell probes for that.
+                markers="play_turn",
+                note="Since 12 Nov 2026, in direct messages. A server "
+                     "channel still gets one move per reply, on purpose, as "
+                     "Telegram groups do: several people read it, and a "
+                     "loop there risks a kin's turn landing under another "
+                     "tenant's name."),
             "cron": Present(),
         },
     ),
