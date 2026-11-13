@@ -862,4 +862,114 @@ CAPABILITIES = [
                      "the two settings its person happened to choose."),
         },
     ),
+
+    # --- added 12 Nov 2026: the features built on 11 and 12 Nov ----------
+
+    Capability(
+        key="mid_reply_messages",
+        what="A message sent while a reply is running reaches that reply",
+        why="'Wait, that's the wrong file' is read after the damage, not before",
+        markers=("interject",),
+        surfaces={
+            "desktop": NotHere(
+                "The person is at the screen: sending again replaces the "
+                "reply, and Stop is right there."),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": NotHere(
+                "Nobody can send anything to a wake-up while it runs; it has "
+                "no conversation partner to interrupt it."),
+        },
+    ),
+
+    Capability(
+        key="per_reply_tool_cap",
+        what="Caps how many tool calls one reply may make",
+        why="A model that batches can run dozens of calls in one round with "
+            "nobody watching",
+        markers=("max_tool_calls",),
+        surfaces={
+            "desktop": NotHere(
+                "The person is watching and can press Stop; 'Max tool rounds "
+                "per reply' still applies."),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": Present(markers="_WAKE_TOOL_CAP"),
+        },
+    ),
+
+    Capability(
+        key="long_reply_warning",
+        what="Says aloud on the desktop when a reply elsewhere runs long",
+        why="A runaway on another surface is invisible from the desktop",
+        markers=("_announce_long_reply",),
+        surfaces={
+            "desktop": NotHere(
+                "The reply is on the screen in front of the person."),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": NotHere(
+                "Usually runs with the app closed or the person away; "
+                "Ctrl+Shift+X names any running wake-up instead, and the "
+                "per-reply limit bounds it."),
+        },
+    ),
+
+    Capability(
+        key="per_person_settings",
+        what="Reads each person's settings from the one shared list",
+        why="A setting added for one surface's people never reaches the "
+            "other's, which is how Discord fell behind",
+        markers=("person_value", "resolve_file_reach"),
+        surfaces={
+            "desktop": NotHere(
+                "One person, the operator, at the keyboard. There is no list "
+                "of people."),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": NotHere(
+                "A wake-up talks to no one; there is no person to look up."),
+        },
+    ),
+
+    Capability(
+        key="fence_confinement",
+        what="A file written out in a reply obeys the same folder rule as "
+             "the file tools",
+        why="A fenced save could reach where write_file was deliberately "
+            "stopped",
+        markers=("confine",),
+        surfaces={
+            "desktop": NotHere(
+                "The operator's own surface; file tools there aren't "
+                "confined either, so there's no rule for a fence to escape."),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": NotHere(
+                "The kin acting for itself on its own machine, like the "
+                "desktop; its file tools aren't confined there either."),
+        },
+    ),
+
+    Capability(
+        key="operator_identity",
+        what="Knows which person is the operator ('This is me')",
+        why="Without it, sharing a conversation stood in for 'this is the "
+            "operator', and someone shared with approved their own commands",
+        markers=("_user_is_me",),
+        surfaces={
+            "desktop": NotHere(
+                "The desktop is the operator, sitting at it; there is no "
+                "one else to tell apart."),
+            "telegram": Present(),
+            "discord": NotHere(
+                "On Discord a command that asks always asks on the desktop, "
+                "and there's no /reset, so there's nothing for 'This is me' "
+                "to unlock yet. If Discord grows either, this cell should "
+                "flip and fail."),
+            "cron": NotHere(
+                "A wake-up talks to no one, so there is no person whose "
+                "identity matters."),
+        },
+    ),
 ]
