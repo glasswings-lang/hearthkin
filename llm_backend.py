@@ -5395,6 +5395,26 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
     _np = loop_options.get("num_predict")
     if not _np or _np < TOOL_LOOP_MIN_OUTPUT_TOKENS:
         loop_options["num_predict"] = TOOL_LOOP_MIN_OUTPUT_TOKENS
+
+    def _show_final_turn(text):
+        """The loop's last answers (tool-call limit reached, a stuck loop, too
+        many rounds) are asked for without streaming. Hand them to a streaming
+        surface exactly as a streamed turn would arrive: the turn boundary
+        first, then the words. Without this the surface still held the turn
+        BEFORE the tools as its live text, and the last answer replaced it:
+        on Telegram a kin's apology was overwritten by its "Fixed." (13 Nov
+        2026), and the desktop painted the earlier turn as the reply."""
+        if on_turn is not None:
+            try:
+                on_turn()
+            except Exception:
+                pass
+        if on_content is not None and text:
+            try:
+                on_content(text)
+            except Exception:
+                pass
+
     for _ in range(max_iterations):
         # Asked to stop between iterations — after a tool call resolved but
         # before spending another model call on it. Return what we have with
@@ -5636,6 +5656,7 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                 if not final.content:
                     final.content = (f"[Stopped: this reply reached its "
                                      f"limit of {max_tool_calls} tool calls.]")
+                _show_final_turn(final.content)
                 final.messages_added = messages_added
                 final.hit_tool_limit = True
                 return final
@@ -5666,6 +5687,7 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
             if not final.content:
                 final.content = ("[Stopped: the last tool call repeated with "
                                  "no change in result.]")
+            _show_final_turn(final.content)
             final.messages_added = messages_added
             return final
         last_signature = signature
@@ -5683,5 +5705,6 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
     if not final.content:
         final.content = (f"[Tool loop exceeded {max_iterations} iterations "
                          "without a final answer.]")
+    _show_final_turn(final.content)
     final.messages_added = messages_added
     return final

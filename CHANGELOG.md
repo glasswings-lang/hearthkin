@@ -2,6 +2,13 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
+## Unreleased
+
+### Fixed
+
+- **On Telegram, a kin's words before its tool calls could be replaced by its last answer.** When a kin used up its tool calls, its final answer overwrote the message it had written before the tools ran. Now each part of a reply is its own message: what the kin says before its tools, then what it says after. The same applies on Discord. On the desktop, the last answer after a limit is now shown instead of the earlier words.
+- **The user guide's Discord section was out of date.** It still described Discord as it was before 0.12.0. It's corrected, and so is the line saying rooms can't take pictures.
+
 ## v0.12.0 — 2026-11-12
 
 ### Fixed

@@ -578,9 +578,11 @@ def _is_not_modified(err):
 
 
 class _TelegramStreamEditor:
-    """Renders a streaming kin reply into ONE Telegram message that fills in
+    """Renders a streaming kin reply into Telegram messages that fill in
     place (OpenClaw-style), instead of a wall of silence until the whole reply
-    lands. Wired into run_tool_loop via on_content (feed) + on_turn (reset_turn);
+    lands. One message per talking turn: what the kin says before a tool call
+    and what it says after are separate messages (13 Nov 2026; see
+    reset_turn). Wired into run_tool_loop via on_content (feed) + on_turn (reset_turn);
     the caller calls finalize() with the CLEANED reply after its cleanup pipeline.
 
     Dependencies are injected so the throttle logic is unit-testable without a
@@ -634,6 +636,9 @@ class _TelegramStreamEditor:
         # knowing nothing about kin or impersonation rules.
         self._clean = clean
         self._kept = ""
+        # Cleaned text of each earlier turn already finished as its own
+        # message, so finalize can tell a repeat from something new.
+        self._closed = []
         self._buf = ""
         self._msg_id = None
         self._last_edit_at = 0.0
@@ -700,17 +705,57 @@ class _TelegramStreamEditor:
         self._dirty = False
 
     def reset_turn(self):
-        """A talking turn has ENDED — bank what it said and start a fresh
-        buffer.
+        """A talking turn has ENDED: finish its message and leave it be. The
+        next turn gets a message of its own.
 
-        Banked, not dropped. This used to discard the buffer, which is what
-        made a tool call erase the sentence in front of it. Nothing the reader
-        has already been shown may be taken away."""
+        Each talking turn is its own message since 13 Nov 2026. Before that
+        they were banked into one message that kept growing, and before THAT
+        the buffer was simply dropped, so a tool call erased the sentence in
+        front of it. One message for the whole reply was fragile: any path
+        that skipped this hook (the last answer after the tool-call limit
+        did) overwrote what was said first, and the operator lost a kin's
+        apology that way. Separate messages can't be overwritten by a later
+        turn, and they read as what they are: the kin said something, went
+        and did things, then said something else."""
         said = self._buf.strip()
-        if said:
-            self._kept = (self._kept + said).strip() + "\n\n"
         self._buf = ""
-        self._dirty = self._msg_id is not None
+        self._dirty = False
+        if not said:
+            return
+        if self._msg_id is None:
+            # Its first send failed, so nothing is on screen. Keep the words
+            # for finalize, which puts them in front of the last turn.
+            self._kept = (self._kept + said).strip() + "\n\n"
+            return
+        # Write the WHOLE turn into its message before moving on; the last
+        # throttled edit may have shown only part of it. This only adds.
+        text = self._render_text(said)
+        head = text[:self._max_len] or "…"
+        if head != self._written:
+            try:
+                self._edit(self._msg_id, head)
+            except Exception:
+                pass
+        rest = text[self._max_len:]
+        while rest:
+            try:
+                self._send(rest[:self._max_len])
+            except Exception:
+                break
+            rest = rest[self._max_len:]
+        self._closed.append(text.strip())
+        self._msg_id = None
+        self._written = None
+
+    def _render_text(self, raw):
+        """`raw` shaped by the cleaner, the way _render shapes the live
+        buffer. Never raises."""
+        if self._clean is None:
+            return raw
+        try:
+            return self._clean(raw)
+        except Exception:
+            return raw
 
     def finalize(self, final_text):
         """Write the caller's CLEANED final reply into the streamed message.
@@ -730,11 +775,16 @@ class _TelegramStreamEditor:
         if final_text and self._kept:
             final_text = self._kept + final_text
         elif self._kept and not final_text:
-            # Cleanup ate the last turn entirely. What the kin said before the
-            # tool call is still real and still already on screen; leaving it
-            # would mean editing it away, which is the exact thing this class
-            # must not do.
+            # Cleanup ate the last turn entirely, and an earlier turn's words
+            # never made it on screen (its send failed). Send those.
             final_text = self._kept.strip()
+        if self._msg_id is None and self._closed:
+            # Earlier turns already have their own messages. A last turn that
+            # says nothing new (cleanup emptied it, or a caller salvaged an
+            # earlier turn's words as the reply) must not post those words a
+            # second time.
+            if not final_text.strip() or final_text.strip() in self._closed:
+                return True
         if self._msg_id is None:
             if final_text:
                 try:

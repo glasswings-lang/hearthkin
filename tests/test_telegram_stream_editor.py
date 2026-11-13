@@ -79,15 +79,11 @@ ed.feed("let me check")          # a talking turn before a tool call
 ed.reset_turn()                  # that turn ends; the tool runs
 clock.t = 2.0
 ed.feed("the answer is 42")      # the turn after the tool
-check(sends == ["let me check"], "placeholder created on the first turn")
-# Asserted as a PREFIX, not by looking for both strings: this fixture caps
-# the message at 20 characters, so the second turn is legitimately cut off.
-# The invariant is not "both are visible" — it is that the message never
-# stops starting with what it already said.
-check(edits and edits[-1][1].startswith("let me check"),
-      "the sentence said before the tool call still opens the message")
-check(edits and len(edits[-1][1]) > len("let me check"),
-      "...and the message grew rather than being replaced")
+# Since 13 Nov 2026 the turn after the tool gets a message of its own.
+check(sends == ["let me check", "the answer is 42"],
+      "the turn after the tool call is a new message")
+check(all(mid != "m1" or text == "let me check" for mid, text in edits),
+      "...and the first message is never edited to say anything else")
 
 # 5. finalize writes the cleaned reply into the streamed message, returns True.
 ed, clock, sends, edits = make()
