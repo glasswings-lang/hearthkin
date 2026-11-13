@@ -160,7 +160,8 @@ class CronEntryDialog(wx.Dialog):
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.BORDER_SIMPLE,
             value=(
                 "Tick specific places to send this scheduled message exactly "
-                "there — a Telegram group, a DM. Leave everything unticked to "
+                "there — a Telegram group, a Telegram or Discord DM, a "
+                "Discord channel. Leave everything unticked to "
                 "keep the old behavior (it goes to whoever has 'mirror to "
                 "Telegram' turned on). 'Desktop only' records it in the kin's "
                 "chat and journal and sends it nowhere outward."
@@ -171,27 +172,13 @@ class CronEntryDialog(wx.Dialog):
         self._dest_rows = [("desktop", "", "Desktop only")]
         choices = ["Desktop only — record it, send nowhere outward"]
         try:
+            # Telegram and Discord, from the one list reach_out and the
+            # heartbeat use too (reach_places).
             from kin_persistence import load_agent_config
-            _cfg = load_agent_config(kin) or {}
-            _tg = _cfg.get("telegram") or {}
-            _labels = _tg.get("user_labels") or {}
-            for uid in (_tg.get("allow_from") or []):
-                suid = str(uid).strip()
-                if not suid or suid == "*" or not suid.lstrip("-").isdigit():
-                    continue
-                nm = str(_labels.get(suid) or "").strip()
-                choices.append(
-                    f"Telegram DM: {nm} ({suid})" if nm else f"Telegram DM: {suid}")
-                self._dest_rows.append(("telegram_dm", suid, nm or suid))
-            for chat_id, g in (_tg.get("groups") or {}).items():
-                scid = str(chat_id).strip()
-                if not scid:
-                    continue
-                nm = str(g.get("label") or "").strip() if isinstance(g, dict) else ""
-                choices.append(
-                    f"Telegram group: {nm} ({scid})" if nm
-                    else f"Telegram group: {scid}")
-                self._dest_rows.append(("telegram_group", scid, nm or scid))
+            import reach_places
+            for p in reach_places.place_rows(load_agent_config(kin) or {}):
+                choices.append(p["display"])
+                self._dest_rows.append((p["surface"], p["id"], p["label"]))
         except Exception:
             pass
         # Created here, immediately before the list, because that is the only

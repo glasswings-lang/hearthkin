@@ -583,57 +583,24 @@ def _maybe_post_telegram(kin, cfg, text):
                 pass
 
 
-def _tg_send_chunked(token, chat_id, text, kin, context):
-    """Send `text` (chunked to Telegram's ~4096-char cap, 4000 for headroom)
-    to a single Telegram chat_id — a DM user id OR a group chat id (negative;
-    Telegram's sendMessage takes either on the same call). Failures log to
-    telegram_failures.log so a missing post is debuggable; the reply is
-    journaled locally regardless."""
-    try:
-        from telegram_bot import telegram_api_call
-    except Exception:
-        return
-    try:
-        for chunk_start in range(0, len(text), 4000):
-            chunk = text[chunk_start: chunk_start + 4000]
-            telegram_api_call(
-                token, "sendMessage",
-                {"chat_id": str(chat_id), "text": chunk}, timeout=20)
-    except Exception as e:
-        try:
-            from kin_persistence import append_failure_log
-            append_failure_log("telegram_failures.log", kin, context, e)
-        except Exception:
-            pass
-
-
 def _deliver_to_destinations(kin, cfg, text, destinations):
     """Send a cron reply to the destinations the operator set on the cron
     entry — the 'where does this go' addressing. Each item is a dict
-    ``{"surface": "telegram_dm" | "telegram_group" | "desktop", "id": <chat_id>}``.
-    `telegram_dm` and `telegram_group` both resolve to a Telegram sendMessage
-    on the id (group ids are negative). `desktop` (or an unknown surface)
-    sends nothing outward: the reply is already recorded in the kin's
-    conversation.jsonl + journal, which IS the desktop record. No-ops cleanly
-    when Telegram is off or the bot token is missing. This is the addressed
-    counterpart to _maybe_post_telegram's legacy mirror-to-DM behavior."""
-    tg = cfg.get("telegram") or {}
-    if not isinstance(tg, dict) or not tg.get("enabled"):
-        return
-    token = (tg.get("bot_token") or "").strip()
-    if not token:
-        return
+    ``{"surface": <a reach_places surface> | "desktop", "id": <id>}``:
+    Telegram people and groups, and since 12 Nov 2026 Discord people and
+    channels, all sent through reach_places.deliver. `desktop` sends nothing
+    outward: the reply is already recorded in the kin's conversation.jsonl +
+    journal, which IS the desktop record. A place whose app is off or has no
+    token is skipped cleanly. This is the addressed counterpart to
+    _maybe_post_telegram's legacy mirror-to-DM behavior."""
+    import reach_places
     for d in (destinations or []):
         if not isinstance(d, dict):
             continue
         surface = d.get("surface")
-        if surface in ("telegram_dm", "telegram_group"):
-            chat_id = str(d.get("id", "")).strip()
-            if chat_id:
-                _tg_send_chunked(
-                    token, chat_id, text, kin,
-                    f"cron destination {surface} chat_id={chat_id}")
-        # "desktop" / unknown -> no outward send (conversation.jsonl covers it)
+        if not surface or surface == "desktop":
+            continue    # conversation.jsonl covers it
+        reach_places.deliver(kin, cfg, surface, d.get("id", ""), text)
 
 
 def _append_to_conversation(kin, prompt, reply, intermediate_turns=None,

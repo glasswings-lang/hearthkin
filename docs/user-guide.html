@@ -1926,7 +1926,7 @@ understood, exactly as it does for you at the console.</p>
   <li><strong>Keep this job's history separate from the chat</strong> (<kbd>Alt</kbd>+<kbd>K</kbd>) — off by default. Explained just below this list.</li>
   <li><strong>Retry tending if no tool call fired</strong> — 0 (off), 1, 2 or 3; default 0. Only matters for tending wake-ups. If the kin answers without making any tool call, it is asked again, up to this many times. Leave it at 0 for check-in prompts that don't use tools.</li>
   <li><strong>Give it one more try if no tool runs</strong> (<kbd>Alt</kbd>+<kbd>G</kbd>) — off by default. For any job meant to use tools, not only tending: a journal entry, a note, a check on a file. If a run ends without any tool actually running, the kin is told plainly that nothing was written or read, and gets one more turn to do it, or to say in a line that there was nothing to do. It goes by whether a tool ran, not by what the reply says, because a kin can describe its work in endless ways ("Let me check the journal and write today's entry" names no tool at all), and a reply that saves a file as a fenced block counts as doing the work. Only once per run, so it can't loop. It applies when the job runs on its own; a wake-up sent into the open desktop chat is an ordinary chat turn. Leave it off for jobs that only talk.</li>
-  <li><strong>Send this message to</strong> (<kbd>Alt</kbd>+<kbd>S</kbd>) — a checklist of <strong>Desktop only</strong>, each Telegram DM user, and each Telegram group the kin is in. Space ticks and unticks.</li>
+  <li><strong>Send this message to</strong> (<kbd>Alt</kbd>+<kbd>S</kbd>) — a checklist of <strong>Desktop only</strong>, each Telegram DM user, each Telegram group the kin is in, each Discord person (to their direct messages) and each channel listed under <strong>Only answer in these channels</strong> on the Discord tab. Space ticks and unticks.</li>
   <li>A <strong>time overlap warning</strong>. If the time you chose overlaps another kin's wake-up, pressing OK shows a warning instead of saving, because kin sharing one graphics card take turns and the later one can time out. Change the time, or press OK again to keep it.</li>
 </ul>
 
@@ -1973,8 +1973,8 @@ understood, exactly as it does for you at the console.</p>
   <li><strong>Enable proactive heartbeat for this kin</strong> — off by default.</li>
   <li><strong>Give it a moment every (minutes)</strong> — how often the kin gets a quiet moment. Default 120; anything from 5 to 1440.</li>
   <li><strong>Only between</strong> a start and an end time — default 09:00 to 22:00, so overnight stays quiet.</li>
-  <li><strong>Send its reach-outs to</strong> — the kin's own desktop chat (you see it next time you open it), or a Telegram DM or group you choose.</li>
-  <li><strong>Other places it may write to</strong> — a checklist of Telegram DMs and groups, with nothing ticked. Space ticks and unticks.</li>
+  <li><strong>Send its reach-outs to</strong> — the kin's own desktop chat (you see it next time you open it), or a Telegram DM or group, or a Discord person or channel, that you choose.</li>
+  <li><strong>Other places it may write to</strong> — a checklist of Telegram DMs and groups and Discord people and channels, with nothing ticked. Space ticks and unticks. If two places share a name, such as a Wren on Telegram and a Wren on Discord, the kin is shown them as "Wren on Telegram" and "Wren on Discord", so it can tell them apart.</li>
 </ul>
 
 <p><strong>Think before ticking a place under Other places it may write to.</strong> Ticking a DM or a group lets the kin start a conversation there on its own, without anyone speaking to it first. In a group, everyone in that group will see it. So only tick groups you're in yourself. Messages only reach Telegram if the kin's Telegram bot is switched on; otherwise they stay in the desktop chat.</p>

@@ -80,27 +80,14 @@ class HeartbeatSettingsDialog(wx.Dialog):
         self._dest_labels = ["Desktop"]
         choices = ["Desktop — the kin's own chat (you see it next time you open it)"]
         try:
+            # Telegram and Discord people, groups and channels, from the one
+            # list wake-ups and reach_out use too (reach_places).
             from kin_persistence import load_agent_config
-            cfg = load_agent_config(kin) or {}
-            tg = cfg.get("telegram") or {}
-            labels = tg.get("user_labels") or {}
-            for uid in (tg.get("allow_from") or []):
-                s = str(uid).strip()
-                if not s or s == "*" or not s.lstrip("-").isdigit():
-                    continue
-                nm = str(labels.get(s) or "").strip()
-                choices.append(f"Telegram DM: {nm} ({s})" if nm else f"Telegram DM: {s}")
-                self._dest_rows.append(("telegram_dm", s))
-                self._dest_labels.append(nm or s)
-            for cid, g in (tg.get("groups") or {}).items():
-                sc = str(cid).strip()
-                if not sc:
-                    continue
-                nm = str(g.get("label") or "").strip() if isinstance(g, dict) else ""
-                choices.append(
-                    f"Telegram group: {nm} ({sc})" if nm else f"Telegram group: {sc}")
-                self._dest_rows.append(("telegram_group", sc))
-                self._dest_labels.append(nm or sc)
+            import reach_places
+            for p in reach_places.place_rows(load_agent_config(kin) or {}):
+                choices.append(p["display"])
+                self._dest_rows.append((p["surface"], p["id"]))
+                self._dest_labels.append(p["label"])
         except Exception:
             pass
         self.dest_choice = wx.Choice(self, choices=choices)

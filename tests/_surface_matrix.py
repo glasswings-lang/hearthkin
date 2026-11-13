@@ -714,11 +714,12 @@ CAPABILITIES = [
         surfaces={
             "desktop": Present(markers="desktop", where="tools/reach_out.py"),
             "telegram": Present(markers="telegram_dm",
-                                where="tools/reach_out.py"),
-            "discord": Absent(
-                "reach_out knows the desktop and Telegram only, so a kin "
-                "whose person is on Discord cannot start anything there.",
-                markers="discord", where="tools/reach_out.py"),
+                                where="reach_places.py"),
+            "discord": Present(
+                markers="discord_dm", where="reach_places.py",
+                note="Since 12 Nov 2026: Discord people and channels, "
+                     "through the one list and sender reach_out, wake-up "
+                     "places and the heartbeat share (reach_places)."),
             "cron": NotHere(
                 "A wake-up is the moment a kin decides whether to reach out, "
                 "not a place a message can be delivered to. Nobody is sitting "

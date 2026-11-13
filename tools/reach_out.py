@@ -88,29 +88,21 @@ def reach_out(message: str, to: str = "", agent_name: str = "") -> str:
     surface = dest.get("surface", "desktop")
     delivered_where = "your desktop chat"
 
-    if surface in ("telegram_dm", "telegram_group"):
-        tg = cfg.get("telegram") or {}
-        token = (tg.get("bot_token") or "").strip()
-        chat_id = str(dest.get("id", "")).strip()
-        if tg.get("enabled") and token and chat_id:
-            try:
-                from telegram_bot import telegram_api_call
-                # Chunk to Telegram's ~4096-char cap (4000 for headroom).
-                for i in range(0, len(text), 4000):
-                    telegram_api_call(
-                        token, "sendMessage",
-                        {"chat_id": chat_id, "text": text[i:i + 4000]},
-                        timeout=20,
-                    )
-                delivered_where = (
-                    f"{want} on Telegram" if want
-                    else f"the operator's Telegram ({chat_id})")
-            except Exception as e:
-                # Don't lose the message — it's still recorded below so the
-                # operator sees it on the desktop even if Telegram failed.
-                delivered_where = f"your desktop chat (Telegram send failed: {e})"
+    if surface != "desktop":
+        # Telegram and Discord both, through the one sender (reach_places).
+        import reach_places
+        place_id = str(dest.get("id", "")).strip()
+        sent, why = reach_places.deliver(agent_name, cfg, surface, place_id,
+                                         text)
+        app = reach_places.where_words(surface)
+        if sent:
+            delivered_where = (
+                reach_places.where_words(surface, want) if want
+                else f"the operator's {app} ({place_id})")
         else:
-            delivered_where = "your desktop chat (Telegram isn't fully set up)"
+            # Don't lose the message — it's still recorded below so the
+            # operator sees it on the desktop even if the send failed.
+            delivered_where = f"your desktop chat ({why})"
 
     # Record the reach-out in the kin's own history: the kin remembers it
     # spoke, and the operator sees it on next open. source="reach_out" is a

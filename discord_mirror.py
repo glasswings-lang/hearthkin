@@ -64,18 +64,40 @@ def send_dm(token, user_id, text, kin_name="", timeout=15, _call=_call):
         channel_id = ch.get("id")
         if not channel_id:
             raise RuntimeError("Discord didn't open a DM channel")
-        for i in range(0, len(text), _CHUNK):
-            _call(token, "POST", f"/channels/{channel_id}/messages",
-                  {"content": text[i:i + _CHUNK]}, timeout)
+        _post_pieces(token, channel_id, text, timeout, _call)
         return True
     except Exception as e:
-        try:
-            from kin_persistence import append_failure_log
-            append_failure_log("discord_failures.log", kin_name,
-                               f"mirror DM user_id={user_id}", e)
-        except Exception:
-            pass
+        _log(kin_name, f"DM user_id={user_id}", e)
         return False
+
+
+def send_to_channel(token, channel_id, text, kin_name="", timeout=15,
+                    _call=_call):
+    """Send `text` to one Discord server channel, split to fit. Returns True
+    when every piece was sent. Never raises. Used by reach_places for a kin
+    reaching out, or a wake-up sent, to a channel the operator opened."""
+    if not (token and channel_id and text):
+        return False
+    try:
+        _post_pieces(token, channel_id, text, timeout, _call)
+        return True
+    except Exception as e:
+        _log(kin_name, f"channel_id={channel_id}", e)
+        return False
+
+
+def _post_pieces(token, channel_id, text, timeout, _call):
+    for i in range(0, len(text), _CHUNK):
+        _call(token, "POST", f"/channels/{channel_id}/messages",
+              {"content": text[i:i + _CHUNK]}, timeout)
+
+
+def _log(kin_name, context, e):
+    try:
+        from kin_persistence import append_failure_log
+        append_failure_log("discord_failures.log", kin_name, context, e)
+    except Exception:
+        pass
 
 
 def mirror(cfg, kin_name, texts, timeout=15):
