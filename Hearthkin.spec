@@ -128,7 +128,21 @@ _HEAVY_EXCLUDES = [
     'tensorflow', 'tensorflow_hub', 'keras', 'jax', 'flax',
     'transformers', 'datasets', 'accelerate', 'safetensors',
     'matplotlib', 'pandas', 'scipy', 'sklearn', 'IPython', 'notebook',
+    # Found 12 Nov 2026, when the installer jumped from 95 MB to 262 MB with
+    # no change in Hearthkin: the build machine had gained these from other
+    # projects, and PyInstaller follows whatever is importable. pyarrow and
+    # h5py ride in with data/ML libraries. trafilatura (with lxml, courlan,
+    # babel, htmldate, justext) is the OPTIONAL better page reader for
+    # fetch_url, deliberately not in requirements.txt and never shipped;
+    # fetch_url falls back to its own reader without it.
+    'pyarrow', 'h5py',
+    'trafilatura', 'courlan', 'htmldate', 'justext', 'babel', 'lxml',
 ]
+
+# onnxruntime's graphics-card add-ons (CUDA, TensorRT): 185 MB in 1.27, and
+# nothing here uses them. faster-whisper uses onnxruntime only for its
+# voice-activity model, on the processor. Dropped after analysis, below.
+_DROP_BINARIES = ("onnxruntime_providers_cuda", "onnxruntime_providers_tensorrt")
 try:
     import faster_whisper as _fw  # noqa: F401
 except Exception:
@@ -215,6 +229,12 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+_before = len(a.binaries)
+a.binaries = [b for b in a.binaries
+              if not any(d in _os.path.basename(b[0]).lower()
+                         for d in _DROP_BINARIES)]
+print(f"Hearthkin.spec: left out {_before - len(a.binaries)} unused "
+      f"graphics-card runtime file(s)")
 pyz = PYZ(a.pure)
 
 exe = EXE(
