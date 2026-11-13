@@ -543,10 +543,7 @@ CAPABILITIES = [
                 "One send, when the person presses it. There is nothing to "
                 "reassemble."),
             "telegram": Present(),
-            "discord": Absent(
-                "Discord splits long messages the same way Telegram does, and "
-                "people type across two lines everywhere. Each piece gets its "
-                "own reply."),
+            "discord": Present(markers="_coalesce"),
             "cron": NotHere(
                 "The prompt arrives whole, from a file written in advance. "
                 "There is no typing to wait for and no way for it to "
@@ -640,12 +637,7 @@ CAPABILITIES = [
             "desktop": Present(),
             "telegram": Present(
                 where="frame/bot_integration_mixin.py::_start_bot_for"),
-            "discord": Absent(
-                "The callback exists and is handed to Telegram a few lines "
-                "away; Discord's constructor simply never got it. So a kin "
-                "held up behind a 13-minute memory write looks, from a "
-                "Discord channel, exactly like a kin ignoring you.",
-                where="frame/bot_integration_mixin.py::_start_discord_bot_for"),
+            "discord": Present(where="frame/bot_integration_mixin.py::_start_discord_bot_for"),
             "cron": NotHere(
                 "Nobody is waiting on a scheduled wake-up, so there is nobody "
                 "to reassure."),

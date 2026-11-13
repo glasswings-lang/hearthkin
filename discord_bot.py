@@ -65,6 +65,9 @@ DISCORD_MAX_CONCURRENT_GENERATIONS = 3
 # How many of one person's messages may wait their turn at once. Past this
 # they're told, not silently dropped (12 Nov 2026).
 DISCORD_MAX_WAITING_PER_PERSON = 3
+# Discord cuts a message at 2,000 characters; a piece this long was cut by
+# the client, so its continuation is on its way (see _coalesce).
+DISCORD_SPLIT_LEN = 1990
 
 # Matches a Discord user mention token: <@123> or <@!123> (the "!" form
 # is the legacy nickname mention). Stripped from content before the
@@ -125,7 +128,11 @@ class DiscordBot:
     def __init__(self, agent_name, get_config, get_soul, get_memory,
                  get_model_options, on_status, on_activity=None,
                  wrap_exec=None, request_webcam_approval=None,
-                 on_long_reply=None):
+                 on_long_reply=None, get_busy_label=None):
+        # get_busy_label(skip_bot=None) -> str: what has the model right now
+        # ("Bracken is writing a memory note"), or "" when nothing does. Same
+        # contract as Telegram's; see _maybe_busy_notice.
+        self.get_busy_label = get_busy_label
         self.agent_name = agent_name
         self.get_config = get_config
         self.get_soul = get_soul
@@ -465,6 +472,14 @@ class DiscordBot:
                 f"step, or straight after this reply if there isn't one.")
             return
 
+        # A message split across several sends is put back together first,
+        # as on Telegram. Attachments keep their own path. A piece merged
+        # into a message already waiting has nothing more to do here.
+        if not getattr(message, "attachments", None):
+            content = await self._coalesce(message, content)
+            if content is None:
+                return
+
         # Per-person pace. A follow-up within the cooldown used to be thrown
         # away without a word. Now it waits out the rest of the cooldown and
         # is answered; past a few waiting at once, the person is TOLD, so a
@@ -480,6 +495,7 @@ class DiscordBot:
             return
         waiting[uid] = waiting.get(uid, 0) + 1
         try:
+            await self._maybe_busy_notice(message)
             gap = time.monotonic() - self._user_last_reply.get(uid, 0.0)
             if gap < DISCORD_USER_COOLDOWN_SECS:
                 await asyncio.sleep(DISCORD_USER_COOLDOWN_SECS - gap)
@@ -509,6 +525,108 @@ class DiscordBot:
                 self.on_activity("discord", message.channel.id)
             except Exception:
                 pass
+
+    def _message_wait_secs(self):
+        """How long to listen for the rest of a message: the person's pace
+        from the Telegram tab's Message settings ("message_wait_secs"), so
+        it's set once for both surfaces. Junk falls back to 2 seconds."""
+        cfg = self.get_config() or {}
+        raw = (cfg.get("telegram") or {}).get("message_wait_secs", 2)
+        try:
+            secs = float(raw)
+        except (TypeError, ValueError):
+            return 2.0
+        if secs != secs:
+            return 2.0
+        return max(0.0, min(secs, 600.0))
+
+    @staticmethod
+    def _join_parts(prev_text, next_text):
+        """Same seam rule as Telegram: a newline between pieces, except
+        where whitespace is already there or a piece hit the length limit
+        (the cut may be mid-word)."""
+        if not prev_text:
+            return next_text
+        if not next_text:
+            return prev_text
+        if prev_text[-1].isspace() or next_text[0].isspace():
+            return prev_text + next_text
+        if len(prev_text) >= DISCORD_SPLIT_LEN:
+            return prev_text + next_text
+        return prev_text + "\n" + next_text
+
+    async def _coalesce(self, message, content):
+        """Put a message split across several sends back together, as
+        Telegram does (12 Nov 2026): Discord cuts long messages at 2,000
+        characters, and people type one thought across two quick lines.
+
+        The first piece waits a moment; pieces from the same person in the
+        same channel that arrive meanwhile join it, and each one restarts
+        the wait (longer after a piece cut at the length limit). Returns
+        the whole text for the first piece, or None for a piece that was
+        merged into a message already waiting (nothing more to do)."""
+        key = (message.channel.id, message.author.id)
+        open_ = self.__dict__.setdefault("_coalescing", {})
+        if key in open_:
+            entry = open_[key]
+            entry["parts"].append(content)
+            entry["last"] = asyncio.get_running_loop().time()
+            entry["long"] = len(content) >= DISCORD_SPLIT_LEN
+            return None
+        loop = asyncio.get_running_loop()
+        entry = {"parts": [content], "last": loop.time(),
+                 "long": len(content) >= DISCORD_SPLIT_LEN}
+        open_[key] = entry
+        try:
+            while len(entry["parts"]) < 16:
+                window = self._message_wait_secs()
+                if entry["long"]:
+                    window = max(window, 8.0)
+                remaining = entry["last"] + window - loop.time()
+                if remaining <= 0:
+                    break
+                await asyncio.sleep(min(remaining, 0.25))
+        finally:
+            open_.pop(key, None)
+        text = entry["parts"][0]
+        for part in entry["parts"][1:]:
+            text = self._join_parts(text, part)
+        return text
+
+    async def _maybe_busy_notice(self, message):
+        """Say once, when this person's message is waiting behind the app's
+        own background work (a memory write, a wake-up, another reply), so
+        a held-up kin doesn't look like one ignoring them. Telegram has had
+        this; Discord's constructor never got the callback (12 Nov 2026).
+
+        Same rules as Telegram's: only when something is actually named;
+        not for this kin's own reply in this same channel (they just sent
+        what it's answering); once per busy stretch per channel. The message
+        still goes through either way."""
+        if not getattr(self, "get_busy_label", None):
+            return
+        channel_id = message.channel.id
+        sent = self.__dict__.setdefault("_busy_notice_sent", set())
+        with self._turn_lock:
+            skip_bot = (self.agent_name
+                        if channel_id in self._active_turns else None)
+        try:
+            label = (self.get_busy_label(skip_bot) or "").strip()
+        except Exception:
+            label = ""
+        if not label:
+            sent.discard(channel_id)
+            return
+        if channel_id in sent:
+            return
+        sent.add(channel_id)
+        try:
+            await self._send_chunked(
+                message.channel,
+                f"{label}. Your message is in the queue and will be answered "
+                f"when that finishes; nothing is lost.")
+        except Exception:
+            pass
 
     async def _generate_in_turn(self, message, content, image_paths, text_docs):
         """One reply, under the global concurrency cap and this channel's

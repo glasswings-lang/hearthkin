@@ -116,7 +116,10 @@ class _Client:
     user = _User(1, "bot", bot=True)
 
 
-CFG = {"discord": {"policy": "always", "allow_from": ["*"]}}
+# message_wait_secs 0: these scenarios are about other things, so pieces
+# aren't held to be joined. The joining has its own scenario below.
+CFG = {"discord": {"policy": "always", "allow_from": ["*"]},
+       "telegram": {"message_wait_secs": 0}}
 
 
 def drive(coro):
@@ -245,6 +248,108 @@ async def scenario_leftover():
 
 check("a held message the reply never reached is answered straight after",
       drive(scenario_leftover()) == ["first", "and one more thing"])
+
+
+# --- split messages put back together (12 Nov 2026) --------------------
+async def scenario_coalesce():
+    cfg = {"discord": {"policy": "always", "allow_from": ["*"]},
+           "telegram": {"message_wait_secs": 0.3}}
+    b = bare_bot(cfg)
+    ch = _Channel()
+    answered = []
+
+    async def gen(message, content, imgs, docs):
+        answered.append(content)
+    b._generate_in_turn = gen
+    b._loop = asyncio.get_running_loop()
+
+    async def no_dl(m):
+        return []
+    b._download_images = no_dl
+    b._download_text_documents = no_dl
+
+    async def send(channel, text):
+        channel.sent.append(text)
+    b._send_chunked = send
+
+    async def later(delay, msg):
+        await asyncio.sleep(delay)
+        await b._on_message(_Client(), msg)
+    old = discord_bot.DISCORD_USER_COOLDOWN_SECS
+    discord_bot.DISCORD_USER_COOLDOWN_SECS = 0
+    try:
+        await asyncio.gather(
+            b._on_message(_Client(), _Msg("I was thinking", ch)),
+            later(0.1, _Msg("about the garden", ch)),
+            later(0.2, _Msg("and the beans", ch)))
+        two = list(answered)
+        answered.clear()
+        long_piece = "x" * discord_bot.DISCORD_SPLIT_LEN
+        await asyncio.gather(
+            b._on_message(_Client(), _Msg(long_piece, ch)),
+            later(0.1, _Msg("yz", ch)))
+        three = list(answered)
+        answered.clear()
+        other = _Msg("from someone else", ch, uid=9)
+        await asyncio.gather(
+            b._on_message(_Client(), _Msg("mine", ch)),
+            later(0.05, other))
+        four = sorted(answered)
+    finally:
+        discord_bot.DISCORD_USER_COOLDOWN_SECS = old
+    return two, three, four
+
+
+two, three, four = drive(scenario_coalesce())
+check("quick pieces of one thought are answered as ONE message",
+      two == ["I was thinking\nabout the garden\nand the beans"])
+check("a piece cut at Discord's length limit joins without a line break",
+      len(three) == 1 and three[0].endswith("xxxyz"))
+check("someone else's message is never merged into yours",
+      four == ["from someone else", "mine"])
+
+
+# --- the busy notice (12 Nov 2026) -------------------------------------
+async def scenario_busy():
+    b = bare_bot(CFG)
+    ch = _Channel()
+    label = ["Bracken is writing a memory note"]
+    b.get_busy_label = lambda skip_bot=None: label[0]
+
+    async def gen(message, content, imgs, docs):
+        pass
+    b._generate_in_turn = gen
+    b._loop = asyncio.get_running_loop()
+
+    async def no_dl(m):
+        return []
+    b._download_images = no_dl
+    b._download_text_documents = no_dl
+
+    async def send(channel, text):
+        channel.sent.append(text)
+    b._send_chunked = send
+    old = discord_bot.DISCORD_USER_COOLDOWN_SECS
+    discord_bot.DISCORD_USER_COOLDOWN_SECS = 0
+    try:
+        await b._on_message(_Client(), _Msg("one", ch))
+        await b._on_message(_Client(), _Msg("two", ch))
+        n_busy = sum("in the queue" in s for s in ch.sent)
+        label[0] = ""
+        await b._on_message(_Client(), _Msg("three", ch))
+        label[0] = "Bracken is running a scheduled wake-up"
+        await b._on_message(_Client(), _Msg("four", ch))
+    finally:
+        discord_bot.DISCORD_USER_COOLDOWN_SECS = old
+    return n_busy, ch.sent
+
+
+n_busy, sent = drive(scenario_busy())
+check("Discord says when a message waits behind background work",
+      any(s.startswith("Bracken is writing a memory note.") for s in sent))
+check("...once per busy stretch, not per message", n_busy == 1)
+check("...and again in the next busy stretch",
+      any(s.startswith("Bracken is running a scheduled wake-up.") for s in sent))
 
 
 # --- 3. reading back its own tool steps --------------------------------

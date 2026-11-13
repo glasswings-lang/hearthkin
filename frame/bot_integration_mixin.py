@@ -259,6 +259,11 @@ class BotIntegrationMixin:
                 on_long_reply=lambda kin, surface, who, n: wx.CallAfter(
                     self._notify_long_remote_reply, kin, surface, who, n
                 ),
+                # Same busy check Telegram gets (12 Nov 2026): a message held
+                # up behind a memory write is told so, not left wondering.
+                get_busy_label=lambda skip_bot=None: (
+                    self._own_background_on_the_model(
+                        include_foreground=True, skip_bot=skip_bot)),
             )
             self.discord_bots[agent_name] = bot
         bot.start()
