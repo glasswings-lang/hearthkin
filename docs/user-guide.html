@@ -447,7 +447,7 @@ python hearthkin.pyw</code></pre>
   <li><strong>Size cap:</strong> 8 MB per image. Larger files are refused with a clear error before send.</li>
   <li><strong>Supported formats:</strong> JPG, PNG, GIF, WebP. Animated GIFs from Telegram (which arrive as <code>animation</code>, not <code>photo</code>) are out of scope.</li>
   <li><strong>One image per turn</strong> in the current UI. The underlying data model supports more; multi-attach is a future improvement.</li>
-  <li><strong>Rooms</strong> don't support image attachments yet — the buttons are hidden in room mode. (Multi-kin routing for image messages is a separate design problem.)</li>
+  <li><strong>Rooms</strong> take pictures too (since 12 November 2026): <strong>Attach image</strong> shows in a room, and each kin whose model can see gets the picture, while the others are told one was shared. <strong>Take photo</strong> is for one-on-one chats only.</li>
   <li><strong>Privacy:</strong> when using OpenRouter, image bytes go through OR to whatever provider routes the request, subject to that provider's data policy. Local Ollama models keep everything on the machine.</li>
   <li><strong>Magic-byte validation:</strong> Hearthkin sniffs the file header and refuses anything whose bytes don't match a real image format, even if the extension or sender's mime claim says they do. A renamed <code>.exe</code> won't get accepted as a <code>.png</code>.</li>
 </ul>
@@ -1751,7 +1751,7 @@ understood, exactly as it does for you at the console.</p>
 <ol>
   <li>Create a bot in Discord's own Developer Portal and copy its <strong>bot token</strong> — same idea as getting a Telegram token from BotFather. You'll also need to turn on the <em>Message Content</em> privileged intent for the bot in that portal, or it can't see what people type.</li>
   <li>In Hearthkin, open the kin's <strong>Settings → Discord</strong> tab, paste the token, and enable it.</li>
-  <li>Invite the bot into your server and @-mention it. By default the kin replies only when mentioned (the sane default for a busy channel).</li>
+  <li>Invite the bot into your server and @-mention it. By default the kin replies in a server channel only when mentioned (the sane default for a busy channel). A direct message to the bot needs no mention.</li>
 </ol>
 
 <p><strong>When to respond</strong> on the Discord tab has two choices: <strong>Only when mentioned (@)</strong>, the default, and <strong>Every message (quiet channels only)</strong>. Either way, only people on the list below can reach the kin, and it never answers other bots.</p>
@@ -1770,7 +1770,7 @@ understood, exactly as it does for you at the console.</p>
 <p><strong>The person window is the same on Discord and Telegram</strong> (since 12 November 2026): one window, built from one list, so the two can't drift apart. For each person: a <strong>Display name</strong> (what the kin calls them), <strong>This is me (the operator)</strong> (tick it only on your own entry; on Telegram it's what lets you approve commands in the chat and use /reset), <strong>tool access</strong>, <strong>Share this person's conversation with the Hearthkin desktop</strong> (only about where the conversation is kept; it doesn't make them you or change their limit), <strong>Mirror desktop messages to this person</strong> (on Discord, to their direct messages), <strong>webcam</strong> (ask me, auto-approve, always refuse), a <strong>tool-call limit</strong>, <strong>Commands this person asks for</strong>, and <strong>Files: kept inside the kin's folder, or allowed outside</strong>. If someone is on both, they have an entry in each tab, set separately, but the choices are always the same. When a command or a webcam capture asks, it asks <em>you</em>, on your own desktop, never in the server. The command denylist always applies too — the same protections the Telegram surface has. See <a href="#tools">Tools</a> for what the buckets mean and the <a href="#tools">remote-exec note</a> if the approval prompts get in your way.</p>
 
 <h3>Stopping a reply</h3>
-<p>Send <strong><code>stop</code></strong> in the channel (<code>cancel</code>, <code>/stop</code>, <code>/cancel</code> and <code>!stop</code> work too) and the kin stops writing, keeping whatever it had already said. It has to be the whole message — "stop that, it's funny" is a remark to your kin, not a command. <strong>With the default Only when mentioned (@) setting, the stop has to mention the bot too</strong>, for example <code>@YourKin stop</code>; a plain <code>stop</code> is ignored like any other unmentioned message. If nothing is being written, it tells you so rather than sitting silent. Anyone allowed to talk to the kin in that channel can stop a reply there.</p>
+<p>Send <strong><code>stop</code></strong> in the channel (<code>cancel</code>, <code>/stop</code>, <code>/cancel</code> and <code>!stop</code> work too) and the kin stops writing, keeping whatever it had already said. It has to be the whole message — "stop that, it's funny" is a remark to your kin, not a command. <strong>In a server channel with the default Only when mentioned (@) setting, the stop has to mention the bot too</strong>, for example <code>@YourKin stop</code>; a plain <code>stop</code> is ignored like any other unmentioned message. In a direct message, plain <code>stop</code> is enough. If nothing is being written, it tells you so rather than sitting silent. Anyone allowed to talk to the kin in that channel can stop a reply there.</p>
 
 <h3>Commands</h3>
 <p>The same commands as Telegram (since 12 November 2026). Start them with <code>/</code>, or with <code>!</code> if Discord's own command menu pops up and gets in the way.</p>
@@ -1792,17 +1792,14 @@ understood, exactly as it does for you at the console.</p>
 <h3>How Discord differs from Telegram</h3>
 
 <ul>
-  <li><strong>No slash commands.</strong> The only command is the stop word above.</li>
-  <li><strong>No waiting for the rest of a message.</strong> Each Discord message is handled on its own.</li>
-  <li><strong>A 3-second pause per person.</strong> A message sent within 3 seconds of that person's last answered message is dropped without a reply.</li>
-  <li><strong>No "the model is busy" notice.</strong> A message waiting its turn just waits; the typing indicator starts when the kin begins.</li>
-  <li><strong>History:</strong> the kin sees roughly the last 30 to 40 turns of the channel.</li>
+  <li><strong>Fewer commands.</strong> Discord has the ones listed above. Telegram's <code>/whoami</code> and <code>/reset</code> aren't there; for someone's ID, use Discord's own <strong>Copy User ID</strong>.</li>
+  <li><strong>History:</strong> the kin sees the last 40 messages of the channel.</li>
   <li><strong>Images:</strong> up to 4 per message, 8 MB each, and only if the kin's model can see images. <strong>Text documents:</strong> up to 4 per message, 256 KB each; a Word <code>.docx</code> counts.</li>
   <li><strong>Tool calls are always posted</strong> in the channel, as a call and a short result, for people who have tool access. There's no setting to hide them.</li>
   <li><strong>Kin settings apply.</strong> The kin's context window and sampling settings are used, and reply length follows <strong>Reply length cap (tokens)</strong> from the Telegram tab's <strong>Message settings…</strong>.</li>
-  <li><strong>Scheduled wake-ups reach Discord only through mirroring:</strong> people with <strong>Mirror desktop messages</strong> on get wake-up replies in their direct messages when the wake-up isn't addressed anywhere specific. Heartbeats can't post to Discord.</li>
-  <li><strong>Limiting it to certain servers or channels</strong> has no screen yet. It's an advanced setting in the kin's <code>config.json</code>: under <code>"discord"</code>, a <code>"guilds"</code> list of server IDs and a <code>"channels"</code> list of channel IDs. Empty lists, the default, mean anywhere the bot has been invited.</li>
 </ul>
+
+<p>The rest works the same as Telegram (since 12 November 2026). A message you send while the kin is replying reaches that reply, and the bot says it got it. Quick pieces of one message are joined before the kin answers, using the Telegram tab's <strong>How long to wait for the rest of a message</strong>. A message sent within 3 seconds of your last one waits its turn instead of being dropped, and if more than three are waiting, you're told. If the kin is busy with something in the background, you're told your message is waiting. Voice messages in a direct message are turned into words (see <a href="#voice">Voice</a>). And a kin can write to Discord on its own: <code>reach_out</code>, a wake-up's <strong>Send this message to</strong>, and the heartbeat's places all list Discord people (in their direct messages) and the channels under <strong>Only answer in these channels</strong>.</p>
 
 <h2 id="voice">Voice — dictation, and kin speaking aloud</h2>
 
