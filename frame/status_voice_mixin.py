@@ -197,6 +197,15 @@ class StatusVoiceMixin:
         except Exception:
             return dict(DEFAULT_CONFIG.get("dictation") or {})
 
+    def _transcribe_voice_note(self, data):
+        """A Telegram or Discord voice message -> its words, with the same
+        model and settings as dictation. Called from a bot's worker thread;
+        blocking. Raises voice_notes.VoiceNoteError with a plain reason."""
+        import voice_notes
+        return voice_notes.transcribe(
+            data, self._dictation_cfg(),
+            get_api_key=lambda: llm_backend.resolve_provider_key("elevenlabs"))
+
     def _dictation_ready(self):
         """Can dictation work at all right now? Returns (ok, reason).
 

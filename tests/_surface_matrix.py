@@ -597,21 +597,16 @@ CAPABILITIES = [
         surfaces={
             "desktop": Present(
                 where="frame/status_voice_mixin.py::_transcribe_worker"),
-            "telegram": Absent(
-                "A voice note sent to a kin here is ignored — Telegram "
-                "delivers it as an OGG/OPUS file and nothing downloads or "
-                "transcribes it. A phone keyboard has its own dictation, "
-                "which is why this has never been noticed, but that is the "
-                "phone's answer and not this app's: it does not help anyone "
-                "sending a voice note, and it does not exist on a desktop "
-                "Telegram client. The transcription itself is already "
-                "surface-independent (stt.transcribe takes bytes), so what "
-                "is missing is the download and the format conversion."),
-            "discord": Absent(
-                "Same gap as Telegram, same shape: a voice message arrives "
-                "as an attachment and nothing transcribes it. Whichever "
-                "surface gets this first should hand the other the audio "
-                "fetch, since stt.transcribe is already shared."),
+            "telegram": Present(
+                markers="transcribe_voice",
+                note="Since 12 Nov 2026, in private chats: a voice message "
+                     "is decoded (voice_notes.py, discord.py's libopus) and "
+                     "transcribed with the dictation model; the person is "
+                     "told what was heard."),
+            "discord": Present(
+                markers="transcribe_voice",
+                note="Since 12 Nov 2026, in direct messages, through the "
+                     "same voice_notes.py."),
             "cron": NotHere(
                 "A scheduled wake-up has nobody present to speak. The prompt "
                 "was written in advance, by hand."),

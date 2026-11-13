@@ -47,6 +47,21 @@ import os as _os
 # build without it still works.
 from PyInstaller.utils.hooks import collect_submodules as _collect_submodules
 _DISCORD_HIDDEN = _collect_submodules("discord")
+# discord.py's libopus DLLs (discord/bin), which voice_notes.py uses to
+# decode a Telegram or Discord voice message (12 Nov 2026). They're data to
+# PyInstaller, and discord.opus looks for them next to its own module, so
+# they go back to discord\bin inside the bundle.
+_DISCORD_DATAS = []
+try:
+    import discord as _discord_pkg
+    _dbin = _os.path.join(_os.path.dirname(_discord_pkg.__file__), "bin")
+    for _f in ("libopus-0.x64.dll", "libopus-0.x86.dll", "COPYING"):
+        if _os.path.isfile(_os.path.join(_dbin, _f)):
+            _DISCORD_DATAS.append((_os.path.join(_dbin, _f), "discord/bin"))
+    print(f"Hearthkin.spec: bundling voice-message decoder: "
+          f"{len(_DISCORD_DATAS)} file(s)")
+except Exception as _e:
+    print(f"Hearthkin.spec: no voice-message decoder bundled ({_e})")
 
 # --- Dictation (faster-whisper), bundled only if it is installed -------
 # Speaking a message instead of typing it runs on the user's own machine
@@ -183,7 +198,7 @@ a = Analysis(
         ('docs/user-guide.html',   'docs'),
         ('docs/kin_manual.md',     'docs'),
         ('docs/troubleshooting.md','docs'),
-    ] + _GAME_DATAS + _WHISPER_DATAS,
+    ] + _GAME_DATAS + _WHISPER_DATAS + _DISCORD_DATAS,
     # cv2 is imported inside tools/use_webcam.py behind a try/except so
     # missing-opencv produces an in-app error instead of an import-time
     # crash. PyInstaller's static analysis usually follows that import

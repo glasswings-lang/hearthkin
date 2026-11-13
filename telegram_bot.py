@@ -851,8 +851,13 @@ class TelegramBot:
                  get_model_options, on_status, on_activity=None,
                  request_webcam_approval=None, on_approval_needed=None,
                  on_long_reply=None,
-                 get_busy_label=None, request_desktop_exec_approval=None):
+                 get_busy_label=None, request_desktop_exec_approval=None,
+                 transcribe_voice=None):
         self.agent_name = agent_name
+        # transcribe_voice(bytes) -> str: a voice message's words, with the
+        # desktop's dictation model (voice_notes.py). None: voice messages
+        # are answered with a line saying they can't be heard here.
+        self.transcribe_voice = transcribe_voice
         self.get_config = get_config
         self.get_soul = get_soul
         self.get_memory = get_memory
@@ -2376,9 +2381,13 @@ class TelegramBot:
         # otherwise a bare file upload returns here and the kin never learns
         # anything was sent.
         has_text_doc = self._text_document_of(msg) is not None
-        if not text and (has_image or has_text_doc):
+        # A voice message (12 Nov 2026): it used to be ignored without a
+        # word. Presence only here; it's downloaded and transcribed after the
+        # gates below, like an image.
+        has_voice = isinstance(msg.get("voice"), dict)
+        if not text and (has_image or has_text_doc or has_voice):
             text = (msg.get("caption") or "").strip()
-        if not text and not has_image and not has_text_doc:
+        if not text and not has_image and not has_text_doc and not has_voice:
             return
         # In non-private chats (groups, supergroups, channels) we only
         # respond to a whitelist of safe slash commands — primarily
@@ -2461,6 +2470,21 @@ class TelegramBot:
                         f"(/help and /whoami work even before you're added.)"
                     )
             return
+
+        # --- A voice message becomes words (12 Nov 2026) ---
+        # After the allow check, so nobody unlisted costs a download or a
+        # transcription; before everything else, so the rest treats it as
+        # what it is, a message. Private chats only: in a group a voice
+        # message can't mention the kin, so it's left like any message not
+        # addressed to it.
+        if has_voice:
+            if not is_private:
+                return
+            heard = self._hear_voice(msg, chat_id)
+            if heard is None:
+                return
+            import voice_notes
+            text = voice_notes.as_message(heard, text)
 
         # --- Approval response check (fallback) ---
         # The poll thread is the NORMAL resolver for these (audit C1 —
@@ -2559,6 +2583,41 @@ class TelegramBot:
             attachments=attachments,
             msg=msg,
         )
+
+    def _hear_voice(self, msg, chat_id):
+        """Download a voice message and transcribe it. Returns the words, or
+        None after telling the person why it couldn't be heard. The words
+        are echoed back first, so the person knows what the kin received."""
+        import voice_notes
+        from kin_persistence import append_failure_log
+        if self.transcribe_voice is None:
+            self._send_chunked(chat_id, (
+                f"{self.agent_name} can't hear voice messages here: "
+                "Hearthkin's dictation isn't available. Please type it."))
+            return None
+        voice = msg.get("voice") or {}
+        token = ((self.get_config() or {}).get("bot_token") or "").strip()
+        data, err = _download_telegram_file(
+            token, voice.get("file_id"),
+            max_bytes=voice_notes.MAX_VOICE_BYTES)
+        if err is not None or not data:
+            append_failure_log("telegram_failures.log", self.agent_name,
+                               "download voice message", err or "no data")
+            self._send_chunked(chat_id, (
+                "I couldn't fetch that voice message from Telegram. Please "
+                "try again, or type it."))
+            return None
+        try:
+            heard = self.transcribe_voice(data)
+        except Exception as e:
+            append_failure_log("telegram_failures.log", self.agent_name,
+                               "transcribe voice message", e)
+            self._send_chunked(chat_id, (
+                f"I couldn't make out that voice message ({e}). Please try "
+                "again, or type it."))
+            return None
+        self._send_chunked(chat_id, f"🎙 Heard: {heard}")
+        return heard
 
     def _handle_command(self, text, user_id, chat_id,
                         *, chat_type="private", chat_title=None):

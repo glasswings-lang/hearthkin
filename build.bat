@@ -72,7 +72,7 @@ if errorlevel 1 goto :fail
 
 if not exist "dist\Hearthkin\Hearthkin.exe" (
     echo PyInstaller finished but dist\Hearthkin\Hearthkin.exe is missing.
-    echo The spec is configured for onedir mode -- make sure the COLLECT()
+    echo The spec is configured for onedir mode -- make sure the COLLECT^(^)
     echo step in Hearthkin.spec ran.
     goto :fail
 )
@@ -125,8 +125,8 @@ if not defined ISCC (
     echo Get it from https://jrsoftware.org/isdl.php and rerun this
     echo script to produce dist\Hearthkin-Setup-^<version^>.exe.
     echo.
-    echo dist\Hearthkin\ is ready as a portable build (Hearthkin.exe
-    echo plus its _internal\ sibling -- ship the whole folder).
+    echo dist\Hearthkin\ is ready as a portable build ^(Hearthkin.exe
+    echo plus its _internal\ sibling -- ship the whole folder^).
     goto :done
 )
 

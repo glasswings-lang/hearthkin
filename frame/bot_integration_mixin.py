@@ -41,6 +41,9 @@ class BotIntegrationMixin:
                 get_busy_label=lambda skip_bot=None: (
                     self._own_background_on_the_model(
                         include_foreground=True, skip_bot=skip_bot)),
+                # Voice messages -> words, with the same model and settings
+                # as dictation (12 Nov 2026; voice_notes.py).
+                transcribe_voice=self._transcribe_voice_note,
                 # Telegram-surface activity hook: the bot fires this
                 # after persisting each user/group turn so the frame
                 # can tick the right per-(kin, scope) distillation
@@ -264,6 +267,8 @@ class BotIntegrationMixin:
                 get_busy_label=lambda skip_bot=None: (
                     self._own_background_on_the_model(
                         include_foreground=True, skip_bot=skip_bot)),
+                # Voice messages -> words, as on Telegram.
+                transcribe_voice=self._transcribe_voice_note,
             )
             self.discord_bots[agent_name] = bot
         bot.start()

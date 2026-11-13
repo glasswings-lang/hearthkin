@@ -146,7 +146,11 @@ class DiscordBot:
     def __init__(self, agent_name, get_config, get_soul, get_memory,
                  get_model_options, on_status, on_activity=None,
                  wrap_exec=None, request_webcam_approval=None,
-                 on_long_reply=None, get_busy_label=None):
+                 on_long_reply=None, get_busy_label=None,
+                 transcribe_voice=None):
+        # transcribe_voice(bytes) -> str: a voice message's words, with the
+        # desktop's dictation model (voice_notes.py), as on Telegram.
+        self.transcribe_voice = transcribe_voice
         # get_busy_label(skip_bot=None) -> str: what has the model right now
         # ("Bracken is writing a memory note"), or "" when nothing does. Same
         # contract as Telegram's; see _maybe_busy_notice.
@@ -416,7 +420,11 @@ class DiscordBot:
         dcfg = cfg.get("discord", {}) or {}
         policy = (dcfg.get("policy") or "mention_only").lower()
 
-        addressed = client.user in message.mentions
+        # A direct message is spoken to the kin by definition (12 Nov 2026):
+        # it used to need an @-mention too under the default policy, which
+        # a voice message can't carry at all.
+        addressed = (client.user in message.mentions
+                     or getattr(message, "guild", None) is None)
         if policy == "mention_only" and not addressed:
             return  # not spoken to — stay quiet (the whole point on a busy server)
 
@@ -451,6 +459,16 @@ class DiscordBot:
             return
 
         content = _MENTION_RE.sub("", message.content or "").strip()
+        # A voice message becomes words (12 Nov 2026; it was ignored without
+        # a word). Direct messages only: in a server channel it can't be
+        # addressed to the kin, so it's left like anything else that isn't.
+        voice = self._voice_attachment(message)
+        if voice is not None and getattr(message, "guild", None) is None:
+            heard = await self._hear_voice(message, voice)
+            if heard is None:
+                return
+            import voice_notes
+            content = voice_notes.as_message(heard, content)
         if not content:
             return
 
@@ -1890,6 +1908,51 @@ class DiscordBot:
             except Exception:
                 continue
         return paths
+
+    @staticmethod
+    def _voice_attachment(message):
+        """The voice message attached to `message`, or None. Discord marks
+        them; an Ogg audio file is treated the same, since that's what one
+        is underneath."""
+        for att in list(getattr(message, "attachments", []) or []):
+            try:
+                if att.is_voice_message():
+                    return att
+            except Exception:
+                pass
+            if (getattr(att, "content_type", "") or "").startswith("audio/ogg"):
+                return att
+        return None
+
+    async def _hear_voice(self, message, att):
+        """Read and transcribe a voice message. Returns the words, or None
+        after telling the person why it couldn't be heard. The words are
+        echoed back first, so the person knows what the kin received."""
+        import voice_notes
+        ch = message.channel
+        if getattr(self, "transcribe_voice", None) is None:
+            await self._send_chunked(ch, (
+                f"{self.agent_name} can't hear voice messages here: "
+                "Hearthkin's dictation isn't available. Please type it."))
+            return None
+        if (getattr(att, "size", 0) or 0) > voice_notes.MAX_VOICE_BYTES:
+            await self._send_chunked(
+                ch, "That voice message is too long for me to transcribe.")
+            return None
+        try:
+            data = await att.read()
+            async with ch.typing():
+                heard = await self._loop.run_in_executor(
+                    None, self.transcribe_voice, data)
+        except Exception as e:
+            append_failure_log("discord_failures.log", self.agent_name,
+                               "voice message", e)
+            await self._send_chunked(ch, (
+                f"I couldn't make out that voice message ({e}). Please try "
+                "again, or type it."))
+            return None
+        await self._send_chunked(ch, f"🎙 Heard: {heard}")
+        return heard
 
     async def _download_text_documents(self, message):
         """Return [(filename, bytes)] for attached NON-image files we'd read as
