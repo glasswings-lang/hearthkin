@@ -25,8 +25,8 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 ## What a kin remembers of its own turns
 
 - **On Discord, a kin now sees its own past tool use and Hearthkin's notes.** Fixed 12 November 2026, in the order they happened, with "Tool history kept" applied like on the desktop.
-- **Rooms don't keep tool use either.** On purpose for now.
-- **The "tool history kept" setting only works on the desktop.** On Telegram, old tool use comes back in full. Drift; to do.
+- **Rooms don't keep tool use.** On purpose for now.
+- **The "Tool history kept" setting works everywhere now.** Fixed 12 November 2026: desktop, Telegram and Discord all send older tool steps as short one-line markers.
 
 ## Tidying a reply before it's kept
 
@@ -36,7 +36,7 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 
 ## Everyday things
 
-- **Telegram groups don't read text files people send.** Private chats do. Drift; to do.
+- **Telegram groups read text files people send.** Fixed 12 November 2026, as private chats always did. Naming a file on your computer is still limited to people with read access.
 - **Discord has no commands** like regenerate, undo, clear or status. Telegram groups only have help and whoami. Partly on purpose.
 - **Some replies arrive whole instead of growing as they're written:** Telegram replies from a kin without tools, and room replies. Drift.
 - **Rooms are the barest place to talk:** no images, voice, regenerate, or saving files written out in a reply. Mostly on purpose, marked "not yet".

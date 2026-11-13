@@ -3792,6 +3792,21 @@ class TelegramBot:
             return False
         return isinstance(model, str) and llm_backend.is_hosted_model(model)
 
+    def _compact_for_model(self, history):
+        """Apply the kin's "Tool history kept" (Settings, Tools) to what the
+        model is sent, as the desktop and Discord do. Older tool round-trips
+        become one-line markers; the saved history is untouched. On Telegram
+        this setting used to do nothing, so old tool calls came back in full
+        (12 Nov 2026). Never raises: on any fault, send the history as is."""
+        try:
+            from chat_helpers import compact_tool_history
+            from kin_persistence import load_agent_config
+            keep = int((load_agent_config(self.agent_name) or {}).get(
+                "tool_history_keep", 5) or 0)
+            return compact_tool_history(list(history or []), keep)
+        except Exception:
+            return list(history or [])
+
     def _tg_section(self):
         """This kin's Telegram settings, or {} when they can't be read. A
         settings fault must never turn a save into a silent failure."""
@@ -4316,7 +4331,7 @@ class TelegramBot:
             # Pull history from the right surface — desktop's
             # conversation.jsonl for share-with-desktop users, the
             # per-user telegram_history slice for everyone else.
-            history = self._load_history_for(user_id)
+            history = self._compact_for_model(self._load_history_for(user_id))
 
             # Compute the current sender's attribution string. Order:
             #   1. Operator-set cfg.telegram.user_labels[user_id] —
@@ -5227,7 +5242,7 @@ class TelegramBot:
 
             user_ts = self._user_ts_from_message_date(message_date)
 
-            history = self._load_group_history(chat_id)
+            history = self._compact_for_model(self._load_group_history(chat_id))
 
             # Resolve the effective tool set first (kin's tools.json ∩ the
             # sender's bucket) so the base prompt's tool/memory scaffolding
@@ -5413,7 +5428,25 @@ class TelegramBot:
             # can't make the bot slurp arbitrary machine files into context,
             # but the operator sharing a file with the kin works.
             shared_this_turn = False
-            if "read_file" in set(effective_tools or []):
+            # A text file someone UPLOADED to the group is read in, as in
+            # private chats (12 Nov 2026; groups used to see only the
+            # caption). No tool gate needed: it's text they sent, not a file
+            # on the operator's machine. Same size and type limits as DMs.
+            try:
+                import reading_bridge
+                _uploaded = self._download_text_documents(msg)
+                if _uploaded and messages:
+                    _ublock = reading_bridge.build_attachment_context_block(
+                        _uploaded, self.agent_name)
+                    if _ublock:
+                        messages.insert(len(messages) - 1,
+                                        {"role": "system", "content": _ublock})
+                        shared_this_turn = True
+            except Exception as e:
+                append_failure_log(
+                    "telegram_failures.log", self.agent_name,
+                    "group text document injection failed", e)
+            if not shared_this_turn and "read_file" in set(effective_tools or []):
                 try:
                     import reading_bridge
                     _shared = reading_bridge.extract_shared_paths(
