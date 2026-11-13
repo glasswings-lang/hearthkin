@@ -118,7 +118,11 @@ for phrase in ("stop that, it's funny", "don't stop", "cancel the meeting",
 import inspect                                               # noqa: E402
 on_msg = inspect.getsource(DiscordBot._on_message)
 stop_at = on_msg.find("_STOP_WORDS")
-lock_at = on_msg.find("_channel_locks")
+# Since 12 Nov 2026 the lock is taken inside _generate_in_turn, which the
+# handler calls; where it calls it is where the lock is waited on.
+lock_at = on_msg.find("_generate_in_turn(")
+check("the lock lives in _generate_in_turn",
+      "_channel_locks" in inspect.getsource(DiscordBot._generate_in_turn))
 cool_at = on_msg.find("_user_last_reply")
 check("the stop is checked BEFORE the channel lock it would wait forever on",
       0 < stop_at < lock_at)

@@ -7,7 +7,7 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 ## Stopping a kin, and talking to it mid-reply
 
 - **Scheduled wake-ups can be stopped now.** Fixed 12 November 2026. Control Shift X reaches a wake-up running on its own, says whose it stopped, and the wake-up stops before its next tool call. It sends nothing half-finished, and the journal notes that you stopped it.
-- **A message sent mid-reply only reaches the reply in Telegram private chats.** On Discord it waits until the reply is done. Discord also quietly drops a second message sent within three seconds of the first. Drift; to do. In Telegram groups the waiting is on purpose, because a message there might be meant for another person.
+- **A message sent mid-reply reaches the reply on Discord and in Telegram private chats.** Fixed for Discord 12 November 2026. You get a "Got it", and if the reply takes no further step, your message is answered straight after. A quick second message on Discord is no longer thrown away: it waits a moment and is answered, and if several pile up you're told. In Telegram groups the waiting is on purpose, because a message there might be meant for another person.
 - **The limit on tool calls in one reply covers Discord, Telegram and wake-ups, not the desktop or rooms.** On purpose for the desktop and rooms, since you're right there. Wake-ups got it 12 November 2026, at your decision: they use the kin's own limit.
 - **The limit is the same rule on both.** Fixed 12 November 2026. Each person gets their own number if you gave them one, otherwise the kin's. That includes you: sharing a conversation with the desktop doesn't lift it, because those are separate things. Put 0 in your own entry for no limit.
 
@@ -24,7 +24,7 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 
 ## What a kin remembers of its own turns
 
-- **On Discord, a kin never sees its own past tool use, or the notes Hearthkin gives it.** They're saved, but left out when it gets ready to reply. So "you described doing it but didn't" never reaches a Discord kin. Drift; to do.
+- **On Discord, a kin now sees its own past tool use and Hearthkin's notes.** Fixed 12 November 2026, in the order they happened, with "Tool history kept" applied like on the desktop.
 - **Rooms don't keep tool use either.** On purpose for now.
 - **The "tool history kept" setting only works on the desktop.** On Telegram, old tool use comes back in full. Drift; to do.
 
@@ -32,7 +32,7 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 
 - **Both kinds of wake-up now tidy their replies the same way.** Fixed 12 November 2026. That includes the one that runs while Hearthkin is open but set not to send wake-ups into the chat, which used to skip it all. One thing still differs there, on purpose: the "you only described it" notes only reach the kin if that job keeps its own history, because the open app owns the main conversation and another program mustn't write into it.
 - **Wake-ups rescue a reply that came back empty.** Fixed 12 November 2026. Like everywhere else, if the final reply is blank, Hearthkin keeps what the kin said alongside its last tool call.
-- **On Discord, an empty reply leaves no note for next time.** Elsewhere the kin is told its last reply came back empty. Drift; to do.
+- **On Discord, an empty reply now leaves the kin a note.** Fixed 12 November 2026, as elsewhere, and the tool steps it took are kept.
 
 ## Everyday things
 

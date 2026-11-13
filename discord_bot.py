@@ -62,6 +62,9 @@ DISCORD_HISTORY_CAP = 40
 # thread pool (a cheap DoS / cost-amplification otherwise).
 DISCORD_USER_COOLDOWN_SECS = 3.0
 DISCORD_MAX_CONCURRENT_GENERATIONS = 3
+# How many of one person's messages may wait their turn at once. Past this
+# they're told, not silently dropped (12 Nov 2026).
+DISCORD_MAX_WAITING_PER_PERSON = 3
 
 # Matches a Discord user mention token: <@123> or <@!123> (the "!" form
 # is the legacy nickname mention). Stripped from content before the
@@ -256,15 +259,54 @@ class DiscordBot:
 
     # ── in-flight turns: stopping one, and reporting one ───────────
 
-    def _begin_turn(self, channel_id, who):
+    def _begin_turn(self, channel_id, who, author_id=None):
         """Register a reply as being written. Clears any stale stop flag so a
-        'stop' typed during an earlier turn can't kill this one."""
+        'stop' typed during an earlier turn can't kill this one. Keeps WHOSE
+        reply it is, so a message they send mid-reply can reach it."""
         with self._turn_lock:
-            self._active_turns[channel_id] = {"who": who, "stop": False}
+            self._active_turns[channel_id] = {
+                "who": who, "stop": False,
+                "author_id": None if author_id is None else str(author_id),
+                "held": []}
+
+    def _hold_for_turn(self, channel_id, author_id, text):
+        """Keep a message for the reply running in this channel, if that
+        reply is this person's. Returns True when held."""
+        with self._turn_lock:
+            entry = self._active_turns.get(channel_id)
+            if not entry or entry.get("author_id") != str(author_id):
+                return False
+            entry.setdefault("held", []).append(text)
+            return True
+
+    def _take_interjections(self, channel_id):
+        """The interject poll, called from inside the tool loop (same
+        contract as Telegram's): hand over what the person said mid-reply."""
+        with self._turn_lock:
+            entry = self._active_turns.get(channel_id)
+            held = list(entry.get("held") or []) if entry else []
+            who = (entry or {}).get("who") or ""
+            if entry:
+                entry["held"] = []
+        from chat_helpers import speaker_attribution_prefix
+        prefix = speaker_attribution_prefix(who) if who else ""
+        return [{"role": "user", "content": prefix + t, "interjected": True}
+                for t in held]
+
+    def _take_leftovers(self, channel_id):
+        """Messages held for a reply that ended before taking another step.
+        _end_turn sets them aside; the message handler answers them next, so
+        nothing sent mid-reply is ever lost."""
+        with self._turn_lock:
+            return self.__dict__.setdefault("_leftovers", {}).pop(channel_id, [])
 
     def _end_turn(self, channel_id):
         with self._turn_lock:
-            self._active_turns.pop(channel_id, None)
+            entry = self._active_turns.pop(channel_id, None)
+            held = list((entry or {}).get("held") or [])
+            if held:
+                self.__dict__.setdefault("_leftovers", {}).setdefault(
+                    channel_id, []).extend(held)
 
     def _turn_cancelled(self, channel_id):
         with self._turn_lock:
@@ -409,27 +451,69 @@ class DiscordBot:
                     "Nothing is being written here just now.")
             return
 
-        # Per-user cooldown: drop a too-fast follow-up from the same user
-        # (silent — no channel spam). Bounds single-user flood.
-        import time
-        now = time.monotonic()
-        if now - self._user_last_reply.get(message.author.id, 0.0) < \
-                DISCORD_USER_COOLDOWN_SECS:
+        # A plain message from the person whose reply is running in this
+        # channel reaches that reply before its next step, as on Telegram
+        # (12 Nov 2026). It used to wait behind the reply it was about, so
+        # "wait, that's wrong" was only read after the wrong thing was done.
+        # Attachments keep their usual path. If the reply takes no further
+        # step, the message is answered straight after (_end_turn keeps it).
+        if not getattr(message, "attachments", None) and self._hold_for_turn(
+                message.channel.id, message.author.id, content):
+            await self._send_chunked(
+                message.channel,
+                f"Got it. {self.agent_name} will see this before its next "
+                f"step, or straight after this reply if there isn't one.")
             return
-        self._user_last_reply[message.author.id] = now
 
-        # Download any attached images up front (only when the kin's model
-        # can actually see them). Cleaned up after the turn either way.
-        image_paths = await self._download_images(message)
-        # Text documents (.txt/.md/source) were previously skipped by the
-        # image filter and dropped without a word — "check this out" arrived
-        # with nothing attached. Unlike images these need no model support.
-        text_docs = await self._download_text_documents(message)
+        # Per-person pace. A follow-up within the cooldown used to be thrown
+        # away without a word. Now it waits out the rest of the cooldown and
+        # is answered; past a few waiting at once, the person is TOLD, so a
+        # flood is still bounded but nothing vanishes silently (12 Nov 2026).
+        import time
+        uid = message.author.id
+        waiting = self.__dict__.setdefault("_waiting", {})
+        if waiting.get(uid, 0) >= DISCORD_MAX_WAITING_PER_PERSON:
+            await self._send_chunked(
+                message.channel,
+                "I've already got a few of your messages waiting, so I "
+                "skipped this one. Send it again once I've caught up.")
+            return
+        waiting[uid] = waiting.get(uid, 0) + 1
+        try:
+            gap = time.monotonic() - self._user_last_reply.get(uid, 0.0)
+            if gap < DISCORD_USER_COOLDOWN_SECS:
+                await asyncio.sleep(DISCORD_USER_COOLDOWN_SECS - gap)
+            self._user_last_reply[uid] = time.monotonic()
 
-        # Global concurrency cap across all channels (created lazily on the
-        # loop) + per-channel serialize. Together they bound total in-flight
-        # generations so a spammer across many channels can't saturate the
-        # backend.
+            # Download any attached images up front (only when the kin's model
+            # can actually see them). Cleaned up after the turn either way.
+            image_paths = await self._download_images(message)
+            # Text documents (.txt/.md/source) were previously skipped by the
+            # image filter and dropped without a word — "check this out"
+            # arrived with nothing attached. Unlike images these need no
+            # model support.
+            text_docs = await self._download_text_documents(message)
+            await self._generate_in_turn(message, content, image_paths,
+                                         text_docs)
+            # Anything said mid-reply that the reply never got to: answer it
+            # now, as one message, rather than lose it.
+            leftovers = self._take_leftovers(message.channel.id)
+            while leftovers:
+                await self._generate_in_turn(
+                    message, "\n\n".join(leftovers), [], [])
+                leftovers = self._take_leftovers(message.channel.id)
+        finally:
+            waiting[uid] = max(0, waiting.get(uid, 1) - 1)
+        if self.on_activity:
+            try:
+                self.on_activity("discord", message.channel.id)
+            except Exception:
+                pass
+
+    async def _generate_in_turn(self, message, content, image_paths, text_docs):
+        """One reply, under the global concurrency cap and this channel's
+        lock. Together they bound total in-flight generations so a spammer
+        across many channels can't saturate the backend."""
         if self._gen_semaphore is None:
             self._gen_semaphore = asyncio.Semaphore(
                 DISCORD_MAX_CONCURRENT_GENERATIONS)
@@ -453,11 +537,6 @@ class DiscordBot:
                         os.remove(p)
                     except Exception:
                         pass
-        if self.on_activity:
-            try:
-                self.on_activity("discord", message.channel.id)
-            except Exception:
-                pass
 
     def _channel_history(self, channel_id, share):
         """This channel's prior turns, model-shaped (role + content only),
@@ -487,15 +566,41 @@ class DiscordBot:
                     str(channel_id)) or []
             except Exception:
                 return []
+        # Since 12 Nov 2026 the kin gets back its own tool steps and the
+        # notes Hearthkin gave it ("you described it but didn't do it", "your
+        # reply came back empty"), as on every other surface. Only plain
+        # messages used to come back, so a Discord kin never saw what its
+        # tools did last time, and never received a single steering note.
         turns = []
         for m in rows:
             if not isinstance(m, dict):
                 continue
             role = m.get("role")
             content = m.get("content")
-            if role in ("user", "assistant") and content:
+            if role == "assistant" and m.get("tool_calls"):
+                turns.append({"role": "assistant", "content": content or "",
+                              "tool_calls": m["tool_calls"]})
+            elif role == "tool" and m.get("tool_call_id"):
+                t = {"role": "tool", "content": content or "",
+                     "tool_call_id": m["tool_call_id"]}
+                if m.get("name"):
+                    t["name"] = m["name"]
+                turns.append(t)
+            elif role in ("user", "assistant", "system") and content:
                 turns.append({"role": role, "content": content})
-        return _stable_history_window(turns, DISCORD_HISTORY_CAP)
+        turns = _stable_history_window(turns, DISCORD_HISTORY_CAP)
+        # A window can start between a call and its results; a tool result
+        # whose call scrolled away can't be sent (providers reject it).
+        while turns and turns[0].get("role") == "tool":
+            turns.pop(0)
+        # "Tool history kept" (Settings, Tools), as on the desktop.
+        try:
+            from chat_helpers import compact_tool_history
+            keep = int((self.get_config() or {}).get("tool_history_keep", 5) or 0)
+            turns = compact_tool_history(turns, keep)
+        except Exception:
+            pass
+        return turns
 
     def _persist_turn(self, channel_id, role, content, share):
         """Store one turn in whichever store `share` selects (merged
@@ -769,7 +874,8 @@ class DiscordBot:
         # Register the reply as in flight. Two readers: the Gateway loop, so a
         # "stop" typed in this channel can reach the model call; and the
         # desktop's confirm-on-close, so quitting says what it would abandon.
-        self._begin_turn(channel_id, who)
+        self._begin_turn(channel_id, who,
+                         author_id=getattr(message.author, "id", None))
         # This person's tool-call ceiling (their own number if one is set,
         # else the kin's), kept with the turn so the model call can read it.
         try:
@@ -841,6 +947,26 @@ class DiscordBot:
                 # Deliberately NOT persisted. A placeholder in the history is
                 # a turn the kin reads back as something it said, and it then
                 # explains or apologises for it. The log is the record here.
+                # What IS kept (12 Nov 2026, as on Telegram): the tool steps
+                # it took, and a note telling it the reply came back empty,
+                # so it can pick up next turn instead of not knowing.
+                for _turn in added_turns:
+                    if isinstance(_turn, dict) and _turn.get("role") in (
+                            "assistant", "tool"):
+                        self._persist_tool_turn(channel_id, _turn, share)
+                    elif (isinstance(_turn, dict)
+                          and _turn.get("role") == "user"
+                          and _turn.get("interjected")):
+                        self._persist_turn(channel_id, "user",
+                                           _turn.get("content") or "", share)
+                try:
+                    from kin_persistence import load_app_prompt
+                    self._persist_turn(
+                        channel_id, "system",
+                        load_app_prompt("empty_reply_note_group",
+                                        self.agent_name), share)
+                except Exception:
+                    pass
                 return ""
 
         if not text:
@@ -879,18 +1005,22 @@ class DiscordBot:
                 thinking, cfg=cfg, hard_cap=DISCORD_MSG_LIMIT - 200)
             if _block:
                 self._post_sync(channel, _block)
+        # Tool round-trips, stored so the kin can see what it DID last turn,
+        # and any message the person sent mid-reply, in the order they
+        # happened: BEFORE the final reply (12 Nov 2026; they used to be
+        # stored after it, so they'd have read back out of order).
+        for _turn in added_turns:
+            if not isinstance(_turn, dict):
+                continue
+            if _turn.get("role") in ("assistant", "tool"):
+                self._persist_tool_turn(channel_id, _turn, share)
+            elif _turn.get("role") == "user" and _turn.get("interjected"):
+                self._persist_turn(channel_id, "user",
+                                   _turn.get("content") or "", share)
+
         # The footer is for the reader, not the record — storing it would put
         # the harness's bookkeeping into the kin's own voice.
         self._persist_turn(channel_id, "assistant", text, share)
-
-        # Tool round-trips, stored so the kin can see what it DID last turn.
-        # Without these every turn here began with no idea what happened in
-        # the one before, and a kin that cannot see its own past calls either
-        # repeats them or denies making them.
-        for _turn in added_turns:
-            if isinstance(_turn, dict) and _turn.get("role") in (
-                    "assistant", "tool"):
-                self._persist_tool_turn(channel_id, _turn, share)
 
         # The steering notes every other surface gives back. All four are
         # shared code (turn_steering) rather than a fourth copy of the same
@@ -1076,9 +1206,10 @@ class DiscordBot:
                 model, messages, tools=schemas, tool_executor=executor,
                 on_tool_call=on_tool_call,
                 should_stop=lambda: self._turn_cancelled(channel_id),
-                # The person's ceiling: theirs, else the kin's; none for
-                # someone who shares with the desktop (that's you), unless
-                # you gave them a number.
+                # What they say mid-reply reaches the reply before its next
+                # step, as on Telegram (12 Nov 2026).
+                interject=lambda: self._take_interjections(channel_id),
+                # The person's ceiling: their own number, else the kin's.
                 max_tool_calls=_remote_cap or None,
                 on_content=ed.feed, on_turn=_on_turn,
                 surface=f"{self._surface_label}-tool",
