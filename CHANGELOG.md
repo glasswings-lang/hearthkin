@@ -2,7 +2,7 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
-## Unreleased
+## v0.12.0 — 2026-11-12
 
 ### Fixed
 
