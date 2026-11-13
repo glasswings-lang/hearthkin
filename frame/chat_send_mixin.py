@@ -408,6 +408,18 @@ class ChatSendMixin:
         threading.Thread(target=worker, daemon=True).start()
         return True
 
+    @staticmethod
+    def _is_wake_up_turn(messages):
+        """True when this turn is a scheduled wake-up delivered into the open
+        chat. The wake-up frame's bracket prefix is stable even when an
+        operator edits the body of the wake_up_frame prompt."""
+        return any(
+            isinstance(m, dict) and m.get("role") == "user"
+            and isinstance(m.get("content"), str)
+            and "[hearthkin: scheduled wake-up" in m["content"]
+            for m in (messages or [])[-3:]
+        )
+
     def _run_streaming_inline(self, my_gen, model, messages, options, think, cache, max_ctx_tokens, *, think_effort=None, cache_ttl="auto", openrouter_provider=None):
         """Streaming chat path. Used when the kin has no tools enabled —
         preserves the sentence-by-sentence paint experience. Runs on the
@@ -436,7 +448,10 @@ class ChatSendMixin:
             openrouter_provider=openrouter_provider,
             max_context_tokens=max_ctx_tokens,
             kin_name=self.current_agent,
-            surface="desktop",
+            # A wake-up delivered into this chat is logged as one, not as
+            # the person's own desktop use (12 Nov 2026).
+            surface=("cron-in-chat" if self._is_wake_up_turn(messages)
+                     else "desktop"),
             ollama_host=resolve_kin_ollama_host(
                 (self.agent_cfg or {}).get("ollama_host_name", "")),
         )
@@ -496,12 +511,7 @@ class ChatSendMixin:
         # staging tools stay present for tending even if staging momentarily
         # reads empty. The wake-up frame's bracket prefix is stable even when
         # an operator edits the body of the wake_up_frame prompt.
-        cron_turn = any(
-            isinstance(m, dict) and m.get("role") == "user"
-            and isinstance(m.get("content"), str)
-            and "[hearthkin: scheduled wake-up" in m["content"]
-            for m in messages[-3:]
-        )
+        cron_turn = self._is_wake_up_turn(messages)
         schemas, executor = kin_tools.load_tools(
             enabled_tool_names,
             context={"agent_name": self.current_agent},
@@ -592,7 +602,7 @@ class ChatSendMixin:
             max_context_tokens=max_ctx_tokens,
             tool_result_cap=tool_result_cap,
             kin_name=self.current_agent,
-            surface="desktop-tool",
+            surface=("cron-in-chat-tool" if cron_turn else "desktop-tool"),
             max_iterations=int((self.agent_cfg or {}).get("max_tool_iterations", 8) or 8),
             # Stop, or a new Send, bumps _stream_id. Without this the screen
             # stopped showing the turn but the loop carried on running the

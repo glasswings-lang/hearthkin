@@ -3792,6 +3792,57 @@ class TelegramBot:
             return False
         return isinstance(model, str) and llm_backend.is_hosted_model(model)
 
+    def _make_stream_editor(self, chat_id):
+        """The in-place editor that grows one Telegram message as the
+        reply is written. Used by the tool path and, since 12 Nov 2026,
+        the no-tools path too, which used to send the reply whole."""
+        _stream_tok = (self.get_config() or {}).get("bot_token", "").strip()
+
+        def _stream_log(action, n):
+            # Diagnostic: one line per stream send/edit so streaming is
+            # verifiable from disk (no need to catch the in-place edit live).
+            # Many edits during a turn = streaming works; a lone send+edit =
+            # the model handed us one chunk (e.g. Ollama buffering with tools).
+            try:
+                from kin_persistence import LOGS_DIR
+                import datetime as _dt
+                with open(LOGS_DIR / "telegram_stream.log", "a",
+                          encoding="utf-8") as f:
+                    f.write(
+                        f"{_dt.datetime.now().isoformat(timespec='seconds')} "
+                        f"kin={self.agent_name} chat={chat_id} "
+                        f"{action} len={n}\n")
+            except Exception:
+                pass
+
+        def _stream_send(text):
+            _stream_log("send", len(text or ""))
+            try:
+                r = telegram_api_call(
+                    _stream_tok, "sendMessage",
+                    {"chat_id": chat_id, "text": text})
+                return ((r or {}).get("result") or {}).get("message_id")
+            except Exception:
+                return None
+
+        def _stream_edit(mid, text):
+            _stream_log("edit", len(text or ""))
+            telegram_api_call(
+                _stream_tok, "editMessageText",
+                {"chat_id": chat_id, "message_id": mid, "text": text})
+
+        def _stream_clean(text):
+            # Shape the live text the way the finished message will be shaped,
+            # so the reply only ever grows. Same chain the caller runs at the
+            # end; running it here too means a model opening with its own name
+            # tag never shows that tag rather than showing it and having it
+            # edited away.
+            from chat_helpers import clean_kin_reply
+            return clean_kin_reply(text, self.agent_name)[0]
+
+        return _TelegramStreamEditor(_stream_send, _stream_edit,
+                                     clean=_stream_clean)
+
     def _compact_for_model(self, history):
         """Apply the kin's "Tool history kept" (Settings, Tools) to what the
         model is sent, as the desktop and Discord do. Older tool round-trips
@@ -4576,8 +4627,12 @@ class TelegramBot:
                     # no interruptible moment inside it. Same ChatResult
                     # shape, same single send afterwards, no live-typing
                     # artifacts in chat.
+                    # Grows in place as it's written, like the tool path
+                    # (12 Nov 2026; it used to arrive whole).
+                    _stream_ed = self._make_stream_editor(chat_id)
                     result = llm_backend.chat_collect(
                         model, messages, options=options,
+                        on_content=_stream_ed.feed,
                         should_stop=lambda: self._turn_cancelled(user_id),
                         show_thinking=show_thinking,
                         cache=cache, cache_ttl=cache_ttl,
@@ -5477,8 +5532,12 @@ class TelegramBot:
                 else:
                     # Streamed with no render callback purely to make this
                     # path interruptible — see the DM path for why.
+                    # Grows in place as it's written, like the tool path
+                    # (12 Nov 2026; it used to arrive whole).
+                    _stream_ed = self._make_stream_editor(chat_id)
                     result = llm_backend.chat_collect(
                         model, messages, options=options,
+                        on_content=_stream_ed.feed,
                         should_stop=lambda: self._turn_cancelled(user_id),
                         show_thinking=show_thinking,
                         cache=cache, cache_ttl=cache_ttl,
@@ -6137,52 +6196,7 @@ class TelegramBot:
         # message that fills in, throttled to stay clear of Telegram's edit
         # flood limits. The caller finalizes with the cleaned reply. Best-
         # effort — any API hiccup falls back to the caller's normal send.
-        _stream_tok = (self.get_config() or {}).get("bot_token", "").strip()
-
-        def _stream_log(action, n):
-            # Diagnostic: one line per stream send/edit so streaming is
-            # verifiable from disk (no need to catch the in-place edit live).
-            # Many edits during a turn = streaming works; a lone send+edit =
-            # the model handed us one chunk (e.g. Ollama buffering with tools).
-            try:
-                from kin_persistence import LOGS_DIR
-                import datetime as _dt
-                with open(LOGS_DIR / "telegram_stream.log", "a",
-                          encoding="utf-8") as f:
-                    f.write(
-                        f"{_dt.datetime.now().isoformat(timespec='seconds')} "
-                        f"kin={self.agent_name} chat={chat_id} "
-                        f"{action} len={n}\n")
-            except Exception:
-                pass
-
-        def _stream_send(text):
-            _stream_log("send", len(text or ""))
-            try:
-                r = telegram_api_call(
-                    _stream_tok, "sendMessage",
-                    {"chat_id": chat_id, "text": text})
-                return ((r or {}).get("result") or {}).get("message_id")
-            except Exception:
-                return None
-
-        def _stream_edit(mid, text):
-            _stream_log("edit", len(text or ""))
-            telegram_api_call(
-                _stream_tok, "editMessageText",
-                {"chat_id": chat_id, "message_id": mid, "text": text})
-
-        def _stream_clean(text):
-            # Shape the live text the way the finished message will be shaped,
-            # so the reply only ever grows. Same chain the caller runs at the
-            # end; running it here too means a model opening with its own name
-            # tag never shows that tag rather than showing it and having it
-            # edited away.
-            from chat_helpers import clean_kin_reply
-            return clean_kin_reply(text, self.agent_name)[0]
-
-        ed = _TelegramStreamEditor(_stream_send, _stream_edit,
-                                   clean=_stream_clean)
+        ed = self._make_stream_editor(chat_id)
         # Ceiling on calls in one reply: this person's own number, else the
         # kin's (remote_max_tool_calls). Sharing the desktop conversation has
         # nothing to do with it — that's about where the conversation lives,

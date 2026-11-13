@@ -48,7 +48,9 @@ def loop_call(text, surface):
                     break
             i += 1
         call = text[m.start():i]
-        if f'surface="{surface}"' in call:
+        # The label may be chosen in place (since 12 Nov 2026 a wake-up in
+        # the chat is "cron-in-chat-tool"), so match the quoted name.
+        if f'"{surface}"' in call and "surface=" in call:
             return call
     return ""
 

@@ -71,17 +71,33 @@ def build_bot():
     return b
 
 
-seen = {}
+seen = {"api": [], "during": 0}
 
 
 def fake_collect(model, messages, **kw):
     seen["messages"] = messages
     on = kw.get("on_content")
+    seen["had_on_content"] = on is not None
+    seen["before"] = len(seen["api"])
     if on:
-        on("Thanks, I read them.")
-    return _Result("Thanks, I read them.")
+        for piece in ("Thanks, ", "I read them ", "all the way through."):
+            on(piece)
+            time.sleep(0.05)
+    seen["during"] = len(seen["api"])
+    return _Result("Thanks, I read them all the way through.")
 
 
+import time  # noqa: E402
+import telegram_bot as _tb  # noqa: E402
+real_api = _tb.telegram_api_call
+
+
+def fake_api(token, method, params=None, **kw):
+    seen["api"].append((method, (params or {}).get("text", "")))
+    return {"result": {"message_id": 5}}
+
+
+_tb.telegram_api_call = fake_api
 real = llm_backend.chat_collect
 llm_backend.chat_collect = fake_collect
 try:
@@ -100,8 +116,18 @@ try:
         print("handler raised:", repr(e))
 finally:
     llm_backend.chat_collect = real
+    _tb.telegram_api_call = real_api
 
 check("the group reply ran", ran and "messages" in seen)
+check("a kin without tools: the reply is handed to the live editor",
+      seen.get("had_on_content") is True)
+_while = seen["api"][seen.get("before", 0):seen["during"]]
+check("...and starts appearing while it's still being written",
+      any(m == "sendMessage" for m, _t in _while))
+check("...ending as the whole reply, in one message (no second copy)",
+      any(m == "editMessageText" and "all the way through." in t
+          for m, t in seen["api"])
+      and not any("all the way through." in s for s in b.sent))
 blob = "\n".join(str(m.get("content") or "") for m in seen.get("messages", []))
 check("the uploaded file's text reached the kin in a group",
       "Plant the beans on Friday." in blob)

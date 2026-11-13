@@ -180,9 +180,13 @@ import inspect                                               # noqa: E402
 import telegram_bot                                          # noqa: E402
 import discord_bot                                           # noqa: E402
 
-tg = inspect.getsource(telegram_bot.TelegramBot._run_tool_loop_telegram)
+# Since 12 Nov 2026 Telegram builds its editor in one place for the tool and
+# no-tools paths alike; the tool loop gets it from there.
+tg = inspect.getsource(telegram_bot.TelegramBot._make_stream_editor)
 dc = inspect.getsource(discord_bot.DiscordBot._generate)
-check("Telegram hands the editor a cleaner", "clean=" in tg)
+check("Telegram hands the editor a cleaner",
+      "clean=" in tg and "self._make_stream_editor(" in inspect.getsource(
+          telegram_bot.TelegramBot._run_tool_loop_telegram))
 check("Discord hands the editor a cleaner", "clean=" in dc)
 
 reset = inspect.getsource(_TelegramStreamEditor.reset_turn)
