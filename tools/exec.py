@@ -147,6 +147,20 @@ def exec(
     shell = ""  # per-kin override would read from cfg here; default for now
     argv = _build_shell_argv(command, shell)
 
+    # Guard 4 (12 Nov 2026): a command that could delete or overwrite the
+    # kin's own files backs them up first, silently, then runs. See
+    # tools/_exec_backup.py.
+    from tools._exec_backup import backup_before_exec
+    _saved = backup_before_exec(command, cwd_path, kin_dir, agent_name)
+    # Added at the END of the result: callers and kin read results as
+    # starting with "exit_code:".
+    _saved_note = (
+        "\n[backed up first, in case you need them back: "
+        + ", ".join(_saved[:10])
+        + (f" and {len(_saved) - 10} more" if len(_saved) > 10 else "")
+        + ". Copies are in your backups/files folder.]"
+    ) if _saved else ""
+
     if background:
         try:
             proc = subprocess.Popen(
@@ -166,7 +180,7 @@ def exec(
         )
         return (
             f"[background pid={proc.pid}] {command!r} started in "
-            f"{str(cwd_path)!r}"
+            f"{str(cwd_path)!r}" + _saved_note
         )
 
     try:
@@ -186,7 +200,7 @@ def exec(
             f"exit_code: -1\n"
             f"[killed after {timeout_int}s]\n"
             f"stdout:\n{stdout}\n"
-            f"stderr:\n{stderr}"
+            f"stderr:\n{stderr}" + _saved_note
         )
     except FileNotFoundError as e:
         return f"exec: shell not available: {e}"
@@ -198,5 +212,5 @@ def exec(
     return (
         f"exit_code: {result.returncode}\n"
         f"stdout:\n{stdout}\n"
-        f"stderr:\n{stderr}"
+        f"stderr:\n{stderr}" + _saved_note
     )
