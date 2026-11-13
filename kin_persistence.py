@@ -6029,6 +6029,16 @@ def load_discord_history(name):
         return {}
 
 
+def save_discord_history(name, data):
+    """Full rewrite of the segregated Discord history, for the commands that
+    shorten it (undo, regenerate, clear). Atomic, under the same lock the
+    loader and append_discord_turn use."""
+    with _get_conversation_lock(name):
+        agent_dir(name).mkdir(parents=True, exist_ok=True)
+        atomic_write_text(_discord_history_path(name),
+                          json.dumps(data, ensure_ascii=False))
+
+
 def append_discord_turn(name, channel_id, turn, cap=200):
     """Append one turn to a channel's segregated Discord history, capped to
     the newest `cap`. Load-modify-save under the per-kin conversation lock

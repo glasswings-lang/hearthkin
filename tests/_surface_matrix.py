@@ -524,9 +524,11 @@ CAPABILITIES = [
                 note="Menus rather than typed commands — the same capability "
                      "in the affordance a window offers."),
             "telegram": Present(),
-            "discord": Absent(
-                "Nothing at all. No way to see which model is running, clear "
-                "a channel, undo a bad exchange, or redo a reply."),
+            "discord": Present(
+                markers="_handle_command",
+                note="Since 12 Nov 2026: /help, /status, /regen, /undo, "
+                     "/clear (or ! in front). Help works anywhere; the rest "
+                     "only in a direct message, as on Telegram."),
             "cron": NotHere(
                 "Nobody is present at a scheduled wake-up to type anything."),
         },

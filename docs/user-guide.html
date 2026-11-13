@@ -1335,7 +1335,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 <ul>
   <li><strong>Telegram approval timeout (seconds)</strong> — how long a remote approval request waits for your answer. 30 to 86400; default 600, which is ten minutes.</li>
   <li><strong>Run remote (Telegram/Discord) exec without asking</strong> — off by default. See the note above.</li>
-  <li><strong>Let remote (Telegram/Discord) file tools reach outside the kin folder</strong> — off by default. Off means a file tool used from Telegram or Discord stays inside the kin's own folder. On Telegram the same goes for a file the kin saves by writing it out in a fenced block in its reply.</li>
+  <li><strong>Let remote (Telegram/Discord) file tools reach outside the kin folder</strong> — off by default. Off means a file tool used from Telegram or Discord stays inside the kin's own folder. On Telegram and Discord the same goes for a file the kin saves by writing it out in a fenced block in its reply.</li>
   <li><strong>Tool history kept</strong> — default 5. See <a href="#tool-history">Tool history compaction</a>.</li>
   <li><strong>Tool result cap (chars)</strong> — default 8000. The most of one tool's result that goes back to the model.</li>
   <li><strong>Max tool rounds per reply</strong> — default 8. A round is one go of the model asking for tools; one round can hold several calls at once, so this isn't a count of calls. (It used to be labelled "calls", which it never was.)</li>
@@ -1747,6 +1747,17 @@ understood, exactly as it does for you at the console.</p>
 
 <h3>Stopping a reply</h3>
 <p>Send <strong><code>stop</code></strong> in the channel (<code>cancel</code>, <code>/stop</code>, <code>/cancel</code> and <code>!stop</code> work too) and the kin stops writing, keeping whatever it had already said. It has to be the whole message — "stop that, it's funny" is a remark to your kin, not a command. <strong>With the default Only when mentioned (@) setting, the stop has to mention the bot too</strong>, for example <code>@YourKin stop</code>; a plain <code>stop</code> is ignored like any other unmentioned message. If nothing is being written, it tells you so rather than sitting silent. Anyone allowed to talk to the kin in that channel can stop a reply there.</p>
+
+<h3>Commands</h3>
+<p>The same commands as Telegram (since 12 November 2026). Start them with <code>/</code>, or with <code>!</code> if Discord's own command menu pops up and gets in the way.</p>
+<ul>
+  <li><strong>/help</strong>: lists the commands. Works anywhere.</li>
+  <li><strong>/status</strong>: the model, your tool access, whether this conversation is shared with the desktop, and how many messages the kin remembers here.</li>
+  <li><strong>/regen</strong>: the kin writes its last reply again.</li>
+  <li><strong>/undo</strong>: takes back your last message and its reply.</li>
+  <li><strong>/clear</strong>: wipes this conversation. The kin's memory stays. If the conversation is shared with the desktop, it asks you to send <code>/clear confirm</code> first, since the messages go from the desktop too.</li>
+</ul>
+<p>All but /help only work in a direct message with the kin. In a server channel the conversation belongs to everyone there, so one person can't undo or wipe it. A command sent while the kin is still writing waits: say <code>stop</code> first, or let it finish. Any other word after a <code>/</code> goes to the kin as an ordinary message.</p>
 
 <p>Hearthkin also <strong>warns you before quitting</strong> if a kin is part-way through a Discord reply, the same way it does for Telegram, so closing the app doesn't abandon somebody's conversation without a word.</p>
 

@@ -37,7 +37,7 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 ## Everyday things
 
 - **Telegram groups read text files people send.** Fixed 12 November 2026, as private chats always did. Naming a file on your computer is still limited to people with read access.
-- **Discord has no commands** like regenerate, undo, clear or status. Telegram groups only have help and whoami. Partly on purpose.
+- **Discord has commands now.** Added 12 November 2026: /help, /status, /regen, /undo and /clear, the same as Telegram. You can start them with ! instead of / if Discord's own command menu gets in the way. Help works anywhere. The rest only work in a direct message, on purpose, because in a server channel the conversation belongs to everyone there. Telegram groups likewise only have help and whoami.
 - **Telegram replies now grow as they're written, tools or not.** Fixed 12 November 2026, in private chats and groups. **Room replies still arrive whole, on purpose:** in a room a kin sometimes starts writing as another kin, and that part is cut before the reply is shown. Shown live, your screen reader would already have read the wrong voice aloud, and that can't be taken back.
 - **Rooms are the barest place to talk:** no images, voice, regenerate, or saving files written out in a reply. Mostly on purpose, marked "not yet".
 - **Wake-ups that land in your open chat are logged as wake-ups** in the usage log now, not as your own desktop use. Fixed 12 November 2026.

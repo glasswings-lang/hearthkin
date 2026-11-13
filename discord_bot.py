@@ -81,6 +81,24 @@ _MENTION_RE = re.compile(r"<@!?\d+>")
 # it's funny" is a remark to the kin, not a control instruction.
 _STOP_WORDS = frozenset({"stop", "/stop", "cancel", "/cancel", "!stop"})
 
+# Typed commands, with / or ! in front (Discord's own command menu can get in
+# the way of a leading /). Anything else that starts with / goes to the kin
+# as an ordinary message, so "/shrug" or "/me waves" still reach it.
+_COMMANDS = frozenset({"help", "commands", "status", "regen", "regenerate",
+                       "retry", "undo", "clear", "forget"})
+
+
+def _parse_command(content):
+    """(name, rest) for a known command, else None."""
+    s = (content or "").strip()
+    if len(s) < 2 or s[0] not in "/!":
+        return None
+    parts = s[1:].split(maxsplit=1)
+    name = parts[0].lower() if parts else ""
+    if name not in _COMMANDS:
+        return None
+    return name, (parts[1] if len(parts) > 1 else "")
+
 
 def _stable_history_window(turns, cap):
     """The last `cap`-ish turns, with a start that moves in RARE, BIG steps
@@ -458,6 +476,13 @@ class DiscordBot:
                     "Nothing is being written here just now.")
             return
 
+        # Commands, before the mid-reply hold and the joining below, so
+        # "/undo" is never read as more words for the kin.
+        command = _parse_command(content)
+        if command is not None:
+            await self._handle_command(message, *command)
+            return
+
         # A plain message from the person whose reply is running in this
         # channel reaches that reply before its next step, as on Telegram
         # (12 Nov 2026). It used to wait behind the reply it was about, so
@@ -720,12 +745,14 @@ class DiscordBot:
             pass
         return turns
 
-    def _persist_turn(self, channel_id, role, content, share):
+    def _persist_turn(self, channel_id, role, content, share, said=None):
         """Store one turn in whichever store `share` selects (merged
         conversation.jsonl vs segregated discord_history.json)."""
         import datetime
         turn = {"role": role, "content": content,
                 "ts": datetime.datetime.now().isoformat(timespec="seconds")}
+        if said is not None:
+            turn["said"] = said
         if share:
             from kin_persistence import append_agent_conversation_turn
             append_agent_conversation_turn(
@@ -734,6 +761,214 @@ class DiscordBot:
         else:
             from kin_persistence import append_discord_turn
             append_discord_turn(self.agent_name, channel_id, turn)
+
+    def _shares_desktop(self, author_id):
+        """Whether this person's Discord talk is kept with the desktop's.
+        Their own box in the person window; the old kin-wide box is the
+        fallback for someone saved before per-person sharing existed."""
+        from tools._person_settings import person_value
+        dcfg = (self.get_config() or {}).get("discord") or {}
+        return bool(person_value(dcfg, "discord", author_id, "share_desktop",
+                                 fallback=dcfg.get("share_desktop", False)))
+
+    # ── commands: help, status, regen, undo, clear (12 Nov 2026) ────
+    #
+    # Telegram has had these all along; Discord had only "stop". Same words,
+    # same rules: help works anywhere, the rest only in a direct message,
+    # because in a server channel the conversation belongs to everyone there
+    # and one person's /clear would wipe it for all of them.
+
+    def _cut_from_last_user(self, channel_id, share, look_only=False):
+        """Remove this channel's last message from a person, and everything
+        after it in this channel. Returns the removed message, or None when
+        there was nothing to remove. Other channels, the desktop's own rows
+        and Telegram's are never touched. look_only: find it, change nothing."""
+        from kin_persistence import (
+            _get_conversation_lock, load_agent_conversation,
+            save_agent_conversation, load_discord_history,
+            save_discord_history)
+        with _get_conversation_lock(self.agent_name):
+            if share:
+                src = f"discord:{channel_id}"
+                conv = list(load_agent_conversation(self.agent_name) or [])
+                ours = [i for i, m in enumerate(conv)
+                        if isinstance(m, dict) and m.get("source") == src]
+                users = [i for i in ours if conv[i].get("role") == "user"]
+                if not users:
+                    return None
+                cut = users[-1]
+                if look_only:
+                    return conv[cut]
+                kept = conv[:cut] + [
+                    m for m in conv[cut:]
+                    if not (isinstance(m, dict) and m.get("source") == src)]
+                save_agent_conversation(self.agent_name, kept)
+                return conv[cut]
+            data = load_discord_history(self.agent_name) or {}
+            rows = list(data.get(str(channel_id)) or [])
+            users = [i for i, m in enumerate(rows)
+                     if isinstance(m, dict) and m.get("role") == "user"]
+            if not users:
+                return None
+            cut = users[-1]
+            if look_only:
+                return rows[cut]
+            data[str(channel_id)] = rows[:cut]
+            save_discord_history(self.agent_name, data)
+            return rows[cut]
+
+    def _clear_channel(self, channel_id, share):
+        """Wipe this channel's conversation. Returns how many messages went."""
+        from kin_persistence import (
+            _get_conversation_lock, load_agent_conversation,
+            save_agent_conversation, load_discord_history,
+            save_discord_history)
+        with _get_conversation_lock(self.agent_name):
+            if share:
+                src = f"discord:{channel_id}"
+                conv = list(load_agent_conversation(self.agent_name) or [])
+                kept = [m for m in conv
+                        if not (isinstance(m, dict)
+                                and m.get("source") == src)]
+                gone = len(conv) - len(kept)
+                if gone:
+                    save_agent_conversation(self.agent_name, kept)
+                return gone
+            data = load_discord_history(self.agent_name) or {}
+            gone = len(data.pop(str(channel_id), None) or [])
+            if gone:
+                save_discord_history(self.agent_name, data)
+            return gone
+
+    @staticmethod
+    def _words_of(row):
+        """What the person actually said in a stored message, without the
+        name Hearthkin put in front of it for the kin."""
+        said = row.get("said")
+        if isinstance(said, str):
+            return said.strip()
+        return re.sub(r"^\[[^\]\n]{1,100}\] ", "",
+                      row.get("content") or "", count=1).strip()
+
+    def _help_text(self, in_dm):
+        if not in_dm:
+            return (
+                f"Commands {self.agent_name} answers to here:\n"
+                "/help: this message\n"
+                "stop: end the reply being written, keeping what's written "
+                "so far\n\n"
+                "The others (/status, /regen, /undo, /clear) work in a "
+                f"direct message with {self.agent_name}. Here, the "
+                "conversation belongs to everyone in the channel.")
+        return (
+            f"Commands for {self.agent_name}:\n"
+            "/help: this message\n"
+            "/status: model, your tool access, and whether this talk is "
+            "shared with the desktop\n"
+            "/regen: write the last reply again\n"
+            "/undo: take back your last message and its reply\n"
+            "/clear: wipe this conversation (memory is kept)\n"
+            "stop: end the reply being written, keeping what's written "
+            "so far\n"
+            "You can start them with ! instead of / if Discord gets in "
+            "the way.")
+
+    def _status_text(self, message, share):
+        from tools._person_settings import person_value
+        cfg = self.get_config() or {}
+        dcfg = cfg.get("discord") or {}
+        uid = getattr(message.author, "id", "")
+        bucket = person_value(dcfg, "discord", uid, "bucket")
+        if isinstance(bucket, str) and bucket:
+            access = bucket
+        elif bucket:
+            access = "a custom list"
+        else:
+            access = "none (chat only)"
+        lines = [f"Kin: {self.agent_name}",
+                 f"Model: {cfg.get('model') or '(not set)'}",
+                 f"Your tool access: {access}",
+                 "This conversation: " + (
+                     "shared with the Hearthkin desktop" if share
+                     else "kept on Discord only"),
+                 "Messages it remembers here: "
+                 f"{len(self._channel_history(message.channel.id, share))}"]
+        try:
+            import llm_backend
+            real = llm_backend.last_reported_prompt_tokens(self.agent_name)
+        except Exception:
+            real = None
+        if real:
+            lines.append(f"Last send used {real} tokens of context")
+        return "\n".join(lines)
+
+    async def _handle_command(self, message, name, arg):
+        """One command. Returns nothing; every path answers in the channel."""
+        ch = message.channel
+        in_dm = getattr(message, "guild", None) is None
+        if name in ("help", "commands"):
+            await self._send_chunked(ch, self._help_text(in_dm))
+            return
+        if not in_dm:
+            await self._send_chunked(
+                ch,
+                f"/{name} only works in a direct message with "
+                f"{self.agent_name}. Here, the conversation belongs to "
+                "everyone in the channel. /help works anywhere.")
+            return
+        with self._turn_lock:
+            busy = ch.id in self._active_turns
+        if busy:
+            await self._send_chunked(
+                ch,
+                f"{self.agent_name} is still writing a reply here. Say stop, "
+                f"or wait for it to finish, then send /{name} again.")
+            return
+        share = self._shares_desktop(getattr(message.author, "id", ""))
+        if name == "status":
+            await self._send_chunked(ch, self._status_text(message, share))
+        elif name == "undo":
+            gone = self._cut_from_last_user(ch.id, share)
+            if gone is None:
+                await self._send_chunked(
+                    ch, "Nothing to undo. There's no earlier message here.")
+            else:
+                await self._send_chunked(
+                    ch,
+                    f"Undone. {self.agent_name} won't see your last message "
+                    "or its reply." + (
+                        " This conversation is shared with the desktop, so "
+                        "they're gone from there too." if share else ""))
+        elif name in ("clear", "forget"):
+            if share and arg.strip().lower() != "confirm":
+                await self._send_chunked(
+                    ch,
+                    "This conversation is shared with the Hearthkin desktop, "
+                    "so clearing it takes these messages away there too. "
+                    f"{self.agent_name}'s memory stays.\n"
+                    "To go ahead, send: /clear confirm")
+                return
+            self._clear_channel(ch.id, share)
+            await self._send_chunked(
+                ch,
+                f"Cleared. {self.agent_name} won't remember anything said "
+                "here before this. Its memory is untouched.")
+        elif name in ("regen", "regenerate", "retry"):
+            last = self._cut_from_last_user(ch.id, share, look_only=True)
+            if last is None:
+                await self._send_chunked(
+                    ch, "Nothing to write again. There's no earlier message "
+                        "here.")
+                return
+            words = self._words_of(last)
+            if not words:
+                await self._send_chunked(
+                    ch, "Can't write that again: the last message had no "
+                        "words to send.")
+                return
+            self._cut_from_last_user(ch.id, share)
+            # The reply is written fresh, as if the message had just come in.
+            await self._generate_in_turn(message, words, [], [])
 
     def _generate(self, message, content, image_paths=None, text_docs=None):
         """BLOCKING — runs in the executor, never on the event loop.
@@ -780,8 +1015,7 @@ class DiscordBot:
         # saved before per-person sharing existed.
         from tools._person_settings import person_value
         author_id = getattr(message.author, "id", "")
-        share = bool(person_value(dcfg, "discord", author_id, "share_desktop",
-                                  fallback=dcfg.get("share_desktop", False)))
+        share = self._shares_desktop(author_id)
 
         # Inline attribution, no colon — same anti-impersonation shape as
         # the Telegram group path (a "[Name]:" token is a speaker-turn
@@ -803,8 +1037,9 @@ class DiscordBot:
         history = self._channel_history(channel_id, share)
 
         # Persist the user turn NOW, before generating — if generation
-        # fails the message is still on record, never orphaned.
-        self._persist_turn(channel_id, "user", user_text, share)
+        # fails the message is still on record, never orphaned. `said` keeps
+        # the words without the name in front, so /regen can send them again.
+        self._persist_turn(channel_id, "user", user_text, share, said=content)
 
         # Load the kin's tools, gated by THIS user's bucket — the same
         # (kin tools.json) ∩ (per-user bucket) intersection the Telegram
