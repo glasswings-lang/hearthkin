@@ -661,12 +661,7 @@ CAPABILITIES = [
             "desktop": Present(markers="💭 Reasoning"),
             "telegram": Present(markers="reasoning_block"),
             "discord": Present(markers="reasoning_block"),
-            "cron": Absent(
-                "A wake-up records the reply in the journal and posts it "
-                "onward, but the reasoning behind it goes nowhere. Less "
-                "pressing than the chat surfaces — nobody is reading at the "
-                "time — but the setting is per-kin and does not know that, "
-                "so a kin with it on still pays for thinking nobody keeps."),
+            "cron": Present(markers="reasoning_block", where="hearthkin_cron.py"),
         },
     ),
 

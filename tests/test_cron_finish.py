@@ -55,11 +55,12 @@ class R:
         self.tool_calls_made = []
 
 
-def run(mode, reply_obj):
+def run(mode, reply_obj, show_thinking=False):
     """One whole wake-up. mode: 'closed' or 'open-not-in-chat'."""
     (k / "config.json").write_text(json.dumps({
         "model": "stub-model",
         "cron_inject_when_running": mode == "closed",
+        "show_thinking": show_thinking,
         "cron_entries": [{"prompt": "Tend your notes.", "enabled": True,
                           "time": "08:00"}]}), encoding="utf-8")
     posted = []
@@ -104,6 +105,18 @@ for mode in ("closed", "open-not-in-chat"):
           f"alongside its tool call",
           posted and posted[0].startswith("Done: I tidied February.")
           and "[no reply produced]" not in journal)
+
+# "Show reasoning" on: the reasoning reaches the journal, not the post.
+for mode in ("closed", "open-not-in-chat"):
+    r = R("<thinking>Beans first, then the onions.</thinking>Planted.")
+    rc, posted, journal = run(mode, r, show_thinking=True)
+    check(f"{mode}: with Show reasoning on, the reasoning is in the journal",
+          "Beans first, then the onions." in journal)
+    check(f"{mode}: ...and never in what's posted onward",
+          posted and "onions" not in posted[0])
+    rc, posted, journal = run(mode, R("<thinking>Quietly.</thinking>Done."))
+    check(f"{mode}: with it off, the reasoning goes nowhere",
+          "Quietly." not in journal and posted and "Quietly." not in posted[0])
 
 print()
 if _fails:

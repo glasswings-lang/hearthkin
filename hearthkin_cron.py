@@ -1426,6 +1426,22 @@ def _finish_cron_reply(kin, result, messages, model, options, cache,
     note = _maybe_read_nudge_cron(kin, reply, safe_tools, _added)
     if note:
         steer_notes.append(note)
+    # "Show reasoning" (12 Nov 2026): the reasoning behind a wake-up's reply
+    # was pulled out and dropped. With the kin's box ticked it now rides into
+    # the journal entry (the operator-facing record), never into the reply
+    # that's posted onward or stored as the kin's words.
+    if show_thinking:
+        try:
+            import turn_steering
+            _all_thinking = "\n\n".join(
+                t for t in ((getattr(result, "thinking", "") or "").strip(),
+                            (_thinking or "").strip()) if t)
+            _block = turn_steering.reasoning_block(_all_thinking)
+            if _block:
+                bridge_confirm = ((bridge_confirm + "\n\n") if bridge_confirm
+                                  else "") + _block
+        except Exception:
+            pass
     return reply, bridge_note, bridge_confirm, steer_notes
 
 
