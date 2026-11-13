@@ -122,6 +122,10 @@ class MenusMixin:
         # want to check often.
         self.mnu_whats_busy = chat_menu.Append(
             wx.ID_ANY, "What's it &busy with?\tCtrl+B")
+        # The kin writes itself a note, and carries on from it and the last
+        # few messages. Nothing is deleted (12 Nov 2026; FileMenuMixin).
+        self.mnu_compact = chat_menu.Append(
+            wx.ID_ANY, "&Compact this conversation...\tCtrl+Shift+K")
         menubar.Append(chat_menu, "&Chat")
 
         tools_menu = wx.Menu()
@@ -227,6 +231,7 @@ class MenusMixin:
         self.Bind(wx.EVT_MENU, self._on_stop, self.mnu_stop)
         self.Bind(wx.EVT_MENU, self._on_stop_everywhere, self.mnu_stop_everywhere)
         self.Bind(wx.EVT_MENU, self._on_whats_busy, self.mnu_whats_busy)
+        self.Bind(wx.EVT_MENU, self._on_compact, self.mnu_compact)
         # Not _on_continue directly: this item's Ctrl+Enter accelerator is
         # also the default send key, and the accelerator wins before the
         # message box sees it. _on_ctrl_enter_menu sends when you're typing

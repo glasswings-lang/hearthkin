@@ -44,6 +44,7 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 - **Telegram replies now grow as they're written, tools or not.** Fixed 12 November 2026, in private chats and groups. **Room replies still arrive whole, on purpose:** in a room a kin sometimes starts writing as another kin, and that part is cut before the reply is shown. Shown live, your screen reader would already have read the wrong voice aloud, and that can't be taken back.
 - **Rooms save files written out in a reply now.** Fixed 12 November 2026. A kin in a room can write a file out in its reply, the way it can on the desktop, and it's saved. A kin with no tools can save to its own memory that way, as its instructions already told it. A kin that says it read a file it never opened is told so, like everywhere else.
 - **Rooms are still the barest place to talk:** no images, no sharing a file in, no park moves, no regenerate, no list of recalled memories under a reply, and the kin doesn't speak its replies aloud. Mostly on purpose, marked "not yet". Dictation does work in a room, because it's the same message box.
+- **Compacting a conversation works in the main window, on Telegram, and in Discord direct messages.** New 12 November 2026: a menu item in the window, /compact in the chats. Rooms don't have it yet.
 - **Wake-ups that land in your open chat are logged as wake-ups** in the usage log now, not as your own desktop use. Fixed 12 November 2026.
 
 ## Keeping this true

@@ -85,7 +85,7 @@ _STOP_WORDS = frozenset({"stop", "/stop", "cancel", "/cancel", "!stop"})
 # the way of a leading /). Anything else that starts with / goes to the kin
 # as an ordinary message, so "/shrug" or "/me waves" still reach it.
 _COMMANDS = frozenset({"help", "commands", "status", "regen", "regenerate",
-                       "retry", "undo", "clear", "forget"})
+                       "retry", "undo", "clear", "forget", "compact"})
 
 
 def _parse_command(content):
@@ -709,6 +709,10 @@ class DiscordBot:
                     str(channel_id)) or []
             except Exception:
                 return []
+        # A compacted conversation is read from its latest note onward
+        # (/compact); nothing before it was deleted.
+        from chat_helpers import view_after_compaction
+        rows = view_after_compaction(rows)
         # Since 12 Nov 2026 the kin gets back its own tool steps and the
         # notes Hearthkin gave it ("you described it but didn't do it", "your
         # reply came back empty"), as on every other surface. Only plain
@@ -840,6 +844,112 @@ class DiscordBot:
                 save_discord_history(self.agent_name, data)
             return gone
 
+    # /compact, as on Telegram and the desktop (12 Nov 2026): the kin writes
+    # itself a note, the person reads it here, "/compact confirm" puts a
+    # marker with it into this channel's conversation, and from then on the
+    # kin reads the note and the last few messages. Nothing is deleted.
+    COMPACT_KEEP = 6
+
+    async def _cmd_compact(self, message, arg, share):
+        from chat_helpers import compact_marker
+        from kin_persistence import load_app_prompt, now_iso
+        ch = message.channel
+        pending = self.__dict__.setdefault("_pending_compact", {})
+        word = (arg or "").strip().lower()
+        who = self.agent_name
+        user = self._compact_user_name(message)
+        if word == "confirm":
+            note = pending.pop(ch.id, None)
+            if not note:
+                await self._send_chunked(
+                    ch, f"There's no note waiting. Send /compact and {who} "
+                        "will write one first.")
+                return
+            preface = load_app_prompt("compact_marker", who).replace(
+                "{user}", user)
+            row = compact_marker(note, self.COMPACT_KEEP, ts=now_iso(),
+                                 preface=preface)
+            if share:
+                from kin_persistence import append_agent_conversation_turn
+                append_agent_conversation_turn(
+                    who, {**row, "source": f"discord:{ch.id}"})
+            else:
+                from kin_persistence import append_discord_turn
+                append_discord_turn(who, ch.id, row)
+            await self._send_chunked(
+                ch, f"Compacted. From now on {who} reads its note and the "
+                    f"last {self.COMPACT_KEEP} messages here. Nothing was "
+                    "deleted.")
+            return
+        if word not in ("", "again"):
+            await self._send_chunked(
+                ch, "Send /compact to have the note written, then "
+                    "/compact confirm to compact with it.")
+            return
+        await self._send_chunked(
+            ch, f"Asking {who} to write its note. This can take a moment.")
+        err = ""
+        try:
+            async with ch.typing():
+                note = await self._loop.run_in_executor(
+                    None, self._compact_note, ch.id, share, user)
+        except Exception as e:
+            note, err = "", str(e)
+        if not note:
+            pending.pop(ch.id, None)
+            await self._send_chunked(
+                ch, f"{who} didn't write a note"
+                    + (f" ({err})" if err else "")
+                    + ". Nothing was changed; you can try /compact again.")
+            return
+        pending[ch.id] = note
+        await self._send_chunked(
+            ch, f"Here's the note {who} wrote for after:\n\n{note}\n\n"
+                "Send /compact confirm to compact with it, or /compact again "
+                "for a new one. Anything else leaves it as it was. Nothing "
+                "is deleted either way.")
+
+    def _compact_user_name(self, message):
+        from tools._person_settings import person_value
+        dcfg = (self.get_config() or {}).get("discord") or {}
+        uid = getattr(message.author, "id", "")
+        name = (person_value(dcfg, "discord", uid, "label")
+                or getattr(message.author, "display_name", "") or "")
+        return name.strip() or "the person you talk with"
+
+    def _compact_note(self, channel_id, share, user):
+        """BLOCKING. Ask the kin for its note: soul and memory, this
+        channel's conversation as it's read now, and the request. No tools."""
+        import llm_backend
+        from kin_persistence import (build_system_prompt, load_app_prompt,
+                                     resolve_kin_ollama_host)
+        from chat_helpers import extract_inline_thinking
+        cfg = self.get_config() or {}
+        got = self.get_model_options()
+        options = (got[1] if isinstance(got, tuple) and len(got) == 2
+                   else got) or {}
+        if not isinstance(options, dict):
+            options = {}
+        num_ctx = int(options.get("num_ctx") or 0) or 8192
+        msgs = [{"role": "system", "content": build_system_prompt(
+            self.get_soul() or "", self.get_memory() or "",
+            enabled_tools=[], kin_name=self.agent_name)}]
+        for m in self._channel_history(channel_id, share):
+            if m.get("role") in ("user", "assistant", "system") \
+                    and not m.get("tool_calls") and m.get("content"):
+                msgs.append({"role": m["role"], "content": m["content"]})
+        msgs.append({"role": "user", "content": load_app_prompt(
+            "compact_request", self.agent_name).replace("{user}", user)})
+        r = llm_backend.chat_collect(
+            cfg.get("model", ""), msgs, options=options,
+            max_context_tokens=max(512, num_ctx - 2000),
+            kin_name=self.agent_name, surface="compact",
+            ollama_host=resolve_kin_ollama_host(
+                cfg.get("ollama_host_name", "")))
+        note, _ = extract_inline_thinking(getattr(r, "content", "") or "",
+                                          getattr(r, "thinking", "") or "")
+        return (note or "").strip()
+
     @staticmethod
     def _words_of(row):
         """What the person actually said in a stored message, without the
@@ -857,7 +967,8 @@ class DiscordBot:
                 "/help: this message\n"
                 "stop: end the reply being written, keeping what's written "
                 "so far\n\n"
-                "The others (/status, /regen, /undo, /clear) work in a "
+                "The others (/status, /regen, /undo, /clear, /compact) "
+                "work in a "
                 f"direct message with {self.agent_name}. Here, the "
                 "conversation belongs to everyone in the channel.")
         return (
@@ -868,6 +979,8 @@ class DiscordBot:
             "/regen: write the last reply again\n"
             "/undo: take back your last message and its reply\n"
             "/clear: wipe this conversation (memory is kept)\n"
+            "/compact: the kin writes itself a note and carries on from it "
+            "and the last few messages (nothing is deleted)\n"
             "stop: end the reply being written, keeping what's written "
             "so far\n"
             "You can start them with ! instead of / if Discord gets in "
@@ -953,6 +1066,8 @@ class DiscordBot:
                 ch,
                 f"Cleared. {self.agent_name} won't remember anything said "
                 "here before this. Its memory is untouched.")
+        elif name == "compact":
+            await self._cmd_compact(message, arg, share)
         elif name in ("regen", "regenerate", "retry"):
             last = self._cut_from_last_user(ch.id, share, look_only=True)
             if last is None:

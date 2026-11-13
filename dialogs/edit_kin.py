@@ -595,6 +595,26 @@ class EditKinDialog(wx.Dialog):
         at_pct_row.Add(at_pct_lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=4)
         at_pct_row.Add(self.distill_at_pct_spin)
 
+        # Compacting (12 Nov 2026): only ever a heads-up. Nothing compacts
+        # on its own; the person chooses Chat -> Compact this conversation.
+        compact_row = wx.BoxSizer(wx.HORIZONTAL)
+        compact_lbl = wx.StaticText(
+            host,
+            label="Tell me when the conversation is this % full, so I can "
+                  "compact it (0 = never):")
+        self.compact_hint_field = _IntField(
+            host,
+            value=self.cfg.get("compact_hint_pct", 70),
+            min_val=0, max_val=100,
+            size=(80, -1),
+            name=("Tell me when the conversation is this percent full, so I "
+                  "can compact it (0 = never)"),
+            on_commit=lambda v: self._save_param("compact_hint_pct", v),
+        )
+        compact_row.Add(compact_lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT,
+                        border=4)
+        compact_row.Add(self.compact_hint_field)
+
         # Memory-log index cap. Created here so tab order reads it with the
         # other memory-size controls (wxPython tab order follows CREATION
         # order, not sizer order).
@@ -838,6 +858,8 @@ class EditKinDialog(wx.Dialog):
         memory_sizer.Add(every_n_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(at_pct_row,
+                         flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        memory_sizer.Add(compact_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(log_idx_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)

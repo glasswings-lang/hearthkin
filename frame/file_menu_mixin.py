@@ -11,7 +11,188 @@ from frame_shared import (
 )
 
 
+COMPACT_KEEP_MESSAGES = 6
+
+
 class FileMenuMixin:
+
+    # --- Compacting a conversation (12 Nov 2026) --- #
+    #
+    # Chat -> Compact this conversation (Ctrl+Shift+K). The kin is asked, in
+    # an ordinary message with no tools (so every kin can answer), to write
+    # itself a note; the person reads it, can edit it or have it written
+    # again; then a marker holding the note goes into the conversation and
+    # from then on the kin is sent the note, the last few messages and what
+    # follows (chat_helpers.view_after_compaction). Nothing is deleted, and
+    # the summarizer carries on over the whole history, which is why this is
+    # a marker and not a wipe.
+
+    def _on_compact(self, event):
+        if self.current_room is not None:
+            self._compact_say("Compacting is for a conversation with one kin. "
+                              "Switch to a kin first.")
+            return
+        if not self.current_agent or not self.conversation:
+            self._compact_say("There's no conversation to compact yet.")
+            return
+        if self._streaming or getattr(self, "_compact_busy", False):
+            self._compact_say("Wait for the reply to finish, then compact.")
+            return
+        self._compact_ask()
+
+    def _compact_say(self, text):
+        self._set_status(text)
+        try:
+            nvda_speak(text)
+        except Exception:
+            pass
+
+    def _compact_user_name(self):
+        return ((self.config.get("user_name", "") or "").strip()
+                or "the person you talk with")
+
+    def _compact_messages(self, kin):
+        """What the kin is sent when asked for its note: its soul and memory,
+        the conversation as it is now sent, and the request. No tools."""
+        from frame_shared import (build_system_prompt, load_app_prompt,
+                                  load_memory, load_soul)
+        from chat_helpers import view_after_compaction
+        sys_content = build_system_prompt(
+            load_soul(kin) or "", load_memory(kin) or "",
+            enabled_tools=[], kin_name=kin)
+        keep_window = int((self.agent_cfg or {}).get("tool_history_keep", 5)
+                          or 0)
+        history = []
+        for m in self._compact_tool_history(
+                view_after_compaction(self.conversation), keep_window):
+            e = self._history_entry_for_model(m)
+            if e is not None:
+                history.append(e)
+        ask = load_app_prompt("compact_request", kin).replace(
+            "{user}", self._compact_user_name())
+        return ([{"role": "system", "content": sys_content}] + history
+                + [{"role": "user", "content": ask}])
+
+    def _compact_ask(self):
+        import threading
+        from frame_shared import (_num_ctx_of, extract_inline_thinking,
+                                  llm_backend, resolve_kin_ollama_host)
+        kin = self.current_agent
+        cfg = dict(self.agent_cfg or load_agent_config(kin) or {})
+        try:
+            messages = self._compact_messages(kin)
+        except Exception as e:
+            self._compact_say(f"Couldn't ask {kin} for a note: {e}. "
+                              "Nothing was changed.")
+            return
+        self._compact_busy = True
+        self._compact_say(f"Asking {kin} to write its note. This can take a "
+                          "moment.")
+
+        def worker():
+            note, err = "", None
+            try:
+                result = llm_backend.chat(
+                    strip_model_annotation(str(cfg.get("model", "") or "")),
+                    messages,
+                    options={
+                        "temperature": cfg.get("temperature", 0.8),
+                        "top_p": cfg.get("top_p", 0.9),
+                        "num_ctx": _num_ctx_of(cfg),
+                    },
+                    stream=False, cache=bool(cfg.get("cache", True)),
+                    cache_ttl=str(cfg.get("cache_ttl", "auto")),
+                    max_context_tokens=max(512, _num_ctx_of(cfg) - 2000),
+                    kin_name=kin, surface="compact",
+                    ollama_host=resolve_kin_ollama_host(
+                        cfg.get("ollama_host_name", "")))
+                note, _ = extract_inline_thinking(
+                    getattr(result, "content", "") or "",
+                    getattr(result, "thinking", "") or "")
+                note = (note or "").strip()
+            except Exception as e:
+                err = str(e)
+            wx.CallAfter(self._compact_show, kin, note, err)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _compact_show(self, kin, note, err=None):
+        self._compact_busy = False
+        if kin != self.current_agent:
+            self._compact_say(f"You moved away from {kin}, so nothing was "
+                              "compacted.")
+            return
+        if err or not note:
+            self._compact_say(
+                f"{kin} didn't write a note"
+                + (f" ({err})" if err else "")
+                + ". Nothing was changed; you can try again.")
+            return
+        from dialogs.compact import CompactDialog
+        dlg = CompactDialog(self, kin, note, keep=COMPACT_KEEP_MESSAGES)
+        r = dlg.ShowModal()
+        text = dlg.get_note()
+        dlg.Destroy()
+        if r == wx.ID_RETRY:
+            self._compact_ask()
+            return
+        if r != wx.ID_OK or not text:
+            self._compact_say("Not compacted. Nothing was changed.")
+            return
+        self._apply_compaction(kin, text)
+
+    def _apply_compaction(self, kin, note):
+        from frame_shared import load_app_prompt
+        from chat_helpers import compact_marker
+        preface = load_app_prompt("compact_marker", kin).replace(
+            "{user}", self._compact_user_name())
+        self.conversation.append(
+            compact_marker(note, COMPACT_KEEP_MESSAGES, ts=now_iso(),
+                           preface=preface))
+        self._persist_current_conversation()
+        try:
+            self._render_conversation()
+        except Exception:
+            pass
+        self._update_token_display()
+        self._compact_say(
+            f"Compacted. From now on {kin} is sent its note and the last "
+            f"{COMPACT_KEEP_MESSAGES} messages. Nothing was deleted.")
+
+    def _maybe_hint_compact(self):
+        """After a reply in the main window: once the conversation is as full
+        as the kin's 'Tell me when the conversation is this % full' setting
+        says, say so, once, with how to compact. Never compacts by itself."""
+        try:
+            kin = self.current_agent
+            if not kin or self.current_room is not None:
+                return
+            cfg = self.agent_cfg or {}
+            try:
+                at = int(cfg.get("compact_hint_pct", 70) or 0)
+            except (TypeError, ValueError):
+                at = 0
+            if at <= 0:
+                return
+            from frame_shared import _num_ctx_of, llm_backend
+            real = llm_backend.last_reported_prompt_tokens(kin)
+            if not real:
+                return
+            effective = max(512, _num_ctx_of(cfg) - 2000)
+            pct = int(real * 100 / effective) if effective else 0
+            if pct < at:
+                return
+            marks = sum(1 for m in self.conversation
+                        if isinstance(m, dict) and m.get("compact"))
+            hinted = self.__dict__.setdefault("_compact_hinted", set())
+            if (kin, marks) in hinted:
+                return
+            hinted.add((kin, marks))
+            self._compact_say(
+                f"{kin}'s conversation is {pct} percent full. You can compact "
+                "it: Chat menu, Compact this conversation, Control Shift K.")
+        except Exception:
+            pass
 
     # --- File ops --- #
 

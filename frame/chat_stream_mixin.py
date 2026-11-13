@@ -821,6 +821,10 @@ class ChatStreamMixin:
         # After the UI has updated, check whether to fire auto-distillation
         if self.current_agent:
             wx.CallAfter(self._maybe_auto_distill, self.current_agent)
+            # And whether to say, once, that the conversation is full enough
+            # to compact. A few seconds late on purpose, so it doesn't speak
+            # over the reply being read.
+            wx.CallLater(3000, self._maybe_hint_compact)
 
     def _show_cold_start_hint(self, gen):
         """Update the Activity field to "(still loading…)" when 8

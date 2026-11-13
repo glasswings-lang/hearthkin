@@ -1073,6 +1073,85 @@ def strip_tool_summary_footer(text):
     return _TOOL_SUMMARY_FOOTER_RE.sub('', text).rstrip()
 
 
+# --- Compacting a conversation (12 Nov 2026) ---
+# When a conversation gets full, the person can have the kin write itself a
+# note and carry on from that note plus the last few messages. NOTHING is
+# deleted: a marker row holding the note is appended, and only what a model
+# is SENT changes. The conversation on disk, the screen, and the summarizer
+# (whose bookmark counts rows) all carry on over the whole history; wiping
+# it, as "New conversation" does, would lose whatever the summarizer hadn't
+# read yet.
+
+def compact_marker(note, keep, ts=None, preface=""):
+    """The row that marks a compaction. `keep` is how many of the messages
+    before it are still sent after it. A count, not a position: the desktop
+    and a Telegram chat read the same conversation with different rows
+    filtered out, so a stored index would point at different rows."""
+    row = {"role": "system", "compact": True, "keep": int(keep),
+           "content": ((preface.strip() + "\n\n") if preface.strip() else "")
+           + (note or "").strip()}
+    if ts:
+        row["ts"] = ts
+    return row
+
+
+def view_after_compaction(conversation):
+    """What a model is sent from `conversation`: everything, if it was never
+    compacted; else the latest compaction's note, the few rows it kept from
+    before it, and everything after it. A tool result whose call fell outside
+    the kept rows is dropped (providers reject one). Never raises; returns a
+    new list and leaves `conversation` alone."""
+    convo = list(conversation or [])
+    at = None
+    for i in range(len(convo) - 1, -1, -1):
+        m = convo[i]
+        if isinstance(m, dict) and m.get("compact"):
+            at = i
+            break
+    if at is None:
+        return convo
+    marker = convo[at]
+    try:
+        keep = int(marker.get("keep", 0))
+    except (TypeError, ValueError):
+        keep = 0
+    before = convo[:at]
+    keep_from = compact_keep_from(before, keep)
+    # An earlier compaction's note inside the kept rows is superseded by
+    # this one; sending both would hand the kin two pasts.
+    kept = [m for m in before[keep_from:]
+            if not (isinstance(m, dict) and m.get("compact"))]
+    while kept and isinstance(kept[0], dict) and kept[0].get("role") == "tool":
+        kept.pop(0)
+    note = {"role": "system", "content": marker.get("content") or ""}
+    return [note] + kept + convo[at + 1:]
+
+
+def compact_keep_from(conversation, keep, counts=None):
+    """Index to keep from so that the last `keep` rows that `counts(row)`
+    accepts are kept (default: plain user and assistant messages). Never
+    starts on a tool result."""
+    convo = list(conversation or [])
+    if counts is None:
+        def counts(m):
+            return (isinstance(m, dict) and m.get("role") in ("user", "assistant")
+                    and not m.get("tool_calls") and not m.get("compact"))
+    if keep <= 0:
+        return len(convo)
+    seen = 0
+    idx = len(convo)
+    for i in range(len(convo) - 1, -1, -1):
+        if counts(convo[i]):
+            seen += 1
+            idx = i
+            if seen >= keep:
+                break
+    while idx < len(convo) and isinstance(convo[idx], dict) \
+            and convo[idx].get("role") == "tool":
+        idx += 1
+    return idx
+
+
 # --- Tool-history compaction, shared by every surface (12 Nov 2026) ---
 # Lived on the desktop window only, so "Tool history kept" did nothing on
 # Telegram or Discord. Moved here unchanged; the desktop delegates to it.

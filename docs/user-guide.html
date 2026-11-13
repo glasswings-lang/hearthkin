@@ -325,6 +325,7 @@ python hearthkin.pyw</code></pre>
     <li><strong>Continue room round</strong> — <kbd>Ctrl</kbd>+<kbd>Enter</kbd> with the message box empty.</li>
     <li><strong>Edit a message…</strong> — <kbd>Ctrl</kbd>+<kbd>E</kbd>.</li>
     <li><strong>What's it busy with?</strong> — <kbd>Ctrl</kbd>+<kbd>B</kbd>.</li>
+    <li><strong>Compact this conversation…</strong> — <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>. See <a href="#compacting">Compacting a conversation</a>.</li>
   </ul></dd>
 
   <dt><strong>Tools</strong></dt>
@@ -576,6 +577,7 @@ python hearthkin.pyw</code></pre>
   <li><strong>Auto-distill when leaving this kin</strong> — fires when you close Hearthkin or switch away from this kin.</li>
   <li><strong>Auto-distill every N messages (0 = off)</strong> — fires after every N messages. Default 0 (off). Useful for long-running conversations where you want notes captured as you go.</li>
   <li><strong>Auto-distill at this % of the context window (0 = off)</strong> — fires when the un-noted part of the conversation grows past this share of the kin's <strong>context window</strong> — the amount of conversation Hearthkin can send the model in one message (see <em>The context window</em>, below). Default 0 (off), highest 95. It's a safety net: past a certain size the oldest turns have to be dropped to make the message fit, and this gets them written into memory first.</li>
+  <li><strong>Tell me when the conversation is this % full, so I can compact it (0 = never)</strong> — default 70. Once a conversation in the main window is this full, Hearthkin says so once, a few seconds after the reply, with how to compact it. It never compacts by itself. See <a href="#compacting">Compacting a conversation</a>.</li>
   <li><strong>Distillation model</strong> — which model the summarizer uses. <strong>Change distillation model…</strong> picks a different one, for example something cheaper; <strong>Use chat model</strong> goes back to the kin's own chat model.</li>
   <li><strong>When catching up on a backlog, wait this many minutes between automatic distillations (0 = don't wait)</strong> — default 30. Explained just below.</li>
   <li><strong>List memory logs in memory.md, up to this many characters (0 = list them all)</strong> — default 1500. The list of the kin's memory logs at the bottom of <code>memory.md</code> stops at this size, newest logs first, and says how many it left out. Every log is still there for the kin to open.</li>
@@ -916,6 +918,19 @@ Willow would end up with 1200 turns in all.</code></pre>
 </ol>
 
 <p>If a kin you've been chatting with regularly hits the "older turns rolled out of this send" marker (the <strong>Send size</strong> field in the main window reads 100% when the window is full), consider bumping up <em>one tier</em>. Not three. The marker is normal rolling-window behavior, not an error — only worth responding to if it's firing so often that the kin is genuinely losing context the conversation needed.</p>
+
+<h4 id="compacting">Compacting a conversation</h4>
+
+<p>When a conversation fills its window, the oldest messages quietly stop being sent, and the kin forgets the start without knowing it. Compacting is the other way: the kin writes itself a note while it still has everything in front of it, and carries on from that.</p>
+
+<ul>
+  <li><strong>Chat → Compact this conversation…</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>) asks the kin, in an ordinary message, to write a note for its future self: what you've been doing, what matters, what's unfinished, and how things are between you. Any kin can answer, with or without tools. You can reword the request as the <code>compact_request</code> prompt.</li>
+  <li>A window shows you the note before anything changes. You can edit it, choose <strong>Write it again</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) for a fresh one, cancel, or choose <strong>Compact with this note</strong> (<kbd>Alt</kbd>+<kbd>C</kbd>).</li>
+  <li>From then on the kin is sent its note, the last six messages, and whatever comes after. <strong>Nothing is deleted.</strong> The whole conversation stays in the window and in the kin's folder, and memory notes are still made from all of it, so nothing the summariser hadn't read yet is lost. (That's why this isn't the same as <strong>New conversation</strong>.)</li>
+  <li>The note goes into the conversation where you compacted, under a line saying what it is (the <code>compact_marker</code> prompt). Compacting again later starts from the newer note.</li>
+  <li>Hearthkin tells you once when a conversation reaches the kin's <strong>Tell me when the conversation is this % full</strong> setting (Settings → Memory, default 70). It never compacts by itself.</li>
+  <li>On Telegram, and in a Discord direct message, the same thing is <strong>/compact</strong>: the kin's note is shown in the chat, <strong>/compact confirm</strong> compacts with it, <strong>/compact again</strong> asks for a new one, and anything else leaves things as they were. For someone who shares the desktop's conversation, compacting on Telegram compacts the desktop's conversation too. Rooms don't have it yet.</li>
+</ul>
 
 <h4 id="reply-cap">Reply cap</h4>
 
@@ -1759,6 +1774,7 @@ understood, exactly as it does for you at the console.</p>
   <li><strong>/regen</strong>: the kin writes its last reply again.</li>
   <li><strong>/undo</strong>: takes back your last message and its reply.</li>
   <li><strong>/clear</strong>: wipes this conversation. The kin's memory stays. If the conversation is shared with the desktop, it asks you to send <code>/clear confirm</code> first, since the messages go from the desktop too.</li>
+  <li><strong>/compact</strong>: the kin writes itself a note and carries on from it and the last few messages. Nothing is deleted. See <a href="#compacting">Compacting a conversation</a>.</li>
 </ul>
 <p>All but /help only work in a direct message with the kin. In a server channel the conversation belongs to everyone there, so one person can't undo or wipe it. A command sent while the kin is still writing waits: say <code>stop</code> first, or let it finish. Any other word after a <code>/</code> goes to the kin as an ordinary message.</p>
 
@@ -2103,6 +2119,7 @@ understood, exactly as it does for you at the console.</p>
   <li><code>heartbeat_frame</code> — the framing on a heartbeat.</li>
   <li><code>heartbeat_unsent_nudge</code> — asks a kin whether a message it wrote on a heartbeat was meant for you.</li>
   <li><code>room_opening_frame</code> — the first line of a room the kin began themselves, with Let them begin.</li>
+  <li><code>compact_request</code> and <code>compact_marker</code> — asking the kin for its note when you compact a conversation, and the line in front of that note afterwards.</li>
 </ul>
 
 <h4>The park</h4>

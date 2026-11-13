@@ -153,7 +153,11 @@ class ChatSendMixin:
         # Default 5; the conversation.json on disk is unaffected — this
         # only changes what's sent in this request's messages list.
         keep_window = int(self.agent_cfg.get("tool_history_keep", 5) or 0)
-        compacted = self._compact_tool_history(self.conversation, keep_window)
+        # A compacted conversation is sent from its latest note onward
+        # (Chat -> Compact this conversation); the full history stays put.
+        from chat_helpers import view_after_compaction
+        compacted = self._compact_tool_history(
+            view_after_compaction(self.conversation), keep_window)
         history = []
         for _m in compacted:
             _entry = self._history_entry_for_model(_m)

@@ -1274,6 +1274,7 @@ class TelegramBot:
         {"command": "reset", "description": "Wipe history AND memory.md (asks to confirm)."},
         {"command": "regen", "description": "Redo the kin's last reply."},
         {"command": "undo", "description": "Drop the last user/assistant exchange."},
+        {"command": "compact", "description": "The kin writes itself a note and carries on from it."},
         {"command": "note", "description": "Append text to today's journal: /note <text>."},
         {"command": "play", "description": "Take a turn in a kin's game: /play tff look."},
         {"command": "think", "description": "Show the reasoning behind the last reply."},
@@ -2623,6 +2624,8 @@ class TelegramBot:
             self._cmd_regen(user_id, chat_id)
         elif cmd == "undo":
             self._cmd_undo(user_id, chat_id)
+        elif cmd == "compact":
+            self._cmd_compact(user_id, chat_id, arg)
         elif cmd == "tools":
             self._cmd_tools(user_id, chat_id)
         elif cmd == "about":
@@ -2972,6 +2975,9 @@ class TelegramBot:
             "/reset — wipe history AND memory.md (asks to confirm)\n"
             "/regen — redo the kin's last reply\n"
             "/undo — drop the last user/assistant exchange\n"
+            "/compact — the kin writes itself a note, and carries on from "
+            "it and the last few messages (asks to confirm; nothing is "
+            "deleted)\n"
             "/note <text> — append text to today's journal\n"
             "/play <game> <command> — take a turn in a kin's game "
             "(e.g. /play tff look)\n"
@@ -3940,16 +3946,125 @@ class TelegramBot:
                     if not (isinstance(m, dict)
                             and (m.get("source") or "").startswith("telegram:group:"))
                 ]
-                return _drop_leading_orphan_tools(filtered)
+                # The shared conversation is the desktop's: once it's been
+                # compacted there, the kin here goes on from its note too.
+                from chat_helpers import view_after_compaction
+                return _drop_leading_orphan_tools(
+                    view_after_compaction(filtered))
             except Exception:
                 return []
         # setdefault is a hidden mutation — must take the lock so an
         # inference worker / /clear can't race the implicit insert
         # (audit T2). Key via _hkey (audit DH1).
         with self._histories_lock:
-            return _drop_leading_orphan_tools(
-                list(self._histories.setdefault(_hkey(user_id), []))
-            )
+            from chat_helpers import view_after_compaction
+            return _drop_leading_orphan_tools(view_after_compaction(
+                list(self._histories.setdefault(_hkey(user_id), []))))
+
+    # ── /compact (12 Nov 2026) ────────────────────────────────────────
+    # The desktop's Chat -> Compact this conversation, on Telegram: the kin
+    # writes itself a note (an ordinary message, no tools), the person reads
+    # it here, and "/compact confirm" puts a marker with it into this
+    # person's conversation. From then on the kin is sent the note and the
+    # last few messages; nothing is deleted. For someone sharing the
+    # desktop's conversation, that's the desktop's conversation too.
+
+    COMPACT_KEEP = 6
+
+    def _cmd_compact(self, user_id, chat_id, arg=""):
+        from chat_helpers import compact_marker
+        from kin_persistence import load_app_prompt, now_iso
+        pending = self.__dict__.setdefault("_pending_compact", {})
+        word = (arg or "").strip().lower()
+        who = self.agent_name
+        user = self._compact_user_name(user_id)
+        if word == "confirm":
+            note = pending.pop(user_id, None)
+            if not note:
+                self._send_chunked(
+                    chat_id, f"There's no note waiting. Send /compact and "
+                             f"{who} will write one first.")
+                return
+            preface = load_app_prompt("compact_marker", who).replace(
+                "{user}", user)
+            self._append_turns_for(user_id, [compact_marker(
+                note, self.COMPACT_KEEP, ts=now_iso(), preface=preface)])
+            self._send_chunked(
+                chat_id,
+                f"Compacted. From now on {who} is sent its note and the last "
+                f"{self.COMPACT_KEEP} messages. Nothing was deleted."
+                + (" This conversation is shared with the desktop, so the "
+                   "desktop carries on from the note too."
+                   if self._user_shares_desktop(user_id) else ""))
+            return
+        if word not in ("", "again"):
+            self._send_chunked(
+                chat_id, "Send /compact to have the note written, then "
+                         "/compact confirm to compact with it.")
+            return
+        self._send_chunked(chat_id, f"Asking {who} to write its note. This "
+                                    "can take a moment.")
+        try:
+            note = self._compact_note(user_id, user)
+        except Exception as e:
+            note, err = "", str(e)
+        else:
+            err = ""
+        if not note:
+            pending.pop(user_id, None)
+            self._send_chunked(
+                chat_id, f"{who} didn't write a note"
+                + (f" ({err})" if err else "")
+                + ". Nothing was changed; you can try /compact again.")
+            return
+        pending[user_id] = note
+        self._send_chunked(
+            chat_id,
+            f"Here's the note {who} wrote for after:\n\n{note}\n\n"
+            f"Send /compact confirm to compact with it, or /compact again "
+            f"for a new one. Anything else leaves it as it was. Nothing is "
+            f"deleted either way.")
+
+    def _compact_user_name(self, user_id):
+        try:
+            from tools._person_settings import person_value
+            name = person_value(self.get_config() or {}, "telegram",
+                                user_id, "label")
+        except Exception:
+            name = ""
+        return (name or "").strip() or "the person you talk with"
+
+    def _compact_note(self, user_id, user):
+        """Ask the kin for its note: soul and memory, this person's
+        conversation as it's sent now, and the request. No tools."""
+        from kin_persistence import (build_system_prompt, load_agent_config,
+                                     load_app_prompt, resolve_kin_ollama_host)
+        from chat_helpers import extract_inline_thinking
+        model, options = self.get_model_options()
+        system = build_system_prompt(self.get_soul() or "",
+                                     self.get_memory() or "",
+                                     enabled_tools=[],
+                                     kin_name=self.agent_name)
+        msgs = [{"role": "system", "content": system}]
+        for m in self._load_history_for(user_id):
+            if (isinstance(m, dict) and m.get("role") in
+                    ("user", "assistant", "system")
+                    and not m.get("tool_calls") and m.get("content")):
+                msgs.append({"role": m["role"], "content": m["content"]})
+        msgs.append({"role": "user", "content": load_app_prompt(
+            "compact_request", self.agent_name).replace("{user}", user)})
+        # The kin's own settings (get_config is only its Telegram part).
+        cfg = load_agent_config(self.agent_name) or {}
+        num_ctx = int((options or {}).get("num_ctx") or 0) or 2048
+        r = llm_backend.chat_collect(
+            model, msgs, options=options,
+            max_context_tokens=max(512, num_ctx - 2000),
+            kin_name=self.agent_name, surface="compact",
+            ollama_host=resolve_kin_ollama_host(
+                cfg.get("ollama_host_name", "")))
+        note, _ = extract_inline_thinking(getattr(r, "content", "") or "",
+                                          getattr(r, "thinking", "") or "")
+        return (note or "").strip()
 
     def _load_shared_conversation_cached(self):
         """Read the kin's conversation.jsonl, memoized by the file's

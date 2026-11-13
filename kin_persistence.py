@@ -1274,6 +1274,10 @@ DEFAULT_AGENT_CONFIG = {
     # memory_log_index_max_chars: a bare number is not actionable.
     "memory_index_budget_chars": 5000,
     "memory_distill_at_pct": 0,
+    # Tell the person once, when the desktop conversation is this full (% of
+    # the context window), that they can compact it (Chat -> Compact this
+    # conversation). 0 = never. Nothing happens on its own (12 Nov 2026).
+    "compact_hint_pct": 70,
     # Minutes to wait before the AUTOMATIC triggers may fire again on a
     # scope that is working through a BACKLOG — one so large that the run
     # just finished digested less than what is still left. 0 = no wait
@@ -4087,6 +4091,27 @@ DEFAULT_ROOM_OPENING_FRAME = (
     "begin however they like.]"
 )
 
+# Compacting a conversation (Chat -> Compact this conversation, 12 Nov 2026).
+# The request is an ordinary message, so a kin with no tools can answer it:
+# Hearthkin keeps the reply. Written to the kin as itself, about the person
+# and the two of them, because the note is for its own future self and a
+# summary written "about the user" from outside is exactly what this replaces.
+DEFAULT_COMPACT_REQUEST = (
+    "[hearthkin: this conversation is getting full, so {user} would like to "
+    "compact it. Nothing is deleted, but after this you'll be sent only a "
+    "note from you and the last few messages, not everything before them. "
+    "So please write that note now, to yourself, in your own voice: what "
+    "we've been doing, what matters in it, what's unfinished, and how "
+    "things are between you and {user} right now. Write it for the you who "
+    "will read it next, with no memory of this conversation. Just the note; "
+    "no tools.]"
+)
+DEFAULT_COMPACT_MARKER = (
+    "[hearthkin: this conversation was compacted here, at {user}'s request. "
+    "Everything before it is kept, but you're no longer sent it. Before it "
+    "was compacted, you wrote yourself this note:]"
+)
+
 # Operator-extendable word lists for the reading-gesture detector
 # (reading_bridge.looks_like_read_gesture). Purely ADDITIVE, exactly like
 # gesture_messages: the built-in baseline is unchanged and anything added here
@@ -4918,6 +4943,24 @@ APP_PROMPT_REGISTRY = {
                 "restraint but names the two unwanted messages as content "
                 "(a status update, a repeat) instead of asking the kin to "
                 "second-guess whether its own impulse is genuine.",
+    },
+    "compact_request": {
+        "default": DEFAULT_COMPACT_REQUEST,
+        "version": 1,
+        "placeholders": ["{user}"],
+        "title": "Compacting: asking the kin for its note",
+        "desc": "Sent when you choose Chat, Compact this conversation. The "
+                "kin's answer becomes the note it carries on from. An "
+                "ordinary message, so a kin with no tools can answer it.",
+    },
+    "compact_marker": {
+        "default": DEFAULT_COMPACT_MARKER,
+        "version": 1,
+        "placeholders": ["{user}"],
+        "title": "Compacting: the line before the kin's note",
+        "desc": "Put in front of the kin's own note where a conversation "
+                "was compacted, so the kin knows what the note is and that "
+                "the earlier conversation still exists.",
     },
     "room_opening_frame": {
         "default": DEFAULT_ROOM_OPENING_FRAME,
