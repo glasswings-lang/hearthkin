@@ -317,11 +317,17 @@ for node in ast.walk(_tree):
 check(_loops == 0, "no second loop -- play_turn owns the counting, once")
 
 # _run_isolated_inner routes through the helper rather than re-implementing it.
+# (Since 12 Nov 2026 the park turn runs in _finish_cron_reply, which both
+# ways a wake-up runs on its own call; _run_isolated_inner calls that.)
 _iso_src = None
+_fin_src = None
 for node in ast.walk(_tree):
     if isinstance(node, ast.FunctionDef) and node.name == "_run_isolated_inner":
         _iso_src = ast.get_source_segment(_src, node) or ""
-check(_iso_src is not None and "_run_cron_park_turn(" in _iso_src,
+    if isinstance(node, ast.FunctionDef) and node.name == "_finish_cron_reply":
+        _fin_src = ast.get_source_segment(_src, node) or ""
+check(_iso_src is not None and "_finish_cron_reply(" in _iso_src
+      and _fin_src is not None and "_run_cron_park_turn(" in _fin_src,
       "_run_isolated_inner calls the extracted helper, not its own copy")
 check(_iso_src is not None and "route_reply" not in _iso_src,
       "...and no longer calls route_reply directly itself")
@@ -329,7 +335,7 @@ check(_iso_src is not None and "route_reply" not in _iso_src,
 # The observability requirement: a long run must leave SOMETHING findable.
 _helper_src = None
 for node in ast.walk(_tree):
-    if isinstance(node, ast.FunctionDef) and node.name == "_run_isolated_inner":
+    if isinstance(node, ast.FunctionDef) and node.name == "_finish_cron_reply":
         _helper_src = ast.get_source_segment(_src, node) or ""
 check(_helper_src is not None and "log_cron_error" in _helper_src
       and "park_turn" in _helper_src,

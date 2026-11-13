@@ -77,19 +77,31 @@ for anchor, label in (
 # module found each helper's DEFINITION, which sits above the call site and
 # made the ordering look wrong — an ordering check has to read the order
 # things happen in, not the order they were declared.
-reply_src = inspect.getsource(hearthkin_cron._run_isolated_inner)
-cleanup_at = reply_src.find("clean_kin_reply(reply")
-journal_at = reply_src.find("cron_helpers.append_journal")
-telegram_at = reply_src.find("_post_cron_reply_to_telegram(kin")
-persist_at = reply_src.find("_append_to_conversation(")
-check("all four steps are in the one function, so the order is a real order",
-      min(cleanup_at, journal_at, telegram_at, persist_at) >= 0)
-check("cleanup runs BEFORE the journal entry is written",
-      0 < cleanup_at < journal_at)
-check("...before the reply is posted to Telegram",
-      0 < cleanup_at < telegram_at)
-check("...and before it is stored as the kin's own words",
-      0 < cleanup_at < persist_at)
+# Since 12 Nov 2026 the cleanup lives in _finish_cron_reply, which BOTH
+# ways a wake-up runs on its own call. So: the cleanup is in the finisher,
+# and in each runner the finisher is called before the journal, the
+# Telegram post and the conversation are written.
+fin_src = inspect.getsource(hearthkin_cron._finish_cron_reply)
+check("the shared finisher runs the cleanup", "clean_kin_reply(reply" in fin_src)
+for runner, label in ((hearthkin_cron._run_isolated_inner, "Hearthkin closed"),
+                      (hearthkin_cron._main, "open, wake-ups not sent to chat")):
+    reply_src = inspect.getsource(runner)
+    if runner is hearthkin_cron._main:
+        reply_src = reply_src[reply_src.find("if running and not inject"):]
+    cleanup_at = reply_src.find("_finish_cron_reply(")
+    journal_at = reply_src.find("cron_helpers.append_journal")
+    telegram_at = reply_src.find("_post_cron_reply_to_telegram(")
+    check(f"{label}: finisher, journal and Telegram post are all in the one "
+          f"path, so the order is a real order",
+          min(cleanup_at, journal_at, telegram_at) >= 0)
+    check(f"{label}: cleanup runs BEFORE the journal entry is written",
+          0 < cleanup_at < journal_at)
+    check(f"{label}: ...before the reply is posted to Telegram",
+          0 < cleanup_at < telegram_at)
+    persist_at = reply_src.find("_append_to_conversation(")
+    if persist_at >= 0:
+        check(f"{label}: ...and before it is stored as the kin's own words",
+              0 < cleanup_at < persist_at)
 
 # The real chain, on the shape that motivated it. Text invented; the shape is
 # what a model imitating a room transcript emits.

@@ -1262,83 +1262,11 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
                 max_iterations=_max_iter,
                 ollama_host=_kin_host,
             ))
-    reply = (result.content or "").strip()
-    # Pull any inline <thinking>...</thinking> markup out of content
-    # before persistence / journal / Telegram post. The other four
-    # send surfaces (1-on-1, room, Telegram DM, Telegram group) do
-    # this in their done-handlers; cron's isolated path skips them
-    # so needs its own call. See chat_helpers.extract_inline_thinking
-    # for why some models (Haiku 4.5 inline, MiMo, R1 distills) leak
-    # reasoning into content rather than via the structured channel.
-    reply, _thinking = extract_inline_thinking(reply, "")
-    # Anti-impersonation cleanup. Every other surface has run this for a long
-    # time and cron never did, on the surface where it matters most: a
-    # scheduled reply goes to the journal, into the conversation the kin reads
-    # back as its own words, and — when configured — straight out to a
-    # Telegram group. So the one turn nobody is awake to read was the one that
-    # could post another kin's name into a room full of people, and then teach
-    # itself from the record that it had said it.
-    #
-    # `impersonated` means the model opened by speaking AS someone else, which
-    # is not cosmetic: the whole reply is in that voice and stripping the label
-    # only hides it. Unattended, there is nobody to re-roll it, so the honest
-    # move is to keep the cleaned text and record the fault where the operator
-    # will find it.
-    try:
-        from chat_helpers import clean_kin_reply
-        reply, _impersonated = clean_kin_reply(reply, kin)
-        reply = (reply or "").strip()
-        if _impersonated:
-            cron_helpers.log_cron_error(
-                kin, "impersonation",
-                "the scheduled reply opened in another speaker's voice; the "
-                "tag was stripped but the turn may still be in that voice")
-    except Exception as e:
-        cron_helpers.log_cron_error(kin, "reply_cleanup", str(e))
-    # Park keeper: run the `> command` the kin chose, and -- for a keeper's
-    # own turn -- keep going until it stops (see _run_cron_park_turn).
-    # Best-effort; never breaks the run.
-    try:
-        reply, _turn = _run_cron_park_turn(
-            kin, reply, messages, model, options, cache, cache_ttl,
-            show_thinking, max_ctx, _kin_host)
-        # Nobody watches a cron run land in real time, so a turn that
-        # actually looped needs a trace an operator could find later --
-        # reuse the always-on cron log rather than a new file.
-        if _turn is not None and _turn.taken > 1:
-            cron_helpers.log_cron_error(
-                kin, "park_turn",
-                f"{_turn.taken} move(s) this wake-up (asked {_turn.asked}x)"
-                + (", stopped at the move ceiling"
-                   if _turn.spent_allowance else ""))
-    except Exception:
-        pass
-    if not reply:
-        _log_empty_cron_reply(
-            kin, "cron-subprocess", model,
-            getattr(result, "content", None) or "")
-        reply = "[no reply produced]"
-    # Authoring bridge: if the kin authored file content in text (a fenced
-    # write / *writes X* emote) instead of a write_file call it froze on,
-    # perform the write. Gated on write tools being cron-safe-enabled.
-    bridge_note, bridge_confirm = _maybe_authoring_bridge_cron(
-        kin, reply, safe_tools, toolless_scopes, model)
-    # Steering notes for a turn nobody was awake to read. Both are appended to
-    # the kin's own history AFTER the reply they describe, so the correction
-    # arrives in the same place the kin will next look — not to the operator,
-    # who cannot do anything about a model gesturing at 4am anyway. The
-    # authoring bridge above runs FIRST on purpose: if it managed to commit
-    # the write the kin only described, there is nothing left to correct.
+    reply, bridge_note, bridge_confirm, steer_notes = _finish_cron_reply(
+        kin, result, messages, model, options, cache, cache_ttl,
+        show_thinking, max_ctx, _kin_host, safe_tools, toolless_scopes,
+        "cron-subprocess")
     _added = getattr(result, "messages_added", None) or []
-    steer_notes = []
-    if not bridge_note:
-        note = _maybe_roleplay_corrective_cron(
-            kin, reply, safe_tools, _added, model)
-        if note:
-            steer_notes.append(note)
-    note = _maybe_read_nudge_cron(kin, reply, safe_tools, _added)
-    if note:
-        steer_notes.append(note)
     # Persist tool round-trips (if any) so the kin's next read of
     # conversation.jsonl sees what they actually did. Without this the
     # kin would only see the final text reply on the next session and
@@ -1385,6 +1313,120 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     cron_helpers.append_journal(kin, time_label or "(no time)", prompt, journal_reply)
     _post_cron_reply_to_telegram(kin, cfg, reply, result, schemas, destinations=destinations)
     return reply
+
+
+def _finish_cron_reply(kin, result, messages, model, options, cache,
+                       cache_ttl, show_thinking, max_ctx, kin_host,
+                       safe_tools, toolless_scopes, surface):
+    """Everything a wake-up's reply goes through between the model and the
+    record, in one place for BOTH ways a wake-up runs on its own (Hearthkin
+    closed, or open with wake-ups not sent into the chat). The second one used
+    to skip all of it, so its reply could reach Telegram and the journal with
+    stray thinking text or in another kin's voice, a file the kin wrote out
+    was never saved, and the kin was never told it only described an action
+    (12 Nov 2026).
+
+    Steps: strip inline thinking; anti-impersonation cleanup; park keeper
+    moves; rescue an empty reply from what the kin said before its last tool
+    call, as every other surface does; save fenced files (or tool-less memory
+    notes); steering notes.
+
+    Returns (reply, bridge_note, bridge_confirm, steer_notes)."""
+    reply = (result.content or "").strip()
+    # Pull any inline <thinking>...</thinking> markup out of content
+    # before persistence / journal / Telegram post. The other four
+    # send surfaces (1-on-1, room, Telegram DM, Telegram group) do
+    # this in their done-handlers; cron's isolated path skips them
+    # so needs its own call. See chat_helpers.extract_inline_thinking
+    # for why some models (Haiku 4.5 inline, MiMo, R1 distills) leak
+    # reasoning into content rather than via the structured channel.
+    reply, _thinking = extract_inline_thinking(reply, "")
+    # Anti-impersonation cleanup. Every other surface has run this for a long
+    # time and cron never did, on the surface where it matters most: a
+    # scheduled reply goes to the journal, into the conversation the kin reads
+    # back as its own words, and — when configured — straight out to a
+    # Telegram group. So the one turn nobody is awake to read was the one that
+    # could post another kin's name into a room full of people, and then teach
+    # itself from the record that it had said it.
+    #
+    # `impersonated` means the model opened by speaking AS someone else, which
+    # is not cosmetic: the whole reply is in that voice and stripping the label
+    # only hides it. Unattended, there is nobody to re-roll it, so the honest
+    # move is to keep the cleaned text and record the fault where the operator
+    # will find it.
+    try:
+        from chat_helpers import clean_kin_reply
+        reply, _impersonated = clean_kin_reply(reply, kin)
+        reply = (reply or "").strip()
+        if _impersonated:
+            cron_helpers.log_cron_error(
+                kin, "impersonation",
+                "the scheduled reply opened in another speaker's voice; the "
+                "tag was stripped but the turn may still be in that voice")
+    except Exception as e:
+        cron_helpers.log_cron_error(kin, "reply_cleanup", str(e))
+    # Park keeper: run the `> command` the kin chose, and -- for a keeper's
+    # own turn -- keep going until it stops (see _run_cron_park_turn).
+    # Best-effort; never breaks the run.
+    try:
+        reply, _turn = _run_cron_park_turn(
+            kin, reply, messages, model, options, cache, cache_ttl,
+            show_thinking, max_ctx, kin_host)
+        # Nobody watches a cron run land in real time, so a turn that
+        # actually looped needs a trace an operator could find later --
+        # reuse the always-on cron log rather than a new file.
+        if _turn is not None and _turn.taken > 1:
+            cron_helpers.log_cron_error(
+                kin, "park_turn",
+                f"{_turn.taken} move(s) this wake-up (asked {_turn.asked}x)"
+                + (", stopped at the move ceiling"
+                   if _turn.spent_allowance else ""))
+    except Exception:
+        pass
+    if not reply and not getattr(result, "stopped", False):
+        # Rescue: what the kin said alongside its last tool call is usually
+        # what it meant; every other surface keeps it rather than going
+        # silent (12 Nov 2026).
+        try:
+            from chat_helpers import (scan_intermediate_tool_content,
+                                      strip_tool_summary_footer)
+            _mid, _names = scan_intermediate_tool_content(
+                getattr(result, "messages_added", None) or [])
+            _mid, _t = extract_inline_thinking((_mid or "").strip(), "")
+            _mid = strip_tool_summary_footer(_mid).strip()
+            if _mid:
+                reply = _mid
+                surface = surface + "-salvaged"
+        except Exception:
+            pass
+    if not reply or surface.endswith("-salvaged"):
+        _log_empty_cron_reply(
+            kin, surface, model,
+            getattr(result, "content", None) or "")
+    if not reply:
+        reply = "[no reply produced]"
+    # Authoring bridge: if the kin authored file content in text (a fenced
+    # write / *writes X* emote) instead of a write_file call it froze on,
+    # perform the write. Gated on write tools being cron-safe-enabled.
+    bridge_note, bridge_confirm = _maybe_authoring_bridge_cron(
+        kin, reply, safe_tools, toolless_scopes, model)
+    # Steering notes for a turn nobody was awake to read. Both are appended to
+    # the kin's own history AFTER the reply they describe, so the correction
+    # arrives in the same place the kin will next look — not to the operator,
+    # who cannot do anything about a model gesturing at 4am anyway. The
+    # authoring bridge above runs FIRST on purpose: if it managed to commit
+    # the write the kin only described, there is nothing left to correct.
+    _added = getattr(result, "messages_added", None) or []
+    steer_notes = []
+    if not bridge_note:
+        note = _maybe_roleplay_corrective_cron(
+            kin, reply, safe_tools, _added, model)
+        if note:
+            steer_notes.append(note)
+    note = _maybe_read_nudge_cron(kin, reply, safe_tools, _added)
+    if note:
+        steer_notes.append(note)
+    return reply, bridge_note, bridge_confirm, steer_notes
 
 
 def _run_cron_park_turn(kin, reply, messages, model, options, cache,
@@ -1926,31 +1968,37 @@ def _main(args):
                         max_iterations=_max_iter,
                         ollama_host=_kin_host,
                     ))
-            raw_reply = (result.content or "").strip()
-            if not raw_reply:
-                _log_empty_cron_reply(
-                    kin, "cron-isolated", model,
-                    getattr(result, "content", None) or "")
-                reply = "[no reply produced]"
-            else:
-                reply = raw_reply
-            # This branch deliberately doesn't touch conversation.jsonl (see
-            # above), so there is nowhere to persist a receipt — but the WRITES
-            # still have to happen, or a tool-less kin tends into nothing on
-            # every wake-up that lands here. The operator-facing line joins the
-            # journal, which is the record this branch does keep.
-            _tl_note, _tl_confirm = _toolless_memory_cron(
-                kin, reply, safe_tools, toolless_scopes, model)
-            if _tl_confirm:
-                reply = reply + "\n\n" + _tl_confirm
+            # The same finishing steps as the closed-app path (thinking text,
+            # impersonation, park moves, empty-reply rescue, fenced saves or
+            # tool-less memory notes, steering notes). This branch used to do
+            # only the tool-less notes (12 Nov 2026).
+            reply, bridge_note, bridge_confirm, steer_notes = (
+                _finish_cron_reply(
+                    kin, result, messages, model, options,
+                    bool(cfg.get("cache", True)), cache_ttl,
+                    bool(cfg.get("show_thinking", False)), max_ctx,
+                    _kin_host, safe_tools, toolless_scopes, "cron-isolated"))
             if history_path:
                 # This branch keeps no chat record, but a job with its own
-                # history still needs one, or it loses its continuity here.
+                # history still needs one, or it loses its continuity here;
+                # and the notes about this run go with it. Without its own
+                # history there's nowhere to put them: the open app owns the
+                # main conversation, so another process mustn't write to it.
                 _append_to_conversation(
                     kin, framed_prompt, reply,
                     intermediate_turns=getattr(result, "messages_added", None) or [],
                     history_path=history_path)
-            cron_helpers.append_journal(kin, time_label or "(no time)", prompt, reply)
+                for _n in ([bridge_note] if bridge_note else []) + steer_notes:
+                    try:
+                        _append_own_history(history_path, {
+                            "role": "system", "content": _n,
+                            "ts": datetime.datetime.now().isoformat(
+                                timespec="seconds")})
+                    except Exception:
+                        pass
+            cron_helpers.append_journal(
+                kin, time_label or "(no time)", prompt,
+                reply + (("\n\n" + bridge_confirm) if bridge_confirm else ""))
             _post_cron_reply_to_telegram(
                 kin, cfg, reply, result, schemas, destinations=destinations)
         except Exception as e:

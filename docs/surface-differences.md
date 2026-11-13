@@ -30,8 +30,8 @@ Each item says whether the difference is **on purpose** (and why) or **drift** (
 
 ## Tidying a reply before it's kept
 
-- **One kind of wake-up skips all the tidying.** That's when Hearthkin is open but set not to send wake-ups into the chat. Its reply skips: the clean-up that stops a kin speaking as someone else, removing stray thinking text, saving files written out in the reply, and the "you only described it" notes. That reply still goes to Telegram and the journal. Drift; to do.
-- **Wake-ups don't rescue a reply that came back empty.** Elsewhere, if the final reply is blank, Hearthkin keeps what the kin said just before. Drift; to do.
+- **Both kinds of wake-up now tidy their replies the same way.** Fixed 12 November 2026. That includes the one that runs while Hearthkin is open but set not to send wake-ups into the chat, which used to skip it all. One thing still differs there, on purpose: the "you only described it" notes only reach the kin if that job keeps its own history, because the open app owns the main conversation and another program mustn't write into it.
+- **Wake-ups rescue a reply that came back empty.** Fixed 12 November 2026. Like everywhere else, if the final reply is blank, Hearthkin keeps what the kin said alongside its last tool call.
 - **On Discord, an empty reply leaves no note for next time.** Elsewhere the kin is told its last reply came back empty. Drift; to do.
 
 ## Everyday things

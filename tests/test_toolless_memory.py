@@ -364,9 +364,17 @@ check("D6-control a tooled kin still gets the ordinary status line",
 # file. It is not for how many arguments the call happens to take. Pinning
 # the exact argument list made it fail the moment a parameter was added,
 # which is a test reporting on its own literal instead of on the behaviour.
+# Since 12 Nov 2026 both wake-up paths finish through _finish_cron_reply,
+# which hands the scopes to the authoring bridge, which falls back to the
+# tool-less writer. So the chain is: branch -> finisher -> bridge -> writer.
+_branch = _src[_src.find("if running and not inject"):]
 check("D5 the cron-isolated branch commits no-tools writes",
-      re.search(r"_toolless_memory_cron\(\s*kin, reply, safe_tools,"
-                r"\s*toolless_scopes", _src) is not None)
+      "_finish_cron_reply(" in _branch
+      and "toolless_scopes" in _branch[_branch.find("_finish_cron_reply("):
+                                       _branch.find("_finish_cron_reply(") + 400]
+      and re.search(r"_maybe_authoring_bridge_cron\(\s*kin, reply, safe_tools,"
+                    r"\s*toolless_scopes", _src) is not None
+      and re.search(r"return _toolless_memory_cron\(", _src) is not None)
 
 
 # --------------------------- F. notes belong at a tending moment, not always
