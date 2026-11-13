@@ -733,11 +733,17 @@ class StatusVoiceMixin:
             # Rooms don't have a single num_ctx (each kin's varies). Just
             # show the raw token count — the Usage tab has the full
             # per-kin breakdown.
-            return (
+            line = (
                 f"Room: {room} · {len(members)} member"
                 f"{'s' if len(members) != 1 else ''} · "
                 f"~{tokens:,} tokens in convo"
             )
+            # Which kin last drew on its memories, and how many: the same
+            # cue the one-on-one line gives (12 Nov 2026; rooms had none).
+            who, used = getattr(self, "_room_recall_used", None) or ("", [])
+            if who and used:
+                line += f" · {who} recalled {len(used)} memories"
+            return line
         if not self.current_agent:
             return "No kin or room loaded — pick one from the Chat tab."
         cfg = self.agent_cfg or {}

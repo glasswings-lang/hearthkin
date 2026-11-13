@@ -1040,10 +1040,10 @@ ROOMS = {
     "reasoning_display": Present(
         markers=" reasoning]",
         note="Its own shape: '[Name reasoning]' above the reply."),
-    "recall_legibility": Absent(
-        "The main window can show which memories were brought up for a "
-        "reply; a room never does, so nobody can tell why a kin "
-        "remembered what it did."),
+    "recall_legibility": Present(
+        markers="_room_recall_used",
+        note="Since 12 Nov 2026: the Activity line names the kin and how "
+             "many memories it drew on, as the one-on-one line does."),
     "scheduled_wake_reaches_here": NotHere(
         "A wake-up belongs to one kin and lands in that kin's own chat. A "
         "room is a conversation the person starts and sits in."),
@@ -1061,9 +1061,11 @@ ROOMS = {
     "webcam_approval": NotHere(
         "The person is at the desktop, in the window, as in the main chat; "
         "the asking exists for people somewhere else."),
-    "image_attachments": Absent(
-        "No images in a room: the attach button is hidden there. Marked "
-        "'not yet' on the plain page."),
+    "image_attachments": Present(
+        markers="_room_fit_images",
+        note="Since 12 Nov 2026: Attach image works in a room. Each kin "
+             "whose model can see gets the picture; the others are told one "
+             "was shared. Take photo stays one-on-one."),
     "text_attachments": Present(
         markers="build_shared_context_block",
         note="Since 12 Nov 2026: a file named in the person's latest message "

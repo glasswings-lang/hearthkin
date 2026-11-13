@@ -258,6 +258,84 @@ park_keeper.kin_park_mode = lambda kin: "off"
 check("a kin that doesn't play from chat: nothing runs",
       not r._room_park_move("Opal", "> look") and host.ran[-1] == "look")
 
+
+# --- a picture in a room ---------------------------------------------------
+class _Hideable:
+    def __init__(self):
+        self.value, self.hidden = "x", False
+
+    def SetValue(self, v):
+        self.value = v
+
+    def Hide(self):
+        self.hidden = True
+
+
+pic = os.path.join(HOME, "beans.png")
+with open(pic, "wb") as f:
+    f.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+
+
+class PicRoom(Room):
+    _send_to_room = Frame._send_to_room
+    _room_history_for = Frame._room_history_for
+    _room_opened_by_kin = Frame._room_opened_by_kin
+    _room_fit_images = Frame._room_fit_images
+    config = {"user_name": "Wren"}
+
+    def __init__(self):
+        super().__init__([])
+        self._room_round_order = ["Opal", "Vesper"]
+        self._pending_attachment = pic
+        self._pending_attachment_rel = None
+        self.attached_label = _Hideable()
+        self.clear_attach_btn = _Hideable()
+        self.input_box = _Box("", 0)
+        self.shown = []
+
+    def _append_block(self, who, text, when):
+        self.shown.append(text)
+
+
+r = PicRoom()
+r._send_to_room("look at these beans")
+row = r.room_conversation[-1]
+from kin_persistence import attachment_abspath  # noqa: E402
+check("a picture sent to a room is kept with your message",
+      row.get("attachments") and len(row["attachments"]) == 1)
+check("...and saved where each member's own pictures live",
+      all(os.path.isfile(attachment_abspath(k, row["attachments"][0]))
+          for k in ("Opal", "Vesper")))
+check("...the room shows that a picture went with it",
+      "[image attached]" in r.shown[-1])
+check("...and it's no longer waiting to be sent",
+      r._pending_attachment is None and r.attached_label.hidden)
+hist = r._room_history_for("Opal")
+check("each kin's history carries the picture on your message",
+      any(m.get("attachments") == row["attachments"] for m in hist))
+sees = Frame._room_fit_images(hist, "stub", supports=True)
+check("a kin whose model can see is sent it", sees == hist)
+blind = Frame._room_fit_images(hist, "stub", supports=False)
+check("a kin whose model can't see is told one was shared, not sent it",
+      not any(m.get("attachments") for m in blind)
+      and any("shared a picture" in (m.get("content") or "") for m in blind))
+
+# --- which memories a room kin drew on -------------------------------------
+class StatusRoom:
+    _compose_default_status = Frame._compose_default_status
+    current_room = "Den"
+    room_cfg = {"members": ["Opal", "Vesper"]}
+    room_conversation = [{"role": "user", "content": "hi"}]
+
+
+s = StatusRoom()
+s._room_recall_used = ("Opal", ["a", "b"])
+check("the room's Activity line says which kin drew on its memories",
+      "Opal recalled 2 memories" in s._compose_default_status())
+s._room_recall_used = ("Opal", [])
+check("...and says nothing when none were",
+      "recalled" not in s._compose_default_status())
+
 print()
 if _fails:
     print("%d FAILED: %s" % (len(_fails), "; ".join(_fails)))

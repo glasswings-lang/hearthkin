@@ -28,6 +28,8 @@ class RoomsMixin:
             self.edit_room_btn.Enable(bool(list_rooms()))
 
     def _load_room(self, name):
+        # The Activity line's "recalled N memories" belongs to the last room.
+        self._room_recall_used = None
         # If we're leaving a single-kin chat, fire the kin's on-close
         # distillation trigger so a kin → room transition doesn't
         # silently skip distillation the way kin → kin doesn't
@@ -485,9 +487,38 @@ class RoomsMixin:
             self._update_round_label()
 
     def _send_to_room(self, user_text):
+        # A picture picked with Attach image (12 Nov 2026; rooms had none).
+        # Saved into every member's attachments folder under the same name
+        # (the name is the picture's own fingerprint), so each kin finds it
+        # where its own pictures live. Each kin whose model can see is sent
+        # it; the others are told one was shared (_room_fit_images).
+        refs = []
+        src = getattr(self, "_pending_attachment", None)
+        if src is not None:
+            try:
+                from kin_persistence import save_attachment
+                for member in (self._room_round_order or []):
+                    refs = [save_attachment(member, src)]
+            except ValueError as e:
+                self.input_box.SetValue(user_text)
+                wx.MessageBox(f"Couldn't attach that image: {e}",
+                              "Attach image", wx.OK | wx.ICON_WARNING)
+                return
+            self._pending_attachment = None
+            self._pending_attachment_rel = None
+            try:
+                self.attached_label.SetValue("")
+                self.attached_label.Hide()
+                self.clear_attach_btn.Hide()
+            except Exception:
+                pass
         # Append user message to room transcript
         ts = now_iso()
-        self.room_conversation.append({"role": "user", "content": user_text, "ts": ts, "speaker": "You"})
+        row = {"role": "user", "content": user_text, "ts": ts,
+               "speaker": "You"}
+        if refs:
+            row["attachments"] = refs
+        self.room_conversation.append(row)
         try:
             save_room_conversation(self.current_room, self.room_conversation)
         except Exception as e:
@@ -500,7 +531,8 @@ class RoomsMixin:
                 "save_room_conversation (user input)",
                 e,
             )
-        self._append_block("You", user_text, datetime.datetime.now())
+        self._append_block("You", user_text + (
+            "\n[image attached]" if refs else ""), datetime.datetime.now())
 
         # User typing breaks the auto-round chain (counter resets)
         self._room_auto_count = 0
@@ -572,10 +604,15 @@ class RoomsMixin:
             # that destabilizes generation.
             ts_prefix = format_ts_prefix(m.get("ts"))
             if role == "user":
-                history.append({
+                entry = {
                     "role": "user",
                     "content": ts_prefix + room_user_prefix + content,
-                })
+                }
+                # A picture the person shared; _room_fit_images decides,
+                # per kin, whether it's sent or described.
+                if m.get("attachments"):
+                    entry["attachments"] = list(m["attachments"])
+                history.append(entry)
             elif role in ("system", "tool") or m.get("tool_calls"):
                 # A kin's own tool steps and Hearthkin's notes to it, kept
                 # since 12 Nov 2026, go back to that kin only, in their
@@ -706,6 +743,28 @@ class RoomsMixin:
         self._room_round_index = 0
         self._room_active_order = [kin]
         self._run_next_kin_in_round()
+
+    @staticmethod
+    def _room_fit_images(messages, model, supports=None):
+        """Pictures for a kin whose model can see them; for one whose model
+        can't, a plain line saying a picture was shared, so it isn't sent
+        something it can't read and doesn't pretend to see it."""
+        if not any(isinstance(m, dict) and m.get("attachments")
+                   for m in messages):
+            return messages
+        if supports is None:
+            supports = llm_backend.model_supports_images(model)
+        if supports:
+            return messages
+        out = []
+        for m in messages:
+            if isinstance(m, dict) and m.get("attachments"):
+                m = {k: v for k, v in m.items() if k != "attachments"}
+                m["content"] = (m.get("content") or "") + (
+                    "\n[The person shared a picture here. Your model can't "
+                    "see pictures, so you weren't sent it.]")
+            out.append(m)
+        return out
 
     def _room_shared_file_block(self):
         """The text of any file named in the person's latest room message,
@@ -901,6 +960,13 @@ class RoomsMixin:
 
         room_show_thinking = bool(cfg.get("show_thinking", False))
         def worker():
+            # Off the UI thread: the first "can this model see?" check for a
+            # remote model goes over the network.
+            nonlocal messages
+            try:
+                messages = self._room_fit_images(messages, model)
+            except Exception:
+                pass
             try:
                 if enabled_tool_names:
                     self._run_room_tool_loop_inline(
@@ -962,7 +1028,7 @@ class RoomsMixin:
         # it stays clear of the room impersonation safeguards. Fail-soft.
         try:
             from memory_recall import inject_into_messages
-            messages, _ = inject_into_messages(
+            messages, _recalled = inject_into_messages(
                 messages, kin_name,
                 num_ctx=int((options or {}).get("num_ctx", 8192) or 8192),
                 cfg=load_agent_config(kin_name) or {},
@@ -971,6 +1037,8 @@ class RoomsMixin:
                 # -- a plural system announcing who is fronting writes exactly
                 # that shape, and it is part of what they said.
                 speaker_names=self._room_bracketed_names())
+            # Which memories this kin drew on, for the Activity line.
+            self._room_recall_used = (kin_name, list(_recalled or []))
         except Exception:
             pass
         room_host = resolve_kin_ollama_host(
@@ -1047,7 +1115,7 @@ class RoomsMixin:
         # the latest user turn; no tool call). Fail-soft.
         try:
             from memory_recall import inject_into_messages
-            messages, _ = inject_into_messages(
+            messages, _recalled = inject_into_messages(
                 messages, kin_name,
                 num_ctx=int((options or {}).get("num_ctx", 8192) or 8192),
                 cfg=room_kin_cfg,
@@ -1056,6 +1124,8 @@ class RoomsMixin:
                 # -- a plural system announcing who is fronting writes exactly
                 # that shape, and it is part of what they said.
                 speaker_names=self._room_bracketed_names())
+            # Which memories this kin drew on, for the Activity line.
+            self._room_recall_used = (kin_name, list(_recalled or []))
         except Exception:
             pass
         self._chime("first")

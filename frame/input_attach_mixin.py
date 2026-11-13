@@ -141,15 +141,25 @@ class InputAttachMixin:
             return
         in_room = self.current_room is not None
         if in_room:
-            self.attach_btn.Hide()
+            # Attach image works in a room since 12 Nov 2026: each kin whose
+            # model can see gets the picture, the others are told one was
+            # shared (RoomsMixin._send_to_room / _room_fit_images). So it's
+            # on whatever the members' models are. Take photo stays hidden:
+            # a webcam photo is saved for one kin, not for the room.
+            self.attach_btn.Show()
+            self.attach_btn.Enable(True)
+            self.attach_btn.SetToolTip(
+                "Pick an image to share with the room. Kin whose model "
+                "can't see pictures are told one was shared.")
             if hasattr(self, "take_photo_btn"):
                 self.take_photo_btn.Hide()
             self.attached_label.Hide()
             self.clear_attach_btn.Hide()
-            # Pending attachment makes no sense in room mode; drop it
-            # so a later kin-switch doesn't carry it forward by accident.
+            # A staged picture from the one-on-one chat isn't carried in.
             self._pending_attachment = None
             self._pending_attachment_rel = None
+            if self.attach_btn.GetParent():
+                self.attach_btn.GetParent().Layout()
             return
         self.attach_btn.Show()
         if hasattr(self, "take_photo_btn"):
@@ -251,8 +261,8 @@ class InputAttachMixin:
         before send doesn't leave orphan files). Validates the size
         cap eagerly so the user finds out NOW rather than after typing
         a long message."""
-        if not self.current_agent:
-            self._set_status("Load a kin first.")
+        if not self.current_agent and self.current_room is None:
+            self._set_status("Load a kin or a room first.")
             return
         wildcard = (
             "Image files|*.jpg;*.jpeg;*.png;*.gif;*.webp"
