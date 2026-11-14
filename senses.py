@@ -5,8 +5,9 @@ take it in, and bring back what that model heard or saw.
 
 The kin's own model does the thinking and the feeling. This only reports. A
 kin whose model can't hear (most of them) or can't see gets a listener it can
-ask, chosen per kin in its settings ("senses_model"), so the choice can be
-changed like any other model.
+ask, chosen per kin in its settings ("listen_model", and "look_model" for
+pictures, which falls back to the listening model when left empty), so each
+can be changed like any other model.
 
 Why a separate model at all: on 13 Nov 2026 six models were given the same
 two minutes of the operator's own music and the same questions, checked
@@ -68,14 +69,26 @@ _LOOK_DEFAULT_Q = (
     "and light, any text (read it exactly), and the feel of it.")
 
 
-def senses_model_for(agent_name):
-    """The kin's chosen listening-and-looking model, or "" when none is set."""
+def _cfg(agent_name):
     try:
         from kin_persistence import load_agent_config
-        cfg = load_agent_config(agent_name) or {}
+        return load_agent_config(agent_name) or {}
     except Exception:
-        return ""
-    return str(cfg.get("senses_model", "") or "").strip()
+        return {}
+
+
+def listen_model_for(agent_name):
+    """The kin's chosen listening model, or "" when none is set."""
+    return str(_cfg(agent_name).get("listen_model", "") or "").strip()
+
+
+def look_model_for(agent_name):
+    """The kin's chosen looking model. Separate from listening because the
+    best ear is rarely the cheapest eye, and a local model can see well and
+    hear badly. Left empty, it uses the listening model."""
+    cfg = _cfg(agent_name)
+    return (str(cfg.get("look_model", "") or "").strip()
+            or str(cfg.get("listen_model", "") or "").strip())
 
 
 def _kin_ollama_host(agent_name):
@@ -225,11 +238,11 @@ def hear(path, question="", start=None, length=None, *, agent_name="",
 
     Returns the listener's answer, headed by which stretches it heard, or a
     plain sentence saying why it couldn't."""
-    model = model or senses_model_for(agent_name)
+    model = model or listen_model_for(agent_name)
     if not model:
         return ("No listening model is chosen for you yet, so this can't be "
                 "heard. Your operator can pick one in your settings, on the "
-                "Tools tab: Listening and looking model.")
+                "Tools tab: Listening model.")
     import soundfile as sf
     try:
         info = sf.info(str(path))
@@ -272,11 +285,11 @@ def hear(path, question="", start=None, length=None, *, agent_name="",
 
 def see(path, question="", *, agent_name="", model=None):
     """What the chosen looker sees in the image file at `path`."""
-    model = model or senses_model_for(agent_name)
+    model = model or look_model_for(agent_name)
     if not model:
         return ("No looking model is chosen for you yet, so this can't be "
                 "seen. Your operator can pick one in your settings, on the "
-                "Tools tab: Listening and looking model.")
+                "Tools tab: Looking model.")
     from kin_persistence import _sniff_image_format
     try:
         data = open(str(path), "rb").read()

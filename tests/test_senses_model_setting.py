@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: CC0-1.0
-"""The listening-and-looking model is chosen in the kin's Settings window,
-like any other model, not typed into a file.
+"""The listening model and the looking model are chosen in the kin's
+Settings window, like any other model, not typed into a file.
 
-Through the real Settings window: the Tools tab shows the field (saying
-plainly when none is chosen), the Change button opens the model browser, and
-what's picked there is saved for the kin and shown in the field. Also: no two
-controls on the Tools tab claim the same Alt letter, since the new button
-added one and the tab's letter-picker used to leave the buttons' letters out.
+Through the real Settings window, by pressing its buttons: the Tools tab shows
+both fields (saying plainly when none is chosen, and that looking uses the
+listening model until it has its own), each Change button opens the model
+browser, what's picked is saved for that one setting and shown, and "Use the
+listening model for looking" clears the looking model again. Also: no two
+controls on the Tools tab claim the same Alt letter, since the new buttons
+added letters and the tab's letter-picker used to leave the buttons' letters
+out.
 
 The only stand-in is the human picking in the browser: its ShowModal answers
 OK with a model chosen.
@@ -56,7 +59,9 @@ KIN = "Thistle"
 kin_dir(KIN).mkdir(parents=True, exist_ok=True)
 save_agent_config(KIN, dict(DEFAULT_AGENT_CONFIG))
 
-CHOSEN = "openrouter/google/gemini-4-carbon"
+EAR = "openrouter/google/gemini-4-carbon"
+EYE = "openrouter/google/gemini-3.8-flash"
+CHOSEN = EAR
 _opened = []
 
 
@@ -118,23 +123,48 @@ except Exception as e:
     sys.exit(1)
 check("the kin Settings window opens", True)
 
-field = getattr(dlg, "senses_model_display", None)
-check("the Tools tab has the listening and looking model field",
-      field is not None and field.GetName() == "Listening and looking model")
-check("...which says plainly when none is chosen",
-      field is not None and field.GetValue().startswith("(none chosen"))
+def press(btn):
+    btn.Command(wx.CommandEvent(wx.EVT_BUTTON.typeId, btn.GetId()))
 
-dlg._on_change_senses_model(None)
-check("Change opens the model browser", len(_opened) == 1)
+
+ear = getattr(dlg, "listen_model_display", None)
+eye = getattr(dlg, "look_model_display", None)
+check("the Tools tab has a listening model field and a looking model field",
+      ear is not None and eye is not None
+      and ear.GetName() == "Listening model" and eye.GetName() == "Looking model")
+check("...both saying plainly when none is chosen",
+      ear.GetValue().startswith("(none chosen")
+      and eye.GetValue().startswith("(none chosen"))
+
+CHOSEN = EAR
+press(dlg.listen_model_btn)
+check("Change listening model opens the model browser", len(_opened) == 1)
 check("...with no machine picker (the kin keeps its one machine)",
       _opened and _opened[0]["machine_picker"] is False)
-check("what's picked is saved for the kin",
-      load_agent_config(KIN).get("senses_model") == CHOSEN)
-check("...and shown in the field", field.GetValue() == CHOSEN)
+saved = load_agent_config(KIN)
+check("what's picked is saved as the listening model only",
+      saved.get("listen_model") == EAR and not saved.get("look_model"))
+check("...and shown in its field", ear.GetValue() == EAR)
+check("the looking field says it's using the listening model",
+      eye.GetValue() == f"(same as the listening model: {EAR})")
 
-dlg._on_change_senses_model(None)
+CHOSEN = EYE
+press(dlg.look_model_btn)
+saved = load_agent_config(KIN)
+check("Change looking model saves a looking model of its own",
+      saved.get("look_model") == EYE and saved.get("listen_model") == EAR)
+check("...shown in its field", eye.GetValue() == EYE)
+
+press(dlg.look_model_btn)
 check("opening it again starts from the saved choice",
-      len(_opened) == 2 and _opened[1]["current"] == CHOSEN)
+      _opened[-1]["current"] == EYE)
+
+press(dlg.look_same_btn)
+saved = load_agent_config(KIN)
+check("'Use the listening model for looking' clears the looking model",
+      saved.get("look_model") == "" and saved.get("listen_model") == EAR)
+check("...and the field says so",
+      eye.GetValue() == f"(same as the listening model: {EAR})")
 
 # Every Alt letter on the Tools tab, buttons and checkboxes and radios.
 tools_page = None
@@ -159,7 +189,7 @@ if tools_page is not None:
 dupes = {k: v for k, v in letters.items() if len(v) > 1}
 check("no two controls on the Tools tab share an Alt letter "
       + (repr(dupes) if dupes else ""), tools_page is not None and not dupes)
-check("the Change button has its letter", "h" in letters)
+check("the new buttons have their letters", {"h", "g", "s"} <= set(letters))
 
 dlg.Destroy()
 print()

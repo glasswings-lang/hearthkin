@@ -6,7 +6,7 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Added
 
-- **Kin can listen to sound and look at pictures.** Two new tools, `listen` and `look`. A kin names a sound file or a picture, and a model that can hear or see tells it what's there. The kin's own model still does the thinking. You choose the listening and looking model on the kin's Tools tab, like any other model. Long pieces of music are heard as a few short stretches from across them, so a two-hour piece costs a few cents.
+- **Kin can listen to sound and look at pictures.** Two new tools, `listen` and `look`. A kin names a sound file or a picture, and a model that can hear or see tells it what's there. The kin's own model still does the thinking. You choose the listening model and the looking model on the kin's Tools tab, like any other model. They can be different; the looking model uses the listening one until you pick another. Long pieces of music are heard as a few short stretches from across them, so a two-hour piece costs a few cents.
 
 ### Fixed
 

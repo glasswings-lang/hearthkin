@@ -211,6 +211,47 @@ finally:
     llm_backend._is_openrouter_model = _orig_dispatch
 
 
+print("--- listening and looking can be different models ---")
+
+from kin_persistence import (DEFAULT_AGENT_CONFIG, save_agent_config,  # noqa: E402
+                             load_agent_config)
+from hearthkin_paths import kin_dir  # noqa: E402
+
+kin_dir("Bracken").mkdir(parents=True, exist_ok=True)
+cfg = dict(DEFAULT_AGENT_CONFIG)
+cfg.update({"listen_model": "openrouter/test/ear", "look_model": ""})
+save_agent_config("Bracken", cfg)
+check("the listening model is read from the kin's settings",
+      senses.listen_model_for("Bracken") == "openrouter/test/ear")
+check("an empty looking model uses the listening one",
+      senses.look_model_for("Bracken") == "openrouter/test/ear")
+cfg["look_model"] = "openrouter/test/eye"
+save_agent_config("Bracken", cfg)
+check("a looking model of its own is used for looking",
+      senses.look_model_for("Bracken") == "openrouter/test/eye")
+check("...without changing the listening model",
+      senses.listen_model_for("Bracken") == "openrouter/test/ear")
+
+used = []
+_real_ask = senses._ask
+senses._ask = lambda model, *a, **k: (used.append(model), "fine")[1]
+try:
+    senses.hear(SHORT, "", agent_name="Bracken")
+    senses.see(PNG, "", agent_name="Bracken")
+finally:
+    senses._ask = _real_ask
+check("listen sends to the listening model and look to the looking model",
+      used == ["openrouter/test/ear", "openrouter/test/eye"])
+cfg.update({"listen_model": "", "look_model": "openrouter/test/eye"})
+save_agent_config("Bracken", cfg)
+check("a looking model can be set with no listening model",
+      senses.look_model_for("Bracken") == "openrouter/test/eye"
+      and "No listening model" in senses.hear(SHORT, "", agent_name="Bracken"))
+check("the defaults have both settings, empty",
+      DEFAULT_AGENT_CONFIG.get("listen_model") == ""
+      and DEFAULT_AGENT_CONFIG.get("look_model") == "")
+
+
 print("--- the images field survives the send (13 Nov 2026 bug) ---")
 
 msg = [{"role": "user", "content": "x", "images": ["AAAA"], "ts": "1"}]
