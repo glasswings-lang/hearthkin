@@ -1229,6 +1229,7 @@ DEFAULT_AGENT_CONFIG = {
     "discord": dict(DEFAULT_DISCORD_CONFIG),
     # Memory config (auto-summary distillation)
     "memory_model": "",                    # "" = same as chat model
+    "senses_model": "",                    # listen/look tools; "" = none chosen
     "memory_distill_on_close": True,
     "memory_distill_every_n": 0,           # 0 = disabled
     # Fire distillation when the undistilled tail of a scope's

@@ -1058,6 +1058,24 @@ class EditKinDialog(wx.Dialog):
         self.park_settings_btn.Bind(wx.EVT_BUTTON, self._on_open_park_settings)
         _tool_widgets.append(self.park_settings_btn)
 
+        # Listening and looking model: what the listen and look tools send a
+        # sound or picture to. Same shape as the distillation-model row on the
+        # Memory tab: a read-only display (spoken first) and a Change button,
+        # so it is chosen like any other model, not typed into a file.
+        senses_lbl = wx.StaticText(host, label="Listening and looking model:")
+        self.senses_model_display = wx.TextCtrl(
+            host, style=wx.TE_READONLY | wx.TE_MULTILINE
+            | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP)
+        self.senses_model_display.SetMinSize((420, 48))
+        self.senses_model_display.SetName("Listening and looking model")
+        self.senses_model_btn = wx.Button(
+            host, label="C&hange listening and looking model…")
+        self.senses_model_btn.Bind(wx.EVT_BUTTON, self._on_change_senses_model)
+        self._refresh_senses_model_display()
+        _tool_widgets.append(senses_lbl)
+        _tool_widgets.append(self.senses_model_display)
+        _tool_widgets.append(self.senses_model_btn)
+
         # Whether this kin's model will actually CALL any of the tools
         # below. Ollama's capability flag can't answer that -- it reports
         # whether the model's template can express a tool call, not
@@ -1082,7 +1100,10 @@ class EditKinDialog(wx.Dialog):
         # Seed with the trust radios' mnemonics (&Untrusted / T&rusted /
         # &Full) so the auto-assigner below can't hand a tool checkbox
         # a letter that already belongs to a radio on this tab (L-B41).
-        claimed_letters = {"u", "r", "f"}
+        # Plus the buttons' own letters (&behaviour, Par&k, &calling,
+        # C&hange listening...), which the list used to leave out, so a tool
+        # could be handed a letter a button on this tab already had.
+        claimed_letters = {"u", "r", "f", "b", "k", "c", "h"}
         for tname in available:
             fn = kin_tools._REGISTRY.get(tname)
             first_line = ""
@@ -1958,6 +1979,41 @@ class EditKinDialog(wx.Dialog):
                                    kin_name=self.kin)
         try:
             dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+
+    def _refresh_senses_model_display(self):
+        """Repaint the listening-and-looking model field. Empty means none is
+        chosen, and the listen and look tools then say so to the kin."""
+        val = (self.cfg.get("senses_model") or "").strip()
+        self.senses_model_display.SetValue(
+            val or "(none chosen: listen and look will tell the kin to ask you)")
+
+    def _on_change_senses_model(self, event):
+        """Pick the model the listen and look tools send sound and pictures
+        to. Any model in the browser can be chosen; one that can't take sound
+        or pictures will say so in its answer, which is as clear a test as
+        any. The kin's own machine is listed, since a local listener runs
+        there."""
+        if not self.kin:
+            return
+        try:
+            from model_browser import ModelBrowserDialog
+        except ImportError as e:
+            wx.MessageBox(f"model_browser.py not found: {e}",
+                          "Error", wx.OK | wx.ICON_ERROR)
+            return
+        current = (self.cfg.get("senses_model") or "").strip()
+        dlg = ModelBrowserDialog(
+            self.frame, current_model=current,
+            ollama_host=str(self.cfg.get("ollama_host_name", "") or ""),
+            show_machine_picker=False)
+        try:
+            if dlg.ShowModal() == wx.ID_OK:
+                chosen = dlg.get_selected_model()
+                if chosen and chosen != current:
+                    self._save_param("senses_model", chosen)
+                self._refresh_senses_model_display()
         finally:
             dlg.Destroy()
 

@@ -2,6 +2,17 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
+## Unreleased
+
+### Added
+
+- **Kin can listen to sound and look at pictures.** Two new tools, `listen` and `look`. A kin names a sound file or a picture, and a model that can hear or see tells it what's there. The kin's own model still does the thinking. You choose the listening and looking model on the kin's Tools tab, like any other model. Long pieces of music are heard as a few short stretches from across them, so a two-hour piece costs a few cents.
+
+### Fixed
+
+- **Local models that can see were never shown pictures.** Hearthkin removed the pictures just before sending them to a model on your own machine, so attached images and webcam photos never arrived. Now they do. Hosted models weren't affected.
+- **The sound-measuring tool now follows the same file rules as reading a file** for people on Telegram and Discord.
+
 ## v0.12.1 — 2026-11-13
 
 ### Fixed

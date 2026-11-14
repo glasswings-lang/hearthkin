@@ -1329,6 +1329,11 @@ Willow would end up with 1200 turns in all.</code></pre>
 
   <dt><code>analyze_sound</code></dt>
   <dd>Read an audio file and report objective acoustic facts — tonal centre, the pitches present with their tuning in cents, any detuning/beating, brightness, loudness, how much it moves, stereo width. Same path rules as <code>read_file</code>. This is a measuring ear (the facts), not a listening one; it lets a kin talk about a piece of music or a sound you point it at with real detail. In the Read tool bucket.</dd>
+
+  <dt><code>listen</code> and <code>look</code></dt>
+  <dd>Ears and eyes for a kin whose own model can't hear or see. The kin names a sound file or a picture, and another model, one that can take sound and pictures in, tells it what's there. The kin's own model still does the thinking and the feeling; the other model only reports. You choose that model on the kin's <strong>Tools</strong> tab: <strong>Listening and looking model</strong>, with <strong>Change listening and looking model…</strong> (<kbd>Alt</kbd>+<kbd>H</kbd>), from the same model list as everywhere else. It can be a hosted model or one on your own machines. Until you choose one, the tools tell the kin to ask you.
+    <br>A long piece of music isn't sent whole. The listener hears four short stretches from across it, each labelled with where it starts, so a two-hour soundscape costs a few cents. The kin can also ask to hear one part, up to four minutes long.
+    <br>Honest expectations: no model hears music the way a person does yet. In a test on 13 November 2026, the best listener caught the textures, the instruments, a gliding lead line, the mood and roughly the key, but models are much weaker on exact notes and can't follow one melody among others. That's why <code>analyze_sound</code> stays: the listener gives the impression, the measuring tool gives the facts. Each listen or look is a paid call to the chosen model, shown in <strong>Usage history</strong> as <em>listen</em> or <em>look</em>. In the Read tool bucket, with the same file rules as <code>read_file</code>.</dd>
 </dl>
 
 <h3>Trust levels for <code>exec</code></h3>
@@ -1526,7 +1531,7 @@ understood, exactly as it does for you at the console.</p>
   <dd>Chat only. The kin can't use any tools when this user messages.</dd>
 
   <dt><strong>Read</strong></dt>
-  <dd>Read-only tools: <code>memory_search</code>, <code>read_file</code>, <code>list_directory</code>, <code>fetch_url</code>, <code>web_search</code>, <code>list_processes</code>, <code>context_status</code>, <code>recent_thinking</code>, <code>read_staging</code>, <code>analyze_sound</code>.</dd>
+  <dd>Read-only tools: <code>memory_search</code>, <code>read_file</code>, <code>list_directory</code>, <code>fetch_url</code>, <code>web_search</code>, <code>list_processes</code>, <code>context_status</code>, <code>recent_thinking</code>, <code>read_staging</code>, <code>analyze_sound</code>, <code>listen</code>, <code>look</code>.</dd>
 
   <dt><strong>Write</strong></dt>
   <dd>Read tools plus <code>write_file</code>, <code>edit_file</code>, <code>note</code>, <code>use_webcam</code>, <code>archive_staging</code>, and <code>tff</code> (the park game). <code>note</code> is here rather than in Read because it appends to files in the kin's folder (and <code>memory.md</code> rides every turn, so it's a durable write). <code>use_webcam</code> has an extra per-user permission radio in the same dialog — see <a href="#images">Sending images and webcam photos</a> for the Ask / Auto-approve / Always-deny choices.</dd>

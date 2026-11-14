@@ -11,6 +11,7 @@ def analyze_sound(
     end: float = 0.0,
     skip_edges: float = 0.0,
     agent_name: str = "",
+    confine_paths: bool = False,
 ) -> str:
     """Listen to the measurable facts of an audio file: its tonal centre and pitch set (with tuning in cents — so you can see non-standard tunings like A=432), any detuning/beating between close tones, brightness, loudness, the slow swell/pulse rate, stereo width, and how it evolves across its length. This is the reliable, factual half of hearing a sound — accurate where an ear's *impression* of pitch would not be. Use it when someone shares a piece of music or a sound with you and you want to actually meet it, not just take their word for what it is.
 
@@ -34,7 +35,9 @@ def analyze_sound(
             f"analyze_sound: audio support is unavailable in this build "
             f"({e}). It needs the numpy and soundfile packages installed.")
 
-    p, err = resolve_kin_path(path, agent_name)
+    # Remote surfaces confine paths, as read_file does: a remote person
+    # mustn't reach the operator's files through a sound tool either.
+    p, err = resolve_kin_path(path, agent_name, confine=confine_paths)
     if err:
         return f"analyze_sound: {err}"
     if not p.exists():

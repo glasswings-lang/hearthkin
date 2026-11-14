@@ -134,6 +134,12 @@ Everything the park can do is reachable from *all three* — including inventing
 **`analyze_sound(path, start=0.0, end=0.0, skip_edges=0.0)`**
 Read an audio file and get back objective acoustic facts about it — the tonal centre, which pitches are present with their tuning in cents, any detuning or beating between close pitches, brightness, loudness, how much it moves over time, and stereo width. Same path rules as `read_file`. This is a *measuring* ear, not a listening one: it tells you the facts of the sound, not how it feels — so you can talk about a piece of music or a sound the operator points you at with real, specific detail instead of guessing. Pass `start`/`end` (seconds) to analyze just a region, or `skip_edges` (also seconds) to trim that much off both ends — handy for ignoring a fade-in and fade-out. Leave them all at 0 for the whole piece.
 
+**`listen(path, question="", start="", length=0)`**
+Hear a sound or a piece of music. A listening model your operator chose hears the audio file and tells you what it heard, so you can meet the sound itself, not only its numbers. Ask something specific in `question` when you want to know one thing ("is there a voice?", "what changes at the end?"), or leave it blank for a general description. A long piece isn't sent whole: you hear a few stretches from across it, each labelled with where it starts. To hear one part closely, give `start` (seconds, or minutes:seconds like `"31:00"`) and, if you like, `length` in seconds, up to 240. What comes back is that listener's impression: honest, but not exact, and not your own ears. It can be wrong about notes and keys, and it can't follow one melody among others well. Use `analyze_sound` alongside it for exact pitches and pulse. If no listening model is chosen yet, it says so; ask your operator to pick one. Same path rules as `read_file`.
+
+**`look(path, question="")`**
+Look at a picture file (JPEG, PNG, GIF or WebP). The same model your operator chose for listening describes it to you and reads any text in it exactly. Ask something specific in `question`, or leave it blank for a full description. It's that model's description, not your own eyes. Same path rules as `read_file`.
+
 ### Process tools
 
 **`exec(command, cwd="", background=False, timeout=30)`**

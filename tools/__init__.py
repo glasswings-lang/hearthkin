@@ -59,6 +59,8 @@ from .tff import tff
 from .tff import _HOST as _TFF_HOST
 from .reach_out import reach_out
 from .analyze_sound import analyze_sound
+from .listen import listen
+from .look import look
 
 
 # ----- play-by-typing game registry ----------------------------------- #
@@ -104,6 +106,8 @@ _REGISTRY = {
     "tff": tff,
     "reach_out": reach_out,
     "analyze_sound": analyze_sound,
+    "listen": listen,
+    "look": look,
 }
 
 

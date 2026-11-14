@@ -8,7 +8,8 @@ the source of truth; this is the shape):
   none  — kin can chat, can't trigger any tools
   read  — read-only / informational tools (memory_search, read_file,
           list_directory, fetch_url, web_search, list_processes,
-          context_status, recent_thinking, read_staging, analyze_sound)
+          context_status, recent_thinking, read_staging, analyze_sound,
+          listen, look)
   write — read + tools that modify files or save state (write_file,
           edit_file, note, use_webcam, archive_staging, tff)
   full  — write + tools that can execute commands (exec, kill_process)
@@ -51,6 +52,13 @@ _READ = frozenset({
     # no state change, no process spawn — same read-only exposure as read_file
     # (it can read any file on the host, so it sits with the other readers).
     "analyze_sound",
+    # listen / look send a file the kin names to the kin's chosen listening
+    # model and return what it heard or saw: they read files (under the same
+    # path rules as read_file) and change nothing, so they sit with the
+    # readers. Each call is a paid model call, which the per-reply tool-call
+    # ceiling already bounds for remote people.
+    "listen",
+    "look",
 })
 
 # Filesystem-mutating tools layered on top of read. `note` lives here
@@ -118,7 +126,7 @@ BUCKET_EXPLAINER = {
     "none": "Chat only. No tools can be triggered by this user.",
     "read": "Read-only tools: memory_search, read_file, list_directory, "
             "fetch_url, web_search, list_processes, context_status, "
-            "recent_thinking, read_staging, analyze_sound.",
+            "recent_thinking, read_staging, analyze_sound, listen, look.",
     "write": "Read tools + write_file, edit_file, note (can modify "
              "kin files) + archive_staging + use_webcam (capture from "
              "host webcam) + tff (play the kin's own Time for Family park "

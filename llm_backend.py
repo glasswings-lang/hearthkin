@@ -2135,6 +2135,14 @@ def _stream_with_usage(chunks, ctx):
 _API_MESSAGE_FIELDS = frozenset({
     "role", "content", "name", "tool_calls", "tool_call_id",
     "refusal", "thinking",
+    # Ollama's picture (and sound) field. _expand_attachments_for_provider
+    # puts a local model's images here, and this list used to leave it out,
+    # so the strip below removed every picture before it was sent: a local
+    # kin whose model could see was never shown an attachment or a webcam
+    # shot, and answered as if nothing had come (found 13 Nov 2026, in place
+    # since v0.10.0). Hosted models carry pictures inside `content`, so they
+    # never have this field.
+    "images",
 })
 
 
