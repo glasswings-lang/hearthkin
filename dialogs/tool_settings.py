@@ -174,6 +174,20 @@ class ToolSettingsDialog(wx.Dialog):
              "wants a high cap). On a PAID model (OpenRouter) each cycle is "
              "another billable call, so keep it modest there.")
 
+        self.round_cap_field = row(
+            "Most tool calls &at once (in one round):",
+            lambda: _IntField(
+                panel, value=cfg.get("max_calls_per_round", 8),
+                min_val=0, max_val=2000, size=(100, -1),
+                on_commit=lambda v: self._save_param("max_calls_per_round", v)))
+        help("How many tool calls the kin can make in one go before it has "
+             "to read the answers. Some models fire off dozens of guesses at "
+             "once without looking at any of them. Past this many, the rest "
+             "come back unrun with a note to read the answers first, and the "
+             "kin carries on in its next round, so real work isn't blocked, "
+             "just paced. Applies everywhere, the desktop included. Default "
+             "8; 0 means no limit.")
+
         self.remote_cap_field = row(
             "Most tool calls in one reply &over Telegram, Discord and wake-ups:",
             lambda: _IntField(

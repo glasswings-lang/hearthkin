@@ -5287,10 +5287,33 @@ _NOT_RUN_LIMIT = (
     "[not run: this reply has used all the tool calls it is allowed. Nothing "
     "in this call happened.]"
 )
+_NOT_RUN_BURST = (
+    "[not run: that's more tool calls at once than you make in one go "
+    "({n}). Read the answers to the ones that ran, above, then ask again for "
+    "what you still need. Nothing in this call happened.]"
+)
 _NOT_RUN_REPEAT = (
     "[not run: this is the same {name} call, with the same arguments, as "
     "call {n} in this batch. It ran once; its result is above.]"
 )
+_DEFAULT_CALLS_PER_ROUND = 8
+
+
+def _kin_round_cap(kin_name):
+    """The kin's max_calls_per_round (default 8; 0 = no limit). Without a
+    kin, or if its settings can't be read, the default: a loop with no kin
+    behind it is a test or a tool, and the guard costs nothing there."""
+    if not kin_name:
+        return _DEFAULT_CALLS_PER_ROUND
+    try:
+        from kin_persistence import load_agent_config
+        val = (load_agent_config(kin_name) or {}).get(
+            "max_calls_per_round", _DEFAULT_CALLS_PER_ROUND)
+        return max(0, int(val))
+    except Exception:
+        return _DEFAULT_CALLS_PER_ROUND
+
+
 # Tools where the same call twice in one batch can mean two real things: a
 # park move ("go north" twice walks twice) and a fresh webcam capture. These
 # are never treated as repeats.
@@ -5319,7 +5342,7 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                   on_tool_call=None, on_content=None, on_turn=None,
                   max_iterations=MAX_TOOL_ITERATIONS,
                   tool_result_cap=8000, should_stop=None, interject=None,
-                  max_tool_calls=None, **kwargs):
+                  max_tool_calls=None, max_calls_per_round=None, **kwargs):
     """Run a non-streaming chat-with-tools loop. Blocks until no more tool calls
     or max_iterations is reached. Returns the final ChatResult.
 
@@ -5379,6 +5402,16 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
         Surfaces use it for people other than the operator, so a stranger
         can't make a kin spin with nobody watching.
 
+    max_calls_per_round: how many calls may RUN from one batch (one round).
+        Past it, the rest of that batch are answered "not run: read these
+        answers first", and the loop carries on to the model's next round,
+        so the work is paced, not ended. Neither limit above catches a model
+        that fires a spread of different guesses in one batch before reading
+        any answer: one round, and under the call ceiling (91 in one batch,
+        13 Nov 2026). None means "the kin's own setting" (max_calls_per_round
+        in its config, default 8), read here so every surface gets it
+        without each passing it; 0 means no limit.
+
     tool_result_cap: per-tool-result character ceiling before truncation.
         Default 8000 (~2000 tokens) — preserves the original behavior.
         Callers pass the kin's per-config value so the operator can
@@ -5402,6 +5435,8 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
     history = list(messages)
     messages_added = []
     _calls_run = 0
+    if max_calls_per_round is None:
+        max_calls_per_round = _kin_round_cap(kwargs.get("kin_name"))
     last_signature = None
     last_results = None
     retried_empty_reply = False
@@ -5572,19 +5607,23 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
         # shown as steps; each still gets its own result, as providers
         # require.
         _seen_in_batch = {}
+        _batch_run = 0
         for _ci, tc in enumerate(_calls):
             if _loop_should_stop(should_stop):
                 _cut = ("stop", None)
             elif max_tool_calls and _calls_run >= max_tool_calls:
                 _cut = ("limit", None)
+            elif max_calls_per_round and _batch_run >= max_calls_per_round:
+                _cut = ("burst", [])
             else:
                 _late = _take_interjections(interject)
                 if _late:
                     _cut = ("interject", _late)
             if _cut is not None:
                 _note = {"stop": _NOT_RUN_STOPPED,
-                         "limit": _NOT_RUN_LIMIT}.get(_cut[0],
-                                                      _NOT_RUN_INTERJECTED)
+                         "limit": _NOT_RUN_LIMIT,
+                         "burst": _NOT_RUN_BURST.format(n=max_calls_per_round),
+                         }.get(_cut[0], _NOT_RUN_INTERJECTED)
                 for _held in _calls[_ci:]:
                     _held_turn = {
                         "role": "tool",
@@ -5616,6 +5655,7 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                 messages_added.append(_dup_turn)
                 continue
             _calls_run += 1
+            _batch_run += 1
             if _sig is not None:
                 _seen_in_batch[_sig] = _ci + 1
             # Malformed-args guard. The model emitted a tool call whose

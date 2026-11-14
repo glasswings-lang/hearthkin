@@ -942,6 +942,13 @@ DEFAULT_AGENT_CONFIG = {
     # rounds, and one round can carry dozens of calls -- a model once put
     # sixty in one. 0 = no ceiling. Settings -> Tools.
     "remote_max_tool_calls": 15,
+    # Most tool calls that run from ONE round (one batch the model asks for
+    # at once), on every surface. The rest come back "not run: read these
+    # answers first", and the kin carries on in its next round. Neither limit
+    # above caught a kin that put 91 different guesses into one batch
+    # (13 Nov 2026): one round, under its call ceiling. 0 = no limit.
+    # Settings -> Tools -> Tool behaviour.
+    "max_calls_per_round": 8,
     # After this many tool calls in one remote reply (any remote person,
     # the operator's own Telegram included), the desktop says so aloud once,
     # with how to stop it. 0 = never. Settings -> Tools.

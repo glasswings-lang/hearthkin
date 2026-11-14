@@ -59,7 +59,9 @@ def _call(i, name, **args):
             "function": {"name": name, "arguments": json.dumps(args)}}
 
 
-def run(batches, *, max_tool_calls=None):
+def run(batches, *, max_tool_calls=None, max_calls_per_round=0):
+    # The per-round cap (test_round_cap.py) is off here unless asked for, so
+    # this file sees the repeat guard on its own.
     """Run the real tool loop with a model that answers each turn with the
     next batch of calls, then a plain reply. Returns (ran, shown, result)."""
     ran, shown = [], []
@@ -84,7 +86,8 @@ def run(batches, *, max_tool_calls=None):
             tools=[{"type": "function", "function": {"name": n}} for n in names],
             tool_executor={n: tool(n) for n in names},
             on_tool_call=lambda name, args, result, err: shown.append(name),
-            max_tool_calls=max_tool_calls)
+            max_tool_calls=max_tool_calls,
+            max_calls_per_round=max_calls_per_round)
     finally:
         llm_backend.chat = orig
     return ran, shown, res
