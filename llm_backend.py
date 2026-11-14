@@ -1275,6 +1275,16 @@ def chat(
     # the system prompt by accident afterwards.
     messages = _inline_mid_conversation_system_notes(messages)
 
+    # Copies of one call in one batch go out once. The guard in run_tool_loop
+    # only RUNS a repeat once; the copies and their "[not run: same call]"
+    # notes still sat in the history, and every later turn sent all of them
+    # again. On 14 Nov 2026 one kin's batches held 60 to 380 copies each,
+    # paid for as input on every turn after, and the history full of them
+    # showed the model that a batch of hundreds was its normal. Done before
+    # the budget so the space they took goes to real history. The stored
+    # conversation keeps everything; only what is sent changes.
+    messages = _drop_repeat_tool_calls(messages)
+
     _cal_est_sent = None
     if max_context_tokens:
         # _truncate_messages trims by _est_tokens (message text only),
@@ -2168,6 +2178,90 @@ def _strip_extra_message_fields(messages):
             continue
         out.append({k: v for k, v in m.items() if k in _API_MESSAGE_FIELDS})
     return out
+
+
+def _tool_call_signature(tc):
+    """(name, arguments as sorted JSON) for a tool call, or None for calls
+    whose repeats mean something (park moves, webcam captures) or whose
+    arguments can't be read. The same key run_tool_loop's batch guard uses."""
+    fn = _tc_field(tc, "function") or {}
+    name = _tc_field(fn, "name", "")
+    if not name or name in _REPEATABLE_IN_BATCH:
+        return None
+    try:
+        args = _coerce_tool_call_args(_tc_field(fn, "arguments", "{}"))
+        return (name, json.dumps(args, sort_keys=True, default=str))
+    except Exception:
+        return None
+
+
+def _drop_repeat_tool_calls(messages):
+    """Return messages with repeated copies of a call, inside one assistant
+    turn, left out along with their results. A copy is left out only when
+    it added nothing: its result is a "[not run" note, or exactly the same
+    as the first copy's. Copies that really ran and came back different
+    (older floods from before the batch guard) stay. Never changes the
+    messages given; returns the same list when there's nothing to drop."""
+    out = None
+    i, n = 0, len(messages)
+    while i < n:
+        m = messages[i]
+        calls = m.get("tool_calls") if isinstance(m, dict) else None
+        if not (isinstance(m, dict) and m.get("role") == "assistant"
+                and isinstance(calls, list) and len(calls) > 1):
+            if out is not None:
+                out.append(m)
+            i += 1
+            continue
+        # The results that follow this turn, in order.
+        j = i + 1
+        while j < n and isinstance(messages[j], dict) \
+                and messages[j].get("role") == "tool":
+            j += 1
+        results = messages[i + 1:j]
+        # Pair each call with its result: by id when every call has its own,
+        # by position otherwise (a local model leaves the ids blank).
+        ids = [_tc_field(tc, "id", "") for tc in calls]
+        by_id = all(ids) and len(set(ids)) == len(ids)
+        result_for = {}
+        if by_id:
+            idx = {cid: k for k, cid in enumerate(ids)}
+            for r in results:
+                k = idx.get(r.get("tool_call_id"))
+                if k is not None and k not in result_for:
+                    result_for[k] = r
+        else:
+            for k, r in enumerate(results[:len(calls)]):
+                result_for[k] = r
+        first = {}
+        drop = set()
+        for k, tc in enumerate(calls):
+            sig = _tool_call_signature(tc)
+            if sig is None:
+                continue
+            if sig not in first:
+                first[sig] = k
+                continue
+            r = result_for.get(k)
+            text = r.get("content") if r else None
+            kept = result_for.get(first[sig])
+            if (r is None
+                    or (isinstance(text, str) and text.startswith("[not run"))
+                    or (kept is not None and text == kept.get("content"))):
+                drop.add(k)
+        if not drop:
+            if out is not None:
+                out.extend(messages[i:j])
+            i = j
+            continue
+        if out is None:
+            out = list(messages[:i])
+        out.append(dict(m, tool_calls=[tc for k, tc in enumerate(calls)
+                                       if k not in drop]))
+        dropped_results = {id(result_for[k]) for k in drop if k in result_for}
+        out.extend(r for r in results if id(r) not in dropped_results)
+        i = j
+    return messages if out is None else out
 
 
 def _inline_mid_conversation_system_notes(messages):
