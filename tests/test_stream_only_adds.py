@@ -31,6 +31,7 @@ which is the honest form of "only adds" — the message is capped in length, so
 Run: python tests/test_stream_only_adds.py
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -152,8 +153,13 @@ _calls = {"n": 0}
 def _fake_stream(model, history, *, on_content, should_stop=None, **kw):
     _calls["n"] += 1
     on_content("I'm sorry. I took a name that isn't mine.")
+    # Five DIFFERENT edits, as on 13 Nov: identical calls in one batch now
+    # run once (test_tool_repeat_in_batch.py) and would never reach the
+    # limit this check is about.
     tcs = [{"id": "c%d" % i, "type": "function",
-            "function": {"name": "note", "arguments": "{}"}} for i in range(5)]
+            "function": {"name": "note",
+                         "arguments": json.dumps({"text": "edit %d" % i})}}
+           for i in range(5)]
     return _Res("I'm sorry. I took a name that isn't mine.", tcs)
 
 

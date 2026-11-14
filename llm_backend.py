@@ -5287,6 +5287,14 @@ _NOT_RUN_LIMIT = (
     "[not run: this reply has used all the tool calls it is allowed. Nothing "
     "in this call happened.]"
 )
+_NOT_RUN_REPEAT = (
+    "[not run: this is the same {name} call, with the same arguments, as "
+    "call {n} in this batch. It ran once; its result is above.]"
+)
+# Tools where the same call twice in one batch can mean two real things: a
+# park move ("go north" twice walks twice) and a fresh webcam capture. These
+# are never treated as repeats.
+_REPEATABLE_IN_BATCH = frozenset({"tff", "use_webcam"})
 _LIMIT_REACHED_NOTE = (
     "[hearthkin: this reply has reached its limit of {n} tool calls, so no "
     "more will run this turn. Answer now with what you have. If there's more "
@@ -5552,6 +5560,18 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
         iteration_results = []
         _calls = list(result.tool_calls)
         _cut = None
+        # Exact repeats within ONE batch run once. MiMo v2.6 has a known bug
+        # (Xiaomi fixed it in a later checkpoint, which a provider may not
+        # serve) where one reply holds the same call with the same arguments
+        # dozens of times: on 13 Nov 2026 a kin asked for one page and got
+        # over two hundred identical fetch and search calls in a single
+        # batch. Only the same batch, and only byte-identical arguments:
+        # reading other lines of a file is a different call, and the same
+        # call on a LATER turn runs again, since the world may have changed
+        # in between. Repeats don't count toward the call ceiling and aren't
+        # shown as steps; each still gets its own result, as providers
+        # require.
+        _seen_in_batch = {}
         for _ci, tc in enumerate(_calls):
             if _loop_should_stop(should_stop):
                 _cut = ("stop", None)
@@ -5574,11 +5594,30 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
                     history.append(_held_turn)
                     messages_added.append(_held_turn)
                 break
-            _calls_run += 1
             fn = _tc_field(tc, "function") or {}
             name = _tc_field(fn, "name", "")
             args_value = _tc_field(fn, "arguments", "{}")
             args = _coerce_tool_call_args(args_value)
+            _sig = None
+            if name not in _REPEATABLE_IN_BATCH:
+                try:
+                    _sig = (name, json.dumps(args, sort_keys=True, default=str))
+                except Exception:
+                    _sig = None
+            if _sig is not None and _sig in _seen_in_batch:
+                _dup_turn = {
+                    "role": "tool",
+                    "tool_call_id": _tc_field(tc, "id", ""),
+                    "content": _NOT_RUN_REPEAT.format(
+                        name=name, n=_seen_in_batch[_sig]),
+                }
+                iteration_results.append(_dup_turn["content"])
+                history.append(_dup_turn)
+                messages_added.append(_dup_turn)
+                continue
+            _calls_run += 1
+            if _sig is not None:
+                _seen_in_batch[_sig] = _ci + 1
             # Malformed-args guard. The model emitted a tool call whose
             # arguments were a non-empty string that did not parse as
             # JSON — almost always a truncated/cut-off call. Without

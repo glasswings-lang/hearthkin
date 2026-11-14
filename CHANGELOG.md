@@ -10,6 +10,7 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Fixed
 
+- **The same tool call repeated many times in one go now runs once.** Some models, MiMo v2.6 especially, sometimes ask for exactly the same thing dozens or hundreds of times in one reply. Now the first one runs and the repeats are told "same as above". Different details, like other lines of a file, still run, and so does the same call on a later turn. Park moves and webcam photos are left alone.
 - **Local models that can see were never shown pictures.** Hearthkin removed the pictures just before sending them to a model on your own machine, so attached images and webcam photos never arrived. Now they do. Hosted models weren't affected.
 - **The sound-measuring tool now follows the same file rules as reading a file** for people on Telegram and Discord.
 
