@@ -1284,6 +1284,13 @@ def chat(
     # the budget so the space they took goes to real history. The stored
     # conversation keeps everything; only what is sent changes.
     messages = _drop_repeat_tool_calls(messages)
+    # And the calls in one batch that didn't run at all go out as ONE line.
+    # A kin over its limit can have dozens of different calls refused in a
+    # batch (63 at one kin's wake-up on 14 Nov 2026); each sat in
+    # the history as its own "[not run" note, sent again every turn. One
+    # call and its note stay, saying how many more and which tools; the
+    # rest are left out. The stored conversation keeps everything.
+    messages = _collapse_not_run_calls(messages)
 
     _cal_est_sent = None
     if max_context_tokens:
@@ -2260,6 +2267,70 @@ def _drop_repeat_tool_calls(messages):
                                        if k not in drop]))
         dropped_results = {id(result_for[k]) for k in drop if k in result_for}
         out.extend(r for r in results if id(r) not in dropped_results)
+        i = j
+    return messages if out is None else out
+
+
+def _collapse_not_run_calls(messages):
+    """Return messages with each assistant turn's refused calls ("[not run"
+    results) folded into one: the first refused call and its note stay, the
+    note now saying how many more weren't run and which tools they were,
+    and the others are left out with their results. Turns with one refusal
+    or none are untouched. Never changes the messages given; returns the
+    same list when there's nothing to fold."""
+    out = None
+    i, n = 0, len(messages)
+    while i < n:
+        m = messages[i]
+        calls = m.get("tool_calls") if isinstance(m, dict) else None
+        if not (isinstance(m, dict) and m.get("role") == "assistant"
+                and isinstance(calls, list) and len(calls) > 1):
+            if out is not None:
+                out.append(m)
+            i += 1
+            continue
+        j = i + 1
+        while j < n and isinstance(messages[j], dict)                 and messages[j].get("role") == "tool":
+            j += 1
+        results = messages[i + 1:j]
+        ids = [_tc_field(tc, "id", "") for tc in calls]
+        by_id = all(ids) and len(set(ids)) == len(ids)
+        result_for = {}
+        if by_id:
+            idx = {cid: k for k, cid in enumerate(ids)}
+            for r in results:
+                k = idx.get(r.get("tool_call_id"))
+                if k is not None and k not in result_for:
+                    result_for[k] = r
+        else:
+            for k, r in enumerate(results[:len(calls)]):
+                result_for[k] = r
+        refused = [k for k in range(len(calls))
+                   if isinstance((result_for.get(k) or {}).get("content"), str)
+                   and result_for[k]["content"].startswith("[not run")]
+        if len(refused) < 2:
+            if out is not None:
+                out.extend(messages[i:j])
+            i = j
+            continue
+        if out is None:
+            out = list(messages[:i])
+        keep, drop = refused[0], set(refused[1:])
+        counts = {}
+        for k in refused:
+            name = _tc_field(_tc_field(calls[k], "function") or {}, "name", "") or "unnamed"
+            counts[name] = counts.get(name, 0) + 1
+        which = ", ".join(f"{name} {c}" for name, c in
+                          sorted(counts.items(), key=lambda x: -x[1]))
+        note = (result_for[keep]["content"] + f" The same goes for {len(drop)} more "
+                f"call{'s' if len(drop) != 1 else ''} in this batch: {len(refused)} "
+                f"weren't run in all ({which}).")
+        out.append(dict(m, tool_calls=[tc for k, tc in enumerate(calls) if k not in drop]))
+        gone = {id(result_for[k]) for k in drop}
+        for r in results:
+            if id(r) in gone:
+                continue
+            out.append(dict(r, content=note) if r is result_for[keep] else r)
         i = j
     return messages if out is None else out
 

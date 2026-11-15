@@ -155,12 +155,17 @@ check("blank-id copies are paired by position and go out once",
 
 print("--- the check can fail ---")
 
+# Both filters off: refused calls are also folded into one since 14 Nov
+# (test_refused_calls_folded.py), and the copies' notes are refusals too.
 _orig = llm_backend._drop_repeat_tool_calls
+_orig_fold = llm_backend._collapse_not_run_calls
 llm_backend._drop_repeat_tool_calls = lambda m: m
+llm_backend._collapse_not_run_calls = lambda m: m
 try:
     sent = sent_for(_flood(200))
 finally:
     llm_backend._drop_repeat_tool_calls = _orig
+    llm_backend._collapse_not_run_calls = _orig_fold
 check("with the filter off, all two hundred copies go out",
       tool_parts(sent) == (200, 200))
 
