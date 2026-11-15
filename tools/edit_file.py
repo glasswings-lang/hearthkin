@@ -104,6 +104,13 @@ def edit_file(path: str, old_string: str, new_string: str, agent_name: str = "",
         return "edit_file: old_string and new_string must both be strings."
     if old_string == "":
         return "edit_file: old_string was empty (would match everywhere)."
+    # An edit to the same text changes nothing, but used to report "replaced
+    # 1 occurrence", which a kin (15 Nov 2026) and its person both took as a
+    # save. Say plainly that nothing happened, before touching the file.
+    if old_string == new_string:
+        return ("edit_file: nothing changed -- old_string and new_string are "
+                "identical, so the file was left exactly as it was. To add "
+                "text, put the old text plus your addition in new_string.")
     p, err = resolve_kin_path(path, agent_name, confine=confine_paths)
     if err:
         return f"edit_file: {err}"
