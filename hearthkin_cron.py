@@ -194,10 +194,16 @@ def _load_cron_tools(kin):
         enabled = load_kin_tools(kin) or []
     except Exception:
         enabled = []
-    safe_names = [n for n in enabled if n not in _CRON_TOOL_DENYLIST]
+    cfg = load_agent_config(kin) or {}
+    # Tools this kin keeps in chat but not at wake-ups ("cron_tools_off").
+    # On 14 Nov 2026 a kin's tending wake-ups spent their calls on dozens of
+    # exec searches of its own log, which tending never needs, while exec
+    # stayed wanted in chat. Unknown names are ignored.
+    off = cfg.get("cron_tools_off") or []
+    off = set(off) if isinstance(off, (list, tuple)) else set()
+    safe_names = [n for n in enabled if n not in _CRON_TOOL_DENYLIST and n not in off]
     if not safe_names:
         return [], {}, []
-    cfg = load_agent_config(kin) or {}
     chat_model = (cfg.get("model") or "").strip()
     try:
         schemas, executor = kin_tools.load_tools(
