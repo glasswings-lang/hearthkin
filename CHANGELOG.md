@@ -10,6 +10,8 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 - **A wake-up can run on its own model.** In a wake-up's window, **Choose a model for this wake-up** hands that one job to a different model, while chat stays on the kin's own. Useful when a model that's lovely to talk to stumbles over tool-heavy jobs. The wake-up list shows which jobs run on another model.
 
+- **Choose how much a compaction keeps.** A kin's Memory settings have **After compacting, keep this many latest messages besides the note**, default 6. Set 0 and the kin carries on from its note alone, so the stretch you compacted to get away from isn't handed straight back to it. The desktop, Telegram and Discord all follow it.
+
 ### Fixed
 
 - **A kin can't fire dozens of tool calls at once any more without reading the answers.** A new setting, **Most tool calls at once (in one round)**, in Tool behaviour settings, default 8. Past it, the rest wait, and the kin is told to read what came back first, then carry on. A kin had sent 91 different guesses into REAPER in one go, and neither existing limit could catch it.

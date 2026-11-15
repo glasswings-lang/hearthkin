@@ -615,6 +615,27 @@ class EditKinDialog(wx.Dialog):
                         border=4)
         compact_row.Add(self.compact_hint_field)
 
+        # How many latest messages a compaction keeps besides the note
+        # (15 Nov 2026). 0 = the note alone: kept messages hand the kin
+        # fresh examples of the drift the note was meant to leave behind.
+        compact_keep_row = wx.BoxSizer(wx.HORIZONTAL)
+        compact_keep_lbl = wx.StaticText(
+            host,
+            label="After compacting, keep this many latest messages "
+                  "besides the note (0 = the note alone):")
+        self.compact_keep_field = _IntField(
+            host,
+            value=self.cfg.get("compact_keep_messages", 6),
+            min_val=0, max_val=200,
+            size=(80, -1),
+            name=("After compacting, keep this many latest messages besides "
+                  "the note (0 = the note alone)"),
+            on_commit=lambda v: self._save_param("compact_keep_messages", v),
+        )
+        compact_keep_row.Add(compact_keep_lbl,
+                             flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=4)
+        compact_keep_row.Add(self.compact_keep_field)
+
         # Memory-log index cap. Created here so tab order reads it with the
         # other memory-size controls (wxPython tab order follows CREATION
         # order, not sizer order).
@@ -860,6 +881,8 @@ class EditKinDialog(wx.Dialog):
         memory_sizer.Add(at_pct_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(compact_row,
+                         flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        memory_sizer.Add(compact_keep_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(log_idx_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)

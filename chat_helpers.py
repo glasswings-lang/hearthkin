@@ -1082,6 +1082,29 @@ def strip_tool_summary_footer(text):
 # it, as "New conversation" does, would lose whatever the summarizer hadn't
 # read yet.
 
+COMPACT_KEEP_DEFAULT = 6
+
+
+def compact_keep_count(cfg):
+    """How many latest messages a kin keeps after compacting (its
+    compact_keep_messages setting): 0 to 200, default 6."""
+    try:
+        n = int((cfg or {}).get("compact_keep_messages", COMPACT_KEEP_DEFAULT))
+    except (TypeError, ValueError):
+        n = COMPACT_KEEP_DEFAULT
+    return max(0, min(200, n))
+
+
+def compact_sent_words(keep):
+    """What a compacted kin is sent, in words: 'its note and the last 6
+    messages', 'its note and the last message', or 'its note alone'."""
+    if keep <= 0:
+        return "its note alone"
+    if keep == 1:
+        return "its note and the last message"
+    return f"its note and the last {keep} messages"
+
+
 def compact_marker(note, keep, ts=None, preface=""):
     """The row that marks a compaction. `keep` is how many of the messages
     before it are still sent after it. A count, not a position: the desktop

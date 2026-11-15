@@ -151,6 +151,7 @@ class Win:
     _maybe_hint_compact = Frame._maybe_hint_compact
     _history_entry_for_model = Frame._history_entry_for_model
     _compact_tool_history = Frame._compact_tool_history
+    _compact_keep = Frame._compact_keep
 
     def __init__(self):
         self.config = {"user_name": "Wren"}
@@ -201,6 +202,31 @@ sent = ch.view_after_compaction(w.conversation)
 check("next send: the note, then the last six messages",
       sent[0]["role"] == "system" and len(sent) == 7
       and sent[-1]["content"] == "a9")
+
+# --- keeping none: the note alone (15 Nov 2026) ---------------------------
+w0 = Win()
+w0.agent_cfg = dict(w0.agent_cfg, compact_keep_messages=0)
+script[:] = [(wx.ID_OK, None)]
+w0._on_compact(None)
+sent0 = ch.view_after_compaction(w0.conversation)
+check("keeping 0: the next send is the note alone",
+      len(sent0) == 1 and sent0[0]["role"] == "system")
+check("...and you're told it's the note alone",
+      "its note alone" in w0.status[-1] and "Nothing was deleted" in w0.status[-1])
+check("...and still nothing was deleted",
+      w0.conversation[:len(convo)] == convo)
+w1 = Win()
+w1.agent_cfg = dict(w1.agent_cfg, compact_keep_messages=2)
+script[:] = [(wx.ID_OK, None)]
+w1._on_compact(None)
+check("keeping 2: the note and the last two",
+      len(ch.view_after_compaction(w1.conversation)) == 3
+      and "the last 2 messages" in w1.status[-1])
+check("no setting keeps six, as before", ch.compact_keep_count({}) == 6)
+check("a nonsense setting keeps six; a huge one is capped",
+      ch.compact_keep_count({"compact_keep_messages": "x"}) == 6
+      and ch.compact_keep_count({"compact_keep_messages": 10**6}) == 200
+      and ch.compact_keep_count({"compact_keep_messages": -3}) == 0)
 
 w2 = Win()
 script[:] = [(wx.ID_CANCEL, None)]

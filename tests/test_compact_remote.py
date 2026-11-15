@@ -95,6 +95,17 @@ seen = tb._load_history_for(1)
 check("...and from then on the kin reads its note and the last six",
       seen[0]["role"] == "system" and "Note 2" in seen[0]["content"]
       and [m["content"] for m in seen[1:]] == [f"m{i}" for i in range(4, 10)])
+# Keeping none (15 Nov 2026): the kin's setting reaches Telegram too.
+kp.save_agent_config(KIN, dict(kp.DEFAULT_AGENT_CONFIG, model="stub",
+                               compact_keep_messages=0))
+tb._histories[telegram_bot._hkey(2)] = [dict(r) for r in rows]
+tb._handle_command("/compact", 2, 2)
+tb._handle_command("/compact confirm", 2, 2)
+seen0 = tb._load_history_for(2)
+check("Telegram, keeping 0: from then on the kin reads its note alone",
+      len(seen0) == 1 and seen0[0]["role"] == "system"
+      and "its note alone" in tg_sent[-1])
+kp.save_agent_config(KIN, dict(kp.DEFAULT_AGENT_CONFIG, model="stub"))
 tb._handle_command("/compact confirm", 1, 1)
 check("confirming with no note waiting says so",
       "no note waiting" in tg_sent[-1] and len(tb._histories[

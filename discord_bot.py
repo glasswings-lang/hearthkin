@@ -869,7 +869,12 @@ class DiscordBot:
     COMPACT_KEEP = 6
 
     async def _cmd_compact(self, message, arg, share):
-        from chat_helpers import compact_marker
+        from chat_helpers import compact_marker, compact_keep_count, compact_sent_words
+        try:
+            from kin_persistence import load_agent_config
+            _keep = compact_keep_count(load_agent_config(self.agent_name))
+        except Exception:
+            _keep = self.COMPACT_KEEP
         from kin_persistence import load_app_prompt, now_iso
         ch = message.channel
         pending = self.__dict__.setdefault("_pending_compact", {})
@@ -885,7 +890,7 @@ class DiscordBot:
                 return
             preface = load_app_prompt("compact_marker", who).replace(
                 "{user}", user)
-            row = compact_marker(note, self.COMPACT_KEEP, ts=now_iso(),
+            row = compact_marker(note, _keep, ts=now_iso(),
                                  preface=preface)
             if share:
                 from kin_persistence import append_agent_conversation_turn
@@ -895,9 +900,8 @@ class DiscordBot:
                 from kin_persistence import append_discord_turn
                 append_discord_turn(who, ch.id, row)
             await self._send_chunked(
-                ch, f"Compacted. From now on {who} reads its note and the "
-                    f"last {self.COMPACT_KEEP} messages here. Nothing was "
-                    "deleted.")
+                ch, f"Compacted. From now on {who} reads "
+                    f"{compact_sent_words(_keep)} here. Nothing was deleted.")
             return
         if word not in ("", "again"):
             await self._send_chunked(

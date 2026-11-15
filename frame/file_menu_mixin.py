@@ -129,7 +129,7 @@ class FileMenuMixin:
                 + ". Nothing was changed; you can try again.")
             return
         from dialogs.compact import CompactDialog
-        dlg = CompactDialog(self, kin, note, keep=COMPACT_KEEP_MESSAGES)
+        dlg = CompactDialog(self, kin, note, keep=self._compact_keep())
         r = dlg.ShowModal()
         text = dlg.get_note()
         dlg.Destroy()
@@ -141,13 +141,18 @@ class FileMenuMixin:
             return
         self._apply_compaction(kin, text)
 
+    def _compact_keep(self):
+        from chat_helpers import compact_keep_count
+        return compact_keep_count(self.agent_cfg)
+
     def _apply_compaction(self, kin, note):
         from frame_shared import load_app_prompt
-        from chat_helpers import compact_marker
+        from chat_helpers import compact_marker, compact_sent_words
+        keep = self._compact_keep()
         preface = load_app_prompt("compact_marker", kin).replace(
             "{user}", self._compact_user_name())
         self.conversation.append(
-            compact_marker(note, COMPACT_KEEP_MESSAGES, ts=now_iso(),
+            compact_marker(note, keep, ts=now_iso(),
                            preface=preface))
         self._persist_current_conversation()
         try:
@@ -156,8 +161,8 @@ class FileMenuMixin:
             pass
         self._update_token_display()
         self._compact_say(
-            f"Compacted. From now on {kin} is sent its note and the last "
-            f"{COMPACT_KEEP_MESSAGES} messages. Nothing was deleted.")
+            f"Compacted. From now on {kin} is sent {compact_sent_words(keep)}. "
+            "Nothing was deleted.")
 
     def _maybe_hint_compact(self):
         """After a reply in the main window: once the conversation is as full

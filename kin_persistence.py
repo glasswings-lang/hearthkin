@@ -1287,6 +1287,11 @@ DEFAULT_AGENT_CONFIG = {
     # the context window), that they can compact it (Chat -> Compact this
     # conversation). 0 = never. Nothing happens on its own (12 Nov 2026).
     "compact_hint_pct": 70,
+    # How many of the latest messages are still sent, word for word, after a
+    # compaction, besides the note. 0 = the note alone. Drift lives in the
+    # recent messages: kept, they hand the kin fresh examples of the very
+    # pattern the note was meant to leave behind (15 Nov 2026).
+    "compact_keep_messages": 6,
     # Minutes to wait before the AUTOMATIC triggers may fire again on a
     # scope that is working through a BACKLOG — one so large that the run
     # just finished digested less than what is still left. 0 = no wait

@@ -4081,7 +4081,12 @@ class TelegramBot:
     COMPACT_KEEP = 6
 
     def _cmd_compact(self, user_id, chat_id, arg=""):
-        from chat_helpers import compact_marker
+        from chat_helpers import compact_marker, compact_keep_count, compact_sent_words
+        try:
+            from kin_persistence import load_agent_config
+            _keep = compact_keep_count(load_agent_config(self.agent_name))
+        except Exception:
+            _keep = self.COMPACT_KEEP
         from kin_persistence import load_app_prompt, now_iso
         pending = self.__dict__.setdefault("_pending_compact", {})
         word = (arg or "").strip().lower()
@@ -4097,11 +4102,11 @@ class TelegramBot:
             preface = load_app_prompt("compact_marker", who).replace(
                 "{user}", user)
             self._append_turns_for(user_id, [compact_marker(
-                note, self.COMPACT_KEEP, ts=now_iso(), preface=preface)])
+                note, _keep, ts=now_iso(), preface=preface)])
             self._send_chunked(
                 chat_id,
-                f"Compacted. From now on {who} is sent its note and the last "
-                f"{self.COMPACT_KEEP} messages. Nothing was deleted."
+                f"Compacted. From now on {who} is sent {compact_sent_words(_keep)}. "
+                "Nothing was deleted."
                 + (" This conversation is shared with the desktop, so the "
                    "desktop carries on from the note too."
                    if self._user_shares_desktop(user_id) else ""))

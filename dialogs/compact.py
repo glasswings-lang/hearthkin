@@ -25,8 +25,11 @@ class CompactDialog(wx.Dialog):
             self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP,
             value=(
                 f"Below is the note {kin} wrote for itself. If you compact, "
-                f"{kin} will be sent this note and the last {keep} messages "
-                "from now on, instead of everything before them.\n"
+                f"{kin} will be sent "
+                + ("this note alone" if keep <= 0 else
+                   "this note and the last message" if keep == 1 else
+                   f"this note and the last {keep} messages")
+                + " from now on, instead of everything before.\n"
                 "Nothing is deleted. The whole conversation stays here and "
                 f"in {kin}'s folder, and memory notes are still made from "
                 "all of it.\n"
