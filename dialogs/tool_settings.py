@@ -15,7 +15,7 @@ else is top-level. Saves are byte-identical to the old inline fields.
 
 import wx
 
-from ._shared import _IntField
+from ._shared import TickList, _IntField
 
 
 class ToolSettingsDialog(wx.Dialog):
@@ -226,6 +226,34 @@ class ToolSettingsDialog(wx.Dialog):
              "or a piece gets cut off mid-sentence. Default 6000; the "
              "smallest is 500.")
 
+        # Tools left out of scheduled wake-ups only (cron_tools_off). Added
+        # 15 Nov 2026 after a kin's tending wake-ups spent every call on exec
+        # searches it never needed, while exec was still wanted in chat.
+        # Lists the kin's enabled tools, plus anything already left out.
+        off_now = cfg.get("cron_tools_off") or []
+        off_now = [t for t in off_now if isinstance(t, str)] if isinstance(off_now, (list, tuple)) else []
+        try:
+            from kin_persistence import load_kin_tools
+            enabled = list(load_kin_tools(kin_name) or []) if kin_name else []
+        except Exception:
+            enabled = []
+        self._wake_tool_names = sorted(set(enabled) | set(off_now))
+        lbl = wx.StaticText(panel, label="&Leave these tools out of scheduled wake-ups:")
+        sizer.Add(lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+        self.wake_tools_off = TickList(panel, "Tools left out of wake-ups",
+                                       self._wake_tool_names)
+        self.wake_tools_off.SetMinSize((-1, 150))
+        for i, name in enumerate(self._wake_tool_names):
+            if name in off_now:
+                self.wake_tools_off.Check(i, True)
+        self.wake_tools_off.Bind(wx.EVT_CHECKLISTBOX, self._on_wake_tool_tick)
+        sizer.Add(self.wake_tools_off, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+        help("A ticked tool stays this kin's in chat, but its scheduled "
+             "wake-ups don't get it. Useful when a wake-up spends its calls "
+             "on something it doesn't need there, like commands during "
+             "nightly tending. Space ticks or unticks; it saves at once. "
+             "Only tools this kin has switched on are listed.")
+
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         close_btn = wx.Button(panel, wx.ID_CLOSE, "&Close")
         close_btn.Bind(wx.EVT_BUTTON, self._on_close)
@@ -242,6 +270,11 @@ class ToolSettingsDialog(wx.Dialog):
         self.SetSizer(outer)
         self.SetInitialSize((560, 560))
         self.Layout()
+
+    def _on_wake_tool_tick(self, _event):
+        off = [name for i, name in enumerate(self._wake_tool_names)
+               if self.wake_tools_off.IsChecked(i)]
+        self._save_param("cron_tools_off", off)
 
     def _on_close(self, _event):
         if self.IsModal():

@@ -81,6 +81,39 @@ def main():
         check(f"{key} saves what was typed", str(saved.get(key)) == val)
     dlg.Destroy()
 
+    # Tools left out of wake-ups (15 Nov 2026): the kin's enabled tools,
+    # ticked from cron_tools_off, saving the ticked ones.
+    from hearthkin_paths import kin_dir
+    from kin_persistence import save_kin_tools
+    kin_dir("Wren").mkdir(parents=True, exist_ok=True)
+    save_kin_tools("Wren", ["exec", "read_file", "edit_file"])
+    saved.clear()
+    dlg = ToolSettingsDialog(
+        None, {"cron_tools_off": ["exec"]},
+        lambda k, v: saved.__setitem__(k, v), lambda k, v: None, kin_name="Wren")
+    wake = getattr(dlg, "wake_tools_off", None)
+    check("the wake-up tools list is there", wake is not None)
+    if wake is not None:
+        names = [wake.GetString(i) for i in range(wake.GetCount())]
+        check("...listing the kin's switched-on tools", names == ["edit_file", "exec", "read_file"])
+        check("...with exec ticked, as saved", [n for i, n in enumerate(names) if wake.IsChecked(i)] == ["exec"])
+        panel = dlg.GetChildren()[0]
+        check("...and it's a tab stop",
+              wake in [c for c in panel.GetChildren() if c.CanAcceptFocusFromKeyboard()])
+        wake.Check(names.index("read_file"), True)
+        dlg._on_wake_tool_tick(None)
+        check("ticking another saves both", sorted(saved.get("cron_tools_off") or []) == ["exec", "read_file"])
+        wake.Check(names.index("exec"), False)
+        wake.Check(names.index("read_file"), False)
+        dlg._on_wake_tool_tick(None)
+        check("unticking all saves an empty list", saved.get("cron_tools_off") == [])
+        labels = [c.GetLabel() for c in panel.GetChildren() if isinstance(c, wx.StaticText)]
+        stops = [c for c in panel.GetChildren() if c.CanAcceptFocusFromKeyboard()]
+        letters = [m.group(1).lower() for l in labels + [c.GetLabel() for c in stops]
+                   for m in [re.search(r"&(\w)", l or "")] if m]
+        check("shortcut letters are still all different", len(letters) == len(set(letters)))
+    dlg.Destroy()
+
     print()
     if _fails:
         print(f"{len(_fails)} FAILED")
