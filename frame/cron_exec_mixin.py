@@ -291,6 +291,7 @@ class CronExecMixin:
             time_label = str(payload.get("time_label", "") or "").strip()
             destinations = None
             own_history = False
+            own_model = False
             try:
                 cfg = load_agent_config(kin)
                 entries = cfg.get("cron_entries") or []
@@ -301,6 +302,8 @@ class CronExecMixin:
                     if isinstance(_dests, list) and _dests:
                         destinations = _dests
                     own_history = bool(entries[entry_index].get("own_history"))
+                    import hearthkin_cron as _hc
+                    own_model = bool(_hc.entry_model(entries[entry_index]))
             except Exception:
                 pass
             framed_prompt = cron_helpers.frame_wake_up_prompt(prompt, time_label, kin_name=kin)
@@ -339,6 +342,9 @@ class CronExecMixin:
                 # A job with its own history must not be poured into the live
                 # chat -- that is the exact mixing own_history exists to stop.
                 and not own_history
+                # A wake-up on its own model can't go through the live chat,
+                # which runs on the kin's chat model.
+                and not own_model
             ):
                 # Parity with the isolated cron path: tell the kin its staging
                 # state up front so it knows whether there's anything to tend
@@ -632,7 +638,8 @@ class CronExecMixin:
                 destinations = (
                     _dests if isinstance(_dests, list) and _dests else None)
             hearthkin_cron._run_isolated(
-                kin, cfg, time_label, prompt, tend_retry=tend_retry,
+                kin, hearthkin_cron.cfg_for_entry(cfg, entry), time_label, prompt,
+                tend_retry=tend_retry,
                 destinations=destinations,
                 history_path=hearthkin_cron.own_history_path(kin, entry, entry_index),
                 gesture_retry=hearthkin_cron.gesture_retry_enabled(entry))

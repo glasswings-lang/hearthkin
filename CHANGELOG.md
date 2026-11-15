@@ -8,6 +8,8 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 - **Kin can listen to sound and look at pictures.** Two new tools, `listen` and `look`. A kin names a sound file or a picture, and a model that can hear or see tells it what's there. The kin's own model still does the thinking. You choose the listening model and the looking model on the kin's Tools tab, like any other model. They can be different; the looking model uses the listening one until you pick another. Long pieces of music are heard as a few short stretches from across them, so a two-hour piece costs a few cents.
 
+- **A wake-up can run on its own model.** In a wake-up's window, **Choose a model for this wake-up** hands that one job to a different model, while chat stays on the kin's own. Useful when a model that's lovely to talk to stumbles over tool-heavy jobs. The wake-up list shows which jobs run on another model.
+
 ### Fixed
 
 - **A kin can't fire dozens of tool calls at once any more without reading the answers.** A new setting, **Most tool calls at once (in one round)**, in Tool behaviour settings, default 8. Past it, the rest wait, and the kin is told to read what came back first, then carry on. A kin had sent 91 different guesses into REAPER in one go, and neither existing limit could catch it.

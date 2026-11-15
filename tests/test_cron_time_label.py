@@ -90,7 +90,10 @@ try:
         glob.glob(os.path.join(ROOT, "frame", "*.py")))
     src = "\n".join(open(p, encoding="utf-8").read() for p in _frame_files)
     i = src.find("def _on_cron_timer_tick")
-    tick = src[i:i + 8000]
+    # To the next method, not a fixed count: a fixed window stops covering
+    # the end of the function as soon as anything above grows (15 Nov 2026).
+    _end = src.find("\n    def ", i + 1)
+    tick = src[i:_end if _end != -1 else len(src)]
     check('payload.get("time_label"' in tick,
           "the tick handler reads the label off the request payload")
     check("args=(kin, entry_index, prompt, time_label)" in tick,

@@ -4401,7 +4401,11 @@ class EditKinDialog(wx.Dialog):
             if len(prompt) > 60:
                 prompt = prompt[:57] + "..."
             marker = "[X]" if enabled else "[ ]"
-            labels.append(f"{marker} {time_str} — {prompt}")
+            # A wake-up on its own model says which, so it's heard in the list.
+            _own = entry.get("model")
+            _on = (f" (on {_own.strip()})"
+                   if isinstance(_own, str) and _own.strip() else "")
+            labels.append(f"{marker} {time_str}{_on} — {prompt}")
         _prev_idx = self.cron_listbox.GetSelection()
         rebuild_listbox(self.cron_listbox, labels, saved_index=_prev_idx)
 

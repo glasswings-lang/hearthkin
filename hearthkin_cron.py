@@ -181,7 +181,25 @@ def _cron_chat(*args, **kwargs):
     return llm_backend.chat(*args, **kwargs)
 
 
-def _load_cron_tools(kin):
+def entry_model(entry):
+    """The model a cron entry names for itself ("model"), or "" for the
+    kin's own. Added 15 Nov 2026: a kin's chat model looped on tool calls
+    at its wake-ups, and its person wanted wake-ups handed to another model
+    while chat stays where it is."""
+    if not isinstance(entry, dict):
+        return ""
+    m = entry.get("model")
+    return m.strip() if isinstance(m, str) else ""
+
+
+def cfg_for_entry(cfg, entry):
+    """The kin's config as this wake-up should see it: its own model in
+    place of the kin's when the entry names one. A copy; never changes cfg."""
+    m = entry_model(entry)
+    return dict(cfg, model=m) if m else cfg
+
+
+def _load_cron_tools(kin, model=None):
     """Load the kin's enabled tools, filter out the unsafe-for-cron set,
     and build (schemas, executor) ready for run_tool_loop. Returns
     (schemas, executor, enabled_names_after_filter) so the caller can
@@ -204,7 +222,7 @@ def _load_cron_tools(kin):
     safe_names = [n for n in enabled if n not in _CRON_TOOL_DENYLIST and n not in off]
     if not safe_names:
         return [], {}, []
-    chat_model = (cfg.get("model") or "").strip()
+    chat_model = (model or cfg.get("model") or "").strip()
     try:
         schemas, executor = kin_tools.load_tools(
             safe_names,
@@ -1072,7 +1090,7 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     # Resolve the cron-safe tool set before building messages so the base
     # prompt's tool/memory scaffolding is fenced to what this wake-up can
     # actually run (see _load_cron_tools / build_system_prompt).
-    schemas, executor, safe_tools = _load_cron_tools(kin)
+    schemas, executor, safe_tools = _load_cron_tools(kin, model=model)
     messages = _build_messages(kin, framed_prompt, enabled_tools=safe_tools,
                                 history_path=history_path)
     # Park keeper: for a keeper kin a wake-up IS a park turn. Show the park as it stands
@@ -1770,6 +1788,8 @@ def _main(args):
         _WAKE_TOOL_CAP = 15
 
     entry, time_label, prompt = _resolve_entry(cfg, args.entry_index)
+    # A wake-up that names its own model runs on it, on every path below.
+    cfg = cfg_for_entry(cfg, entry)
     # A multi-time entry stores no single `time`; the scheduler passes the
     # specific fire-time via --time-label so the journal header is accurate.
     if getattr(args, "time_label", None):
@@ -1842,7 +1862,7 @@ def _main(args):
             )
             # Resolve cron-safe tools up front so the base prompt is fenced
             # to this wake-up's actual tool set (mirrors _run_isolated).
-            schemas, executor, safe_tools = _load_cron_tools(kin)
+            schemas, executor, safe_tools = _load_cron_tools(kin, model=model)
             messages = _build_messages(kin, framed_prompt, enabled_tools=safe_tools,
                                         history_path=history_path)
             staging_had_work, toolless_scopes = _inject_staging_status(

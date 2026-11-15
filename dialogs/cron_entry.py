@@ -141,6 +141,31 @@ class CronEntryDialog(wx.Dialog):
         gesture_retry_hint.SetMinSize((-1, 56))
         gesture_retry_hint.SetName("What one more try does")
 
+        # --- Which model runs this wake-up (15 Nov 2026) ---
+        # Blank = the kin's own model. A job can be handed to another model
+        # (a steadier one for tool-heavy work, say) while chat stays put.
+        # The label is created right before the read-only box it names
+        # (wxMSW takes a TextCtrl's name from the preceding StaticText).
+        self._wake_model = ""
+        _m = defaults.get("model")
+        if isinstance(_m, str):
+            self._wake_model = _m.strip()
+        try:
+            from kin_persistence import load_agent_config as _lac
+            self._kin_cfg = _lac(kin) or {}
+        except Exception:
+            self._kin_cfg = {}
+        model_label = wx.StaticText(self, label="Model that runs this wake-up:")
+        self.model_display = wx.TextCtrl(
+            self, style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP)
+        self.model_display.SetMinSize((-1, 44))
+        self.model_display.SetName("Model that runs this wake-up")
+        self.model_btn = wx.Button(self, label="Choose a &model for this wake-up…")
+        self.model_btn.Bind(wx.EVT_BUTTON, self._on_choose_model)
+        self.model_own_btn = wx.Button(self, label="&Use the kin's own model")
+        self.model_own_btn.Bind(wx.EVT_BUTTON, self._on_use_own_model)
+        self._show_wake_model()
+
         # --- Where does this wake-up's message go? (destination addressing) ---
         # A cron reply is always recorded in the kin's own chat history +
         # journal. This picks where it's ALSO sent outward. The kin's Telegram
@@ -242,6 +267,12 @@ class CronEntryDialog(wx.Dialog):
             gesture_retry_hint,
             flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8,
         )
+        sizer.Add(model_label, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        sizer.Add(self.model_display, flag=wx.EXPAND | wx.LEFT | wx.RIGHT, border=8)
+        model_row = wx.BoxSizer(wx.HORIZONTAL)
+        model_row.Add(self.model_btn, flag=wx.RIGHT, border=4)
+        model_row.Add(self.model_own_btn)
+        sizer.Add(model_row, flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.BOTTOM, border=8)
         sizer.Add(dest_label, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         sizer.Add(
             dest_help, flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
@@ -254,6 +285,46 @@ class CronEntryDialog(wx.Dialog):
         btn_row.Add(cancel_btn)
         sizer.Add(btn_row, flag=wx.EXPAND | wx.ALL, border=8)
         self.SetSizer(sizer)
+
+    def _show_wake_model(self):
+        own = (self._kin_cfg.get("model") or "").strip() or "none set"
+        if self._wake_model:
+            text = f"{self._wake_model} (this wake-up only; the kin's own is {own})"
+        else:
+            text = f"The kin's own model: {own}"
+        self.model_display.SetValue(text)
+        self.model_own_btn.Enable(bool(self._wake_model))
+
+    def _on_choose_model(self, _event):
+        try:
+            from model_browser import ModelBrowserDialog
+        except ImportError as e:
+            wx.MessageBox(f"The model list couldn't open: {e}", "Error",
+                          wx.OK | wx.ICON_ERROR, self)
+            return
+        current = self._wake_model or (self._kin_cfg.get("model") or "").strip()
+        dlg = ModelBrowserDialog(
+            self, current_model=current,
+            ollama_host=str(self._kin_cfg.get("ollama_host_name", "") or ""),
+            show_machine_picker=False)
+        try:
+            if dlg.ShowModal() == wx.ID_OK:
+                self.set_wake_model(dlg.get_selected_model() or "")
+        finally:
+            dlg.Destroy()
+        self.model_btn.SetFocus()
+
+    def _on_use_own_model(self, _event):
+        self.set_wake_model("")
+        self.model_btn.SetFocus()
+
+    def set_wake_model(self, model):
+        """Set this wake-up's model; the kin's own (or "") means none of its own."""
+        m = (model or "").strip()
+        if m == (self._kin_cfg.get("model") or "").strip():
+            m = ""
+        self._wake_model = m
+        self._show_wake_model()
 
     def _on_ok(self, event):
         raw = self.times_field.GetValue().strip()
@@ -360,6 +431,10 @@ class CronEntryDialog(wx.Dialog):
             out["own_history"] = False
             if isinstance(name, str) and name.strip():
                 out["own_history_name"] = name
+        if self._wake_model:
+            out["model"] = self._wake_model
+        else:
+            out.pop("model", None)
         # Migrate off the shapes this dialog no longer emits — it always
         # produces an explicit `times` list now, so a stale single `time` or
         # interval spec left behind would confuse cron_entry_fire_times.
