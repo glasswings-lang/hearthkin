@@ -31,7 +31,7 @@ from kin_persistence import (
     load_ollama_hosts, THIS_MACHINE_NAME, resolve_kin_ollama_host,
 )
 from telegram_bot import telegram_test_token
-from ._shared import _IntField, rebuild_listbox
+from ._shared import TickList, _IntField, rebuild_listbox
 from .cron_entry import CronEntryDialog
 from .distill_prompt import DistillPromptDialog
 from .app_prompt import AppPromptEditDialog
@@ -971,7 +971,6 @@ class EditKinDialog(wx.Dialog):
         tools_header.SetName("Tools section overview")
         tools_header.SetMinSize((-1, 110))
 
-        self._tool_checks = {}
         _tool_widgets = []
 
         # Trust level: three RadioButtons inside a wx.StaticBox so the
@@ -1138,38 +1137,31 @@ class EditKinDialog(wx.Dialog):
             t for t in kin_tools.list_available()
             if t not in kin_tools._PROACTIVE_TOOLS
         ]
-        # Seed with the trust radios' mnemonics (&Untrusted / T&rusted /
-        # &Full) so the auto-assigner below can't hand a tool checkbox
-        # a letter that already belongs to a radio on this tab (L-B41).
-        # Plus the buttons' own letters (&behaviour, Par&k, &calling,
-        # C&hange listening, lookin&g, li&stening...), which the list used to leave out, so a tool
-        # could be handed a letter a button on this tab already had.
-        claimed_letters = {"u", "r", "f", "b", "k", "c", "h", "g", "s"}
-        for tname in available:
-            fn = kin_tools._REGISTRY.get(tname)
-            first_line = ""
-            if fn and fn.__doc__:
-                _doc = fn.__doc__.strip().split("\n\n", 1)[0]
-                _doc = " ".join(_doc.split())
-                if ". " in _doc:
-                    first_line = _doc.split(". ", 1)[0] + "."
-                else:
-                    first_line = _doc
-            labeled = tname
-            for _i, _ch in enumerate(tname):
-                if _ch.isalpha() and _ch.lower() not in claimed_letters:
-                    claimed_letters.add(_ch.lower())
-                    labeled = tname[:_i] + "&" + tname[_i:]
-                    break
-            if first_line:
-                chk_label = f"Enable {labeled} — {first_line}"
-            else:
-                chk_label = f"Enable {labeled}"
-            chk = wx.CheckBox(host, label=chk_label)
-            chk.SetValue(tname in enabled_set)
-            chk.Bind(wx.EVT_CHECKBOX, lambda evt, n=tname: self._on_tool_toggle(n))
-            self._tool_checks[tname] = chk
-            _tool_widgets.append(chk)
+        # One tick list, not a checkbox per tool: one Tab stop, arrows move
+        # through the tools, Space ticks, and NVDA says checked or not
+        # checked on each (a column of checkboxes was a Tab stop per tool).
+        # Its label takes Alt+O, a letter nothing else on this tab uses.
+        self._tool_names = list(available)
+        self.tool_list = None
+        if available:
+            items = []
+            for tname in available:
+                fn = kin_tools._REGISTRY.get(tname)
+                first_line = ""
+                if fn and fn.__doc__:
+                    _doc = fn.__doc__.strip().split("\n\n", 1)[0]
+                    _doc = " ".join(_doc.split())
+                    first_line = (_doc.split(". ", 1)[0] + ".") if ". " in _doc else _doc
+                items.append(f"{tname} — {first_line}" if first_line else tname)
+            tools_lbl = wx.StaticText(host, label="T&ools this kin can use (Space ticks or unticks; saves at once):")
+            self.tool_list = TickList(host, "Tools this kin can use", items)
+            self.tool_list.SetMinSize((560, 22 * max(3, min(len(items), 12)) + 8))
+            for i, tname in enumerate(available):
+                if tname in enabled_set:
+                    self.tool_list.Check(i, True)
+            self.tool_list.Bind(wx.EVT_CHECKLISTBOX, lambda evt: self._on_tool_toggle())
+            _tool_widgets.append(tools_lbl)
+            _tool_widgets.append(self.tool_list)
 
         if not available:
             # Read-only TextCtrl, not StaticText: in this state it's the only
@@ -4727,7 +4719,7 @@ class EditKinDialog(wx.Dialog):
                 self if alive else None,
             )
 
-    def _on_tool_toggle(self, name):
+    def _on_tool_toggle(self, name=None):
         """Save the kin's tools allowlist immediately on any checkbox change.
         Lives outside the kin's main config (lives in its own tools.json) so
         a misconfigured tools file can be cleared without touching the soul
@@ -4735,7 +4727,8 @@ class EditKinDialog(wx.Dialog):
         if self._loading:
             return
         enabled = [
-            tname for tname, chk in self._tool_checks.items() if chk.GetValue()
+            tname for i, tname in enumerate(self._tool_names)
+            if self.tool_list is not None and self.tool_list.IsChecked(i)
         ]
         try:
             save_kin_tools(self.kin, enabled)
