@@ -188,7 +188,7 @@ _PROACTIVE_TOOLS = frozenset({"reach_out"})
 # stripped from every model-facing schema regardless of whether the caller
 # passed them in `context`. See the hide logic in `load_tools`.
 _FRAMEWORK_HIDDEN_PARAMS = frozenset({"agent_name", "confine_paths",
-                                      "read_ledger"})
+                                      "read_ledger", "said_scope"})
 
 
 def load_tools(allowed_names, *, context=None, model=None, cron_turn=False,

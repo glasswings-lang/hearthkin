@@ -60,6 +60,13 @@ PERSON_SETTINGS = [
     {"key": "file_reach", "kind": "choice",
      "choices": ("default", "inside", "outside"), "default": "default",
      "store": "user_file_reach"},
+    # Whether, while talking with this person, the kin's memory search may
+    # reach the operator's own conversations with it (18 Nov 2026). Off: only
+    # this person's own conversation, and the kin's notes. Never from a "*"
+    # entry: opening the operator's words to "anyone" is not a thing a
+    # wildcard should be able to do.
+    {"key": "reach_said", "kind": "bool", "default": False,
+     "store": "user_reach_said", "no_wildcard": True},
 ]
 
 SURFACES = ("telegram", "discord")
@@ -184,6 +191,33 @@ def person_value(section, surface, uid, key, fallback=None):
             if k in d:
                 return _clean(s, d[k])
     return s["default"] if fallback is None else _clean(s, fallback)
+
+
+def operator_ids(section, surface):
+    """IDs of the people marked "This is me" on this surface."""
+    d = (section if isinstance(section, dict) else {}).get(
+        store_key(_setting("is_me"), surface)) or {}
+    return {str(k) for k, v in (d.items() if isinstance(d, dict) else ())
+            if k != "*" and v}
+
+
+def resolve_said_scope(section, surface, uid, place):
+    """What memory search may reach while the kin talks with `uid` in the
+    conversation tagged `place` ("telegram:<id>", "telegram:group:<id>",
+    "discord:<channel id>": the same tag a shared conversation's rows carry).
+
+    None means everything: the person is the operator ("This is me"), or the
+    operator ticked "search your own conversations" for them. Otherwise a
+    dict: this conversation only, opened to everything if the operator has
+    spoken in it themself (it's theirs too); memory search checks that, since
+    it reads the conversation anyway. Sharing with the desktop opens nothing:
+    on Discord a shared channel still only ever reads back its own part.
+    Agreed with the operator, 18 Nov 2026."""
+    if person_value(section, surface, uid, "is_me"):
+        return None
+    if person_value(section, surface, uid, "reach_said"):
+        return None
+    return {"place": place, "operators": sorted(operator_ids(section, surface))}
 
 
 def resolve_file_reach(section, surface, uid, kin_cfg):

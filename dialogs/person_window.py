@@ -260,6 +260,21 @@ class PersonWindow(wx.Dialog):
                      "Settings, Tools.",
                   "What the files setting does", 4), wx.ALL)
 
+    def _build_reach_said(self, p, add, w, value):
+        self.reach_said_check = wx.CheckBox(
+            p, label="Let the &kin search your own conversations with it, "
+                     "while talking with this person")
+        self.reach_said_check.SetValue(bool(value))
+        add(self.reach_said_check, wx.LEFT | wx.RIGHT | wx.TOP)
+        add(_hint(p, "Off: when this person talks with the kin, its memory "
+                     "search finds its own notes and this person's own "
+                     "conversation, never what you've said to it elsewhere. "
+                     "On: it can search everything, as it does with you. "
+                     "For someone you trust to talk about you with it. A "
+                     "conversation you've spoken in yourself is open either "
+                     "way, and so is one shared with the desktop.",
+                  "What searching your conversations does", 4), wx.ALL)
+
     # --- reading back -----------------------------------------------------
     def cap_is_valid(self):
         t = self.cap_field.GetValue().strip()
@@ -302,6 +317,7 @@ class PersonWindow(wx.Dialog):
                               else "default"),
             "file_reach": (("default", "inside", "outside")[fi] if 0 <= fi < 3
                            else "default"),
+            "reach_said": bool(self.reach_said_check.GetValue()),
         }
 
     # Old helpers, kept for callers written against the old windows.

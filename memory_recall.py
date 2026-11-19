@@ -126,6 +126,18 @@ _STOPWORDS = frozenset((
 ).split())
 _MAX_PER_SOURCE = 2  # diversity: one log can't hog the block
 
+# --- Hint mode (18 Nov 2026, agreed with the person this app is for) ---
+# A kin that can open files gets a pointer, not the note: one short line naming
+# where in its logs this turn's subject lives. Pasted note text arrived every
+# turn, often ten times the length of a short message, and was rebuilt and
+# thrown away each turn -- it never once helped a kin remember, and it confused
+# Tensor badly. A pointer can't drown the message, and it cues the kin to reach
+# for its own memory, which is what dense recall was standing in for.
+# Kins that CAN'T open files keep the pasted notes: they have no other way in.
+_HINT_MAX_ITEMS = 3
+_HINT_MIN_OVERLAP = 3
+_HINT_SNIPPET_CHARS = 60
+
 
 def _kin_memory_dir(kin_name, kin_dir=None):
     base = Path(kin_dir) if kin_dir else kin_folder(kin_name)
@@ -205,6 +217,8 @@ def _live_message(recent_messages, speaker_names=()):
 # is NOT something the person said -- it is bookkeeping this app stapled on.
 _TS_PREFIX_RE = re.compile(r"^\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?\]\s*")
 _NAME_PREFIX_RE = re.compile(r"^\[[^\]\n]{1,80}\]\s*")
+# Hearthkin's own standing header on a wake-up or heartbeat.
+_HARNESS_HEADER_RE = re.compile(r"^\s*\[hearthkin:[^\]]*\]\s*")
 
 
 def _strip_harness_prefix(text, speaker_names=()):
@@ -244,6 +258,17 @@ def _strip_harness_prefix(text, speaker_names=()):
     a word taken out of anyone's mouth.
     """
     s = text or ""
+    # Hearthkin's own standing header on a wake-up or heartbeat ("[hearthkin:
+    # scheduled wake-up -- fired at ... Nobody is currently typing to you
+    # ...]") is the same every hour. Matched on, it pulled the same notes into
+    # every wake-up (08:00, 09:00, 10:00, 11:00 on 18 Nov 2026). The job text
+    # after it is what the wake-up is about, so that stays. A person never
+    # types "[hearthkin:", so this takes nothing of theirs.
+    while True:
+        h = _HARNESS_HEADER_RE.match(s)
+        if not h:
+            break
+        s = s[h.end():]
     m = _TS_PREFIX_RE.match(s)
     if not m:
         return s
@@ -416,6 +441,8 @@ def build_recall_block(
     min_block_chars=None,
     speaker_names=(),
     include_journals=False,
+    hint=False,
+    held=(),
 ):
     """Return (block_text_or_None, used_items).
 
@@ -436,7 +463,7 @@ def build_recall_block(
             kin_name, recent_messages, budget_tokens, max_items,
             fence, boost, semantic, embed_model, embed_timeout, kin_dir, frame,
             min_overlap, distinctive_frac, min_block_chars, speaker_names,
-            include_journals)
+            include_journals, hint, held)
     except Exception:
         # Fail soft: a memory-retrieval bug must never break a reply.
         return None, []
@@ -447,9 +474,15 @@ def _build_recall_block_inner(kin_name, recent_messages, budget_tokens,
                               embed_timeout, kin_dir, frame,
                               min_overlap=None, distinctive_frac=None,
                               min_block_chars=None, speaker_names=(),
-                              include_journals=False):
+                              include_journals=False, hint=False, held=()):
     if not budget_tokens or budget_tokens <= 0:
         return None, []
+    if hint and min_overlap is None:
+        # A pointer is only worth giving on a clear match. Measured on Kimi's
+        # last 60 messages, 18 Nov 2026: two shared words fired on 29, three
+        # on 17, and the ones dropped were matches on things like a file path.
+        # A kin's own setting still wins.
+        min_overlap = _HINT_MIN_OVERLAP
     mem_dir = _kin_memory_dir(kin_name, kin_dir)
     query = _build_query(recent_messages, speaker_names)
     if not query:
@@ -581,6 +614,33 @@ def _build_recall_block_inner(kin_name, recent_messages, budget_tokens,
     per_source = {}
     spent = 0
     spent_chars = 0
+    if hint:
+        # A hint names a place in a log; it carries no note text, so neither
+        # the size cap nor the budget has anything to measure. One mention per
+        # log and a short list: the kin opens what it wants with read_file.
+        for score, rel, lineno, ctext in scored:
+            if len(used) >= min(max_items, _HINT_MAX_ITEMS):
+                break
+            if rel in per_source:
+                continue
+            # Point at the line that actually matched, not the chunk's first
+            # line (often a heading like "Key files:").
+            lineno, ctext = _matching_line(file_text.get(rel, ""), lineno,
+                                           ctext, live)
+            if _is_held(rel, lineno, held):
+                continue  # the kin has this part of the log open already
+            per_source[rel] = 1
+            used.append({"relpath": rel, "lineno": lineno,
+                         "score": round(score, 4), "text": ctext.strip(),
+                         "date": _note_date(file_text.get(rel, ""), lineno,
+                                            rel, span=ctext.count("\n") + 1)})
+        if not used:
+            return None, []
+        block = _format_hint(used, kin_name)
+        readout = [{"relpath": u["relpath"], "lineno": u["lineno"],
+                    "score": u["score"],
+                    "snippet": _snippet(u["text"])} for u in used]
+        return block, readout
     for score, rel, lineno, ctext in scored:
         if len(used) >= max_items:
             break
@@ -632,6 +692,128 @@ def _build_recall_block_inner(kin_name, recent_messages, budget_tokens,
                 "score": u["score"],
                 "snippet": _snippet(u["text"])} for u in used]
     return block, readout
+
+
+def _tool_call_args(tc):
+    """(name, args dict) from one stored tool call, whatever shape it took."""
+    fn = (tc or {}).get("function") or {}
+    name = fn.get("name") or tc.get("name") or ""
+    args = fn.get("arguments", tc.get("arguments", {}))
+    if isinstance(args, str):
+        try:
+            args = json.loads(args) if args.strip() else {}
+        except Exception:
+            args = {}
+    return name, (args if isinstance(args, dict) else {})
+
+
+def _held_logs(messages, mem_dir, kin_root):
+    """Which parts of which logs the kin has open in what is about to be sent.
+
+    A log counts as open while the read_file call that opened it is still in
+    the message list. Tool history keeps only the last few round trips whole
+    (compact_tool_history, deliberately, for context cost); older ones become
+    one-line markers with no tool_calls, so once a reading falls out of that
+    window it stops counting, and the hint for it may come back. That is the
+    intended behaviour: the hint follows what the kin can actually see.
+
+    Returns [(relpath, first_line, last_line_or_None)], relpath relative to
+    the memory folder. None for the last line means "to the end"."""
+    out = []
+    try:
+        mem_res = Path(mem_dir).resolve()
+    except Exception:
+        return out
+    for m in messages or []:
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            continue
+        for tc in (m.get("tool_calls") or []):
+            if not isinstance(tc, dict):
+                continue
+            name, args = _tool_call_args(tc)
+            if name != "read_file":
+                continue
+            raw = str(args.get("path") or "").strip()
+            if not raw:
+                continue
+            p = Path(raw).expanduser()
+            if not p.is_absolute():
+                p = Path(kin_root) / p
+            try:
+                rel = p.resolve().relative_to(mem_res).as_posix()
+            except Exception:
+                continue  # not one of this kin's logs
+            try:
+                start = int(args.get("start_line") or 0)
+            except (TypeError, ValueError):
+                start = 0
+            try:
+                count = int(args.get("line_count") or 0)
+            except (TypeError, ValueError):
+                count = 0
+            first = max(1, start)
+            last = (first + count - 1) if count > 0 else None
+            out.append((rel, first, last))
+    return out
+
+
+def _matching_line(file_text, chunk_start, ctext, live):
+    """(line number, line text) of the line in a chunk sharing the most
+    content words with the live message. Falls back to the chunk itself."""
+    want = _content_tokens(live)
+    lines = (file_text or "").splitlines()
+    # The chunk's own lines, plus slack for blank lines the chunker folded.
+    n_lines = len(ctext.splitlines()) + ctext.count("\n\n") + 2
+    best = (0, chunk_start, None)
+    for ln in range(max(1, chunk_start), min(len(lines), chunk_start + n_lines) + 1):
+        text = lines[ln - 1]
+        if not text.strip():
+            continue
+        hit = len(want & _content_tokens(text))
+        if hit > best[0]:
+            best = (hit, ln, text)
+    if best[2] is None:
+        return chunk_start, ctext
+    return best[1], best[2]
+
+
+def _is_held(rel, lineno, held):
+    for hrel, first, last in held or ():
+        if hrel != rel:
+            continue
+        if lineno >= first and (last is None or lineno <= last):
+            return True
+    return False
+
+
+def _default_hint_frame(kin_name=None):
+    try:
+        from kin_persistence import load_app_prompt
+        return load_app_prompt("memory_recall_hint", kin_name)
+    except Exception:
+        from kin_persistence import DEFAULT_MEMORY_RECALL_HINT
+        return DEFAULT_MEMORY_RECALL_HINT
+
+
+def _format_hint(used, kin_name=None):
+    """One line: where in the kin's own logs this subject lives."""
+    places = []
+    for u in used:
+        first = next((ln.strip() for ln in (u.get("text") or "").splitlines()
+                      if ln.strip() and not ln.strip().startswith("#")), "")
+        first = " ".join(first.split())
+        if len(first) > _HINT_SNIPPET_CHARS:
+            cut = first[:_HINT_SNIPPET_CHARS].rsplit(" ", 1)[0]
+            first = (cut or first[:_HINT_SNIPPET_CHARS]) + "..."
+        place = f"memory/{u['relpath']} from line {u['lineno']}"
+        if first:
+            place += f' ("{first}")'
+        places.append(place)
+    frame = _default_hint_frame(kin_name)
+    notes = "; ".join(places)
+    if "{notes}" in frame:
+        return frame.replace("{notes}", notes).strip()
+    return (frame.strip() + " " + notes).strip()
 
 
 _DATE_RE = re.compile(r"(20\d\d)-(\d\d)-(\d\d)")
@@ -759,7 +941,7 @@ def _log_recall(kin_name, used, block, live):
 
 
 def inject_into_messages(messages, kin_name, *, num_ctx, cfg=None, kin_dir=None,
-                         speaker_names=()):
+                         speaker_names=(), tool_names=None):
     """Config-aware integration helper. Reads the kin's recall settings, builds
     the block, and returns (new_messages, used_items).
 
@@ -817,6 +999,25 @@ def inject_into_messages(messages, kin_name, *, num_ctx, cfg=None, kin_dir=None,
         budget = int(max(0, num_ctx) * pct)
         if budget <= 0:
             return messages, []
+        # Can this kin open its own logs? Then it gets a pointer, not the
+        # notes (see _HINT_MAX_ITEMS). `tool_names` is what this surface will
+        # actually offer on this send; when a caller doesn't say, the kin's
+        # own tool list stands in.
+        if tool_names is None:
+            try:
+                from kin_persistence import load_kin_tools
+                tool_names = load_kin_tools(kin_name) or []
+            except Exception:
+                tool_names = []
+        hint = "read_file" in set(tool_names or ())
+        held = ()
+        if hint:
+            try:
+                root = Path(kin_dir) if kin_dir else kin_folder(kin_name)
+                held = _held_logs(messages, _kin_memory_dir(kin_name, kin_dir),
+                                  root)
+            except Exception:
+                held = ()
         # Most recent few turns are the query signal.
         recent = [m for m in messages
                   if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
@@ -841,6 +1042,8 @@ def inject_into_messages(messages, kin_name, *, num_ctx, cfg=None, kin_dir=None,
             # nothing and no bracket is touched.
             speaker_names=speaker_names,
             include_journals=bool(cfg.get("recall_include_journals", False)),
+            hint=hint,
+            held=held,
         )
         if not block:
             return messages, []

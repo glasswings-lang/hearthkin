@@ -116,6 +116,7 @@ def memory_search(
     max_results: int = 5,
     mode: str = "smart",
     agent_name: str = "",
+    said_scope=None,
 ) -> str:
     """Search this kin's memory files for `query` and return ranked hits using BM25 relevance scoring. Use this BEFORE answering when you need to recall a specific name, date, decision, or topic that may be in your memory — much cheaper than scanning whole files inline. Pass `mode="exact"` for substring AND-match (function names, unique IDs, exact phrases); default `mode="smart"` ranks by BM25 relevance.
 
@@ -137,6 +138,14 @@ def memory_search(
     `<relpath>:<lineno>: <context line>`, where the context line is the
     one containing the most distinct query tokens. Returns a brief
     "no matches" message when nothing hits.
+
+    It also searches what was actually said in your conversations, and
+    adds up to three of those moments under "From what was said", each
+    with where, when, who, and a piece of their words. A moment in
+    `conversation.jsonl` gives its line number: read around it with
+    read_file("conversation.jsonl", start_line=N - 5, line_count=12).
+    Your notes are what you chose to keep; the conversation is what
+    really happened, so check it when a note feels thin or wrong.
     """
     if not query:
         return "memory_search: query was empty."
@@ -156,6 +165,13 @@ def memory_search(
         for p in kin_dir.rglob(ext)
         if p.name not in _EXCLUDED_FILES
     )
+    if said_scope is not None:
+        # Someone other than the kin's own person: the summarizer's staging
+        # notes are close copies of private conversations, so they stay out
+        # of reach along with those conversations. The kin's own notes
+        # (memory.md, memory/) remain searchable.
+        targets = [p for p in targets
+                   if "staging" not in p.relative_to(kin_dir).parts]
     if not targets:
         return f"memory_search: {agent_name!r} has no memory files yet."
 
@@ -186,6 +202,22 @@ def memory_search(
                 file_texts, query, kin_dir, cap, _embed_model())
         if hits is None:
             hits = _rank_bm25(file_texts, query, kin_dir, cap)
+
+    # What was said (tools/_said_search.py). `said_scope` comes from the
+    # surface, never the model: None for the kin's own person and the
+    # desktop, one conversation's key for anyone else. Fail-soft: a broken
+    # conversation file must never break note search.
+    said = []
+    try:
+        from ._said_search import search as _said_search
+        said = _said_search(kin_dir, query, scope=said_scope, cap=3,
+                            exact=(mode == "exact"), bm25_cls=_BM25Okapi)
+    except Exception:
+        said = []
+    if said:
+        notes = "\n".join(hits) if hits else "(nothing in your notes)"
+        return ("From your notes:\n" + notes
+                + "\n\nFrom what was said:\n" + "\n".join(said))
 
     if not hits:
         suffix = "" if mode != "exact" else (

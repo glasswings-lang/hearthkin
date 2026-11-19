@@ -26,6 +26,7 @@ import datetime
 import json
 import re
 import sys
+import threading
 import traceback
 from pathlib import Path
 
@@ -163,10 +164,28 @@ def _cron_should_stop():
     return cron_helpers.wakeup_stop_requested(_WAKE_STARTED)
 
 
+# Per-thread: the desktop app runs isolated wake-ups on worker threads, so two
+# kins' wake-ups can be in flight at once and must not post into each other's
+# chats. Set by _wake_tool_lines; read by _cron_tool_loop.
+_WAKE_LINES = threading.local()
+
+
 def _cron_tool_loop(*args, **kwargs):
     if _cron_should_stop():
         raise WakeStopped()
     kwargs.setdefault("should_stop", _cron_should_stop)
+    sink = getattr(_WAKE_LINES, "sink", None)
+    if sink is not None:
+        prior = kwargs.get("on_tool_call")
+
+        def _both(name, args_, result, is_error):
+            if prior is not None:
+                try:
+                    prior(name, args_, result, is_error)
+                except Exception:
+                    pass
+            sink(name, args_, result, is_error)
+        kwargs["on_tool_call"] = _both
     if _WAKE_TOOL_CAP:
         kwargs.setdefault("max_tool_calls", _WAKE_TOOL_CAP)
     result = llm_backend.run_tool_loop(*args, **kwargs)
@@ -627,6 +646,89 @@ def _deliver_to_destinations(kin, cfg, text, destinations):
         reach_places.deliver(kin, cfg, surface, d.get("id", ""), text)
 
 
+def _is_person_place(surface):
+    """A person's own DM, as opposed to a group or channel."""
+    return surface in ("telegram_dm", "discord_dm")
+
+
+def _wake_tool_line_chats(cfg, destinations):
+    """Telegram chats that should see this wake-up's tool steps as they
+    happen: only when the kin's Telegram "Show tool calls in chat" is on, and
+    only people, never groups -- the same people the reply itself goes to.
+    Unaddressed (legacy) wake-ups go to the mirror-enabled people, as their
+    reply does (_maybe_post_telegram)."""
+    tg = (cfg or {}).get("telegram") or {}
+    if not isinstance(tg, dict) or not tg.get("show_tool_calls"):
+        return []
+    if not tg.get("enabled") or not (tg.get("bot_token") or "").strip():
+        return []
+    if destinations is None:
+        mirror = tg.get("user_mirror_to_telegram") or {}
+        if not isinstance(mirror, dict):
+            return []
+        return [str(uid) for uid, on in mirror.items() if on]
+    return [str(d.get("id", "")).strip() for d in destinations
+            if isinstance(d, dict) and d.get("surface") == "telegram_dm"
+            and str(d.get("id", "")).strip()]
+
+
+def _tool_line_args(args):
+    """Same one-line shape as Telegram chat's tool lines."""
+    if not isinstance(args, dict) or not args:
+        return ""
+    parts = []
+    for k, v in args.items():
+        s = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+        if len(s) > 200:
+            s = s[:200] + "…"
+        parts.append(f"{k}={s}")
+    return ", ".join(parts)
+
+
+def _tool_line_preview(result):
+    s = (result if isinstance(result, str) else str(result)).strip()
+    if not s:
+        return "(no output)"
+    if len(s) > 400:
+        s = s[:400] + " …(truncated for display; model sees full output)"
+    return s
+
+
+class _wake_tool_lines:
+    """While a wake-up runs, post each tool step to the people it reports to,
+    in the form Telegram chat uses ("🔧 name(args)" then "→ result"). Restored
+    18 Nov 2026: since wake-ups gained destinations (12 Nov) their person saw
+    no trace of what a wake-up did. Best-effort; a failed post never touches
+    the wake-up."""
+
+    def __init__(self, kin, cfg, destinations):
+        self.kin = kin
+        self.cfg = cfg or {}
+        self.chats = _wake_tool_line_chats(cfg, destinations)
+
+    def _post(self, name, args_, result, is_error):
+        import reach_places
+        for chat in self.chats:
+            try:
+                reach_places.deliver(self.kin, self.cfg, "telegram_dm", chat,
+                                     f"🔧 {name}({_tool_line_args(args_)})")
+                reach_places.deliver(self.kin, self.cfg, "telegram_dm", chat,
+                                     ("⚠️ " if is_error else "→ ")
+                                     + _tool_line_preview(result))
+            except Exception:
+                pass
+
+    def __enter__(self):
+        self._before = getattr(_WAKE_LINES, "sink", None)
+        if self.chats:
+            _WAKE_LINES.sink = self._post
+        return self
+
+    def __exit__(self, *exc):
+        _WAKE_LINES.sink = self._before
+        return False
+
+
 def _append_to_conversation(kin, prompt, reply, intermediate_turns=None,
                             history_path=None):
     """Append the wake-up user turn + (any tool round-trips) + final
@@ -765,11 +867,23 @@ def _post_cron_reply_to_telegram(kin, cfg, reply, result, schemas, destinations=
         clean = strip_tool_summary_footer(reply)
     except Exception:
         clean = reply
+    footer = _cron_tool_receipt_footer(cfg, result, bool(schemas))
     if destinations is None:
-        _maybe_post_telegram(
-            kin, cfg, clean + _cron_tool_receipt_footer(cfg, result, bool(schemas)))
+        _maybe_post_telegram(kin, cfg, clean + footer)
     else:
-        _deliver_to_destinations(kin, cfg, clean, destinations)
+        # A person's own DM gets the receipt, as an unaddressed wake-up's
+        # people always did; a group or channel does not (18 Nov 2026: the
+        # footer had been dropped for DMs too, so a wake-up's person lost
+        # every trace of what it did).
+        people = [d for d in destinations
+                  if isinstance(d, dict) and _is_person_place(d.get("surface"))]
+        others = [d for d in destinations
+                  if not (isinstance(d, dict)
+                          and _is_person_place(d.get("surface")))]
+        if people:
+            _deliver_to_destinations(kin, cfg, clean + footer, people)
+        if others:
+            _deliver_to_destinations(kin, cfg, clean, others)
 
 
 def _read_staging_fired(result):
@@ -1046,10 +1160,11 @@ def _run_isolated(kin, cfg, time_label, prompt, tend_retry=0, destinations=None,
     except Exception:
         pass
     try:
-        return _run_isolated_inner(
-            kin, cfg, time_label, prompt,
-            tend_retry=tend_retry, destinations=destinations,
-            history_path=history_path, gesture_retry=gesture_retry)
+        with _wake_tool_lines(kin, cfg, destinations):
+            return _run_isolated_inner(
+                kin, cfg, time_label, prompt,
+                tend_retry=tend_retry, destinations=destinations,
+                history_path=history_path, gesture_retry=gesture_retry)
     finally:
         try:
             cron_helpers.clear_cron_running(marker)
@@ -1145,7 +1260,8 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
         from memory_recall import inject_into_messages
         messages, _ = inject_into_messages(
             messages, kin,
-            num_ctx=int(cfg.get("num_ctx", 8192) or 8192), cfg=cfg)
+            num_ctx=int(cfg.get("num_ctx", 8192) or 8192), cfg=cfg,
+            tool_names=safe_tools)
     except Exception:
         pass
     options = {
@@ -1578,6 +1694,13 @@ def run_heartbeat(kin, cfg, should_stop=None):
     try:
         from kin_persistence import load_app_prompt, DEFAULT_HEARTBEAT_FRAME
         framed = load_app_prompt("heartbeat_frame", kin) or DEFAULT_HEARTBEAT_FRAME
+        from kin_persistence import agent_dir as _ad
+        framed = framed.replace("{kin_inbox}",
+                                str(_ad(kin).parent / "inbox.md"))
+        from kin_persistence import house_line
+        _house = house_line(kin)
+        if _house:
+            framed = _house + "\n\n" + framed
     except Exception:
         try:
             from kin_persistence import DEFAULT_HEARTBEAT_FRAME
@@ -1610,7 +1733,8 @@ def run_heartbeat(kin, cfg, should_stop=None):
         from memory_recall import inject_into_messages
         messages, _ = inject_into_messages(
             messages, kin,
-            num_ctx=int(cfg.get("num_ctx", 8192) or 8192), cfg=cfg)
+            num_ctx=int(cfg.get("num_ctx", 8192) or 8192), cfg=cfg,
+            tool_names=names)
     except Exception:
         pass
     options = {
@@ -1847,6 +1971,10 @@ def _main(args):
         return 0
 
     if running and not inject:
+        # Tool steps to the wake-up's people, as on every other wake-up path.
+        # This branch runs once in its own short-lived process, so the sink
+        # needs no undoing.
+        _wake_tool_lines(kin, cfg, destinations).__enter__()
         # Hearthkin is up but the user opted out of live injection. Don't
         # touch conversation.json (race), just journal + Telegram.
         # We still need to run an LLM call to GET the reply — there's no
@@ -1873,7 +2001,8 @@ def _main(args):
                 from memory_recall import inject_into_messages
                 messages, _ = inject_into_messages(
                     messages, kin,
-                    num_ctx=int(cfg.get("num_ctx", 8192) or 8192), cfg=cfg)
+                    num_ctx=int(cfg.get("num_ctx", 8192) or 8192), cfg=cfg,
+                    tool_names=safe_tools)
             except Exception:
                 pass
             options = {

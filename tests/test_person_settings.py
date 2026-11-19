@@ -40,7 +40,7 @@ def check(label, cond):
 
 FULL = {"label": "Alex", "is_me": True, "bucket": "full", "share_desktop": True,
         "mirror": True, "webcam": "auto", "tool_cap": 25,
-        "exec_approval": "ask", "file_reach": "outside"}
+        "exec_approval": "ask", "file_reach": "outside", "reach_said": True}
 DEFAULTS = {s["key"]: s["default"] for s in PERSON_SETTINGS}
 
 for surface in ("telegram", "discord"):

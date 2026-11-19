@@ -892,6 +892,8 @@ class DiscordBot:
                 "{user}", user)
             row = compact_marker(note, _keep, ts=now_iso(),
                                  preface=preface)
+            from kin_persistence import save_now_note
+            save_now_note(who, note)
             if share:
                 from kin_persistence import append_agent_conversation_turn
                 append_agent_conversation_turn(
@@ -960,8 +962,9 @@ class DiscordBot:
             if m.get("role") in ("user", "assistant", "system") \
                     and not m.get("tool_calls") and m.get("content"):
                 msgs.append({"role": m["role"], "content": m["content"]})
-        msgs.append({"role": "user", "content": load_app_prompt(
-            "compact_request", self.agent_name).replace("{user}", user)})
+        from kin_persistence import compact_request_text
+        msgs.append({"role": "user", "content": compact_request_text(
+            self.agent_name, user)})
         r = llm_backend.chat_collect(
             cfg.get("model", ""), msgs, options=options,
             max_context_tokens=max(512, num_ctx - 2000),
@@ -1201,10 +1204,15 @@ class DiscordBot:
             # Per person since 12 Nov 2026; the kin-wide box otherwise.
             from tools._person_settings import resolve_file_reach
             _confine = resolve_file_reach(dcfg, "discord", author_id, cfg)
+            # What memory search may reach for this person (18 Nov 2026).
+            from tools._person_settings import resolve_said_scope
+            _said = resolve_said_scope(dcfg, "discord", author_id,
+                                       f"discord:{channel_id}")
             schemas, executor = load_tools(
                 enabled,
                 context={"agent_name": self.agent_name,
-                         "confine_paths": _confine},
+                         "confine_paths": _confine,
+                         "said_scope": _said},
                 model=model)
             if self._wrap_exec is not None:
                 executor = self._wrap_exec(executor, self.agent_name,

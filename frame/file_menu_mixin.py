@@ -68,8 +68,8 @@ class FileMenuMixin:
             e = self._history_entry_for_model(m)
             if e is not None:
                 history.append(e)
-        ask = load_app_prompt("compact_request", kin).replace(
-            "{user}", self._compact_user_name())
+        from kin_persistence import compact_request_text
+        ask = compact_request_text(kin, self._compact_user_name())
         return ([{"role": "system", "content": sys_content}] + history
                 + [{"role": "user", "content": ask}])
 
@@ -154,6 +154,8 @@ class FileMenuMixin:
         self.conversation.append(
             compact_marker(note, keep, ts=now_iso(),
                            preface=preface))
+        from kin_persistence import save_now_note
+        save_now_note(kin, note)
         self._persist_current_conversation()
         try:
             self._render_conversation()

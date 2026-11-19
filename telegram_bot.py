@@ -4103,6 +4103,8 @@ class TelegramBot:
                 "{user}", user)
             self._append_turns_for(user_id, [compact_marker(
                 note, _keep, ts=now_iso(), preface=preface)])
+            from kin_persistence import save_now_note
+            save_now_note(who, note)
             self._send_chunked(
                 chat_id,
                 f"Compacted. From now on {who} is sent {compact_sent_words(_keep)}. "
@@ -4165,8 +4167,9 @@ class TelegramBot:
                     ("user", "assistant", "system")
                     and not m.get("tool_calls") and m.get("content")):
                 msgs.append({"role": m["role"], "content": m["content"]})
-        msgs.append({"role": "user", "content": load_app_prompt(
-            "compact_request", self.agent_name).replace("{user}", user)})
+        from kin_persistence import compact_request_text
+        msgs.append({"role": "user", "content": compact_request_text(
+            self.agent_name, user)})
         # The kin's own settings (get_config is only its Telegram part).
         cfg = load_agent_config(self.agent_name) or {}
         num_ctx = int((options or {}).get("num_ctx") or 0) or 2048
@@ -6277,9 +6280,18 @@ class TelegramBot:
         from tools._person_settings import resolve_file_reach
         _confine = resolve_file_reach(self._tg_section(), "telegram",
                                       user_id, full_cfg or {})
+        # What memory search may reach for this person (18 Nov 2026): this
+        # conversation only, unless they're the operator or the operator
+        # opened it to them. See resolve_said_scope.
+        from tools._person_settings import resolve_said_scope
+        _place = (f"telegram:group:{chat_id}" if str(chat_id).startswith("-")
+                  else f"telegram:{user_id}")
+        _said = resolve_said_scope(self._tg_section(), "telegram", user_id,
+                                   _place)
         schemas, executor = kin_tools.load_tools(
             effective_tools,
-            context={"agent_name": self.agent_name, "confine_paths": _confine},
+            context={"agent_name": self.agent_name, "confine_paths": _confine,
+                     "said_scope": _said},
             model=tg_model,
         )
         # Wrap use_webcam with the per-user approval flow (ask /

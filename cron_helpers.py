@@ -962,12 +962,20 @@ def frame_wake_up_prompt(prompt, time_label, fired_at=None, kin_name=None):
     # {prompt} is substituted LAST so a cron prompt containing literal braces
     # can't disturb the {time}/{day} slots. Local import avoids a load cycle.
     from kin_persistence import load_app_prompt
-    return (
+    framed = (
         load_app_prompt("wake_up_frame", kin_name)
         .replace("{time}", time_pretty)
         .replace("{day}", day_label)
         .replace("{prompt}", prompt)
     )
+    # Who else is in the house (kin_persistence.house_line). First, so it
+    # sits with the other harness lines and recall never matches on it.
+    try:
+        from kin_persistence import house_line
+        house = house_line(kin_name) if kin_name else ""
+    except Exception:
+        house = ""
+    return (house + "\n\n" + framed) if house else framed
 
 
 def sync_all_kins_blocking(agents_root=None, log_errors=True):

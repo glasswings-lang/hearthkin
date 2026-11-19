@@ -103,7 +103,9 @@ for surface in ("telegram", "discord"):
                        ("mirror_check", "What mirroring desktop messages does"),
                        ("cap_field", "What the tool call limit does"),
                        ("exec_choice", "What the commands setting does"),
-                       ("file_choice", "What the files setting does")):
+                       ("file_choice", "What the files setting does"),
+                       ("reach_said_check",
+                        "What searching your conversations does")):
         ctrl = getattr(d, attr)
         i = st.index(ctrl) if ctrl in st else -1
         check(f"{surface}: Tab from {attr} lands on its explainer",
@@ -118,12 +120,14 @@ for surface in ("telegram", "discord"):
                                "share_desktop": False, "mirror": False,
                                "webcam": "ask", "tool_cap": None,
                                "exec_approval": "default",
-                               "file_reach": "default"})
+                               "file_reach": "default",
+                               "reach_said": False})
     d.Destroy()
 
     full = {"label": "Alex", "is_me": True, "bucket": "full", "share_desktop": True,
             "mirror": True, "webcam": "deny", "tool_cap": 7,
-            "exec_approval": "auto", "file_reach": "inside"}
+            "exec_approval": "auto", "file_reach": "inside",
+            "reach_said": True}
     d = PersonWindow(None, surface, "12345", full)
     check(f"{surface}: an existing person's settings all show and read back",
           d.get_settings() == full and d.get_user_id() == "12345")
