@@ -181,23 +181,13 @@ class FileMenuMixin:
                 at = 0
             if at <= 0:
                 return
-            from frame_shared import _num_ctx_of, llm_backend
-            real = llm_backend.last_reported_prompt_tokens(kin)
-            if not real:
-                return
-            effective = max(512, _num_ctx_of(cfg) - 2000)
-            pct = int(real * 100 / effective) if effective else 0
-            if pct < at:
-                return
-            marks = sum(1 for m in self.conversation
-                        if isinstance(m, dict) and m.get("compact"))
-            hinted = self.__dict__.setdefault("_compact_hinted", set())
-            if (kin, marks) in hinted:
-                return
-            hinted.add((kin, marks))
-            self._compact_say(
-                f"{kin}'s conversation is {pct} percent full. You can compact "
-                "it: Chat menu, Compact this conversation, Control Shift K.")
+            from chat_helpers import compact_hint
+            text = compact_hint(
+                kin, cfg, "desktop",
+                "You can compact it: Chat menu, Compact this conversation, "
+                "Control Shift K.")
+            if text:
+                self._compact_say(text)
         except Exception:
             pass
 

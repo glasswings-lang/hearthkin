@@ -5103,6 +5103,16 @@ class TelegramBot:
                 # the non-tool path, so we fall through to a normal send.
                 if not (_stream_ed and _stream_ed.finalize(content + footer)):
                     self._send_chunked(chat_id, content + footer)
+                # Suggest compacting once a day when it's full (18 Nov 2026).
+                try:
+                    from chat_helpers import compact_hint
+                    _hint = compact_hint(
+                        self.agent_name, full_cfg, f"telegram:{user_id}",
+                        "Send /compact to compact it.")
+                    if _hint:
+                        self._send_chunked(chat_id, _hint)
+                except Exception:
+                    pass
                 # "Show reasoning in chat" reached the model call and stopped
                 # there: the kin thought, and the thinking was thrown away.
                 # Posted as its own message rather than folded into the reply,

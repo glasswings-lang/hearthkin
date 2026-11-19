@@ -1520,6 +1520,19 @@ class DiscordBot:
         # the harness's bookkeeping into the kin's own voice.
         self._persist_turn(channel_id, "assistant", text, share)
 
+        # Suggest compacting once a day when it's full (18 Nov 2026). Direct
+        # messages only: /compact doesn't work in a server channel.
+        try:
+            if getattr(message, "guild", None) is None:
+                from chat_helpers import compact_hint
+                _hint = compact_hint(self.agent_name, cfg,
+                                     f"discord:{channel_id}",
+                                     "Send /compact to compact it.")
+                if _hint:
+                    self._post_sync(channel, _hint)
+        except Exception:
+            pass
+
         # The steering notes every other surface gives back. All four are
         # shared code (turn_steering) rather than a fourth copy of the same
         # judgement — see that module for why. Best-effort throughout: a

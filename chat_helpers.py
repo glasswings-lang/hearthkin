@@ -1340,3 +1340,58 @@ def compact_tool_history(conversation, keep_window):
             continue
         out.append(msg)
     return out
+
+
+# --- Suggesting a compaction (18 Nov 2026) ---------------------------------
+# The person found out from a bill: Kimi had sent about 55,000 tokens on every
+# call for days, the suggestion to compact never reached them, and $60 of
+# cloud credit went in under ten days. It existed only in the desktop window,
+# once per app session, and their kin lives on Telegram. Now every place a
+# person talks one-to-one asks this after a reply.
+#
+# Their rule: "I'd like to be told consistently, like, if I compact, we end up
+# ... filling it up again I do want to know about it." So: told every time the
+# conversation crosses the mark (dropping below it, as a compaction does,
+# re-arms it), and reminded every COMPACT_REMIND_EVERY replies while it stays
+# over, since each of those replies costs the full amount.
+COMPACT_REMIND_EVERY = 10
+_COMPACT_HINTED = {}   # (kin, place) -> replies since last told, while over
+
+
+def compact_hint(kin, cfg, place, how, today=None, real_tokens=None):
+    """The sentence to show after a reply when the conversation is past the
+    kin's "tell me when it's this full" mark, or "". Said when it first
+    crosses, then every COMPACT_REMIND_EVERY replies while it stays over.
+    `how` says how to compact on that surface. `today` is unused, kept so
+    older callers still work."""
+    try:
+        at = int((cfg or {}).get("compact_hint_pct", 70) or 0)
+    except (TypeError, ValueError):
+        at = 0
+    if at <= 0 or not kin:
+        return ""
+    if real_tokens is None:
+        try:
+            import llm_backend
+            real_tokens = llm_backend.last_reported_prompt_tokens(kin)
+        except Exception:
+            real_tokens = None
+    if not real_tokens:
+        return ""
+    try:
+        num_ctx = int((cfg or {}).get("num_ctx", 8192) or 8192)
+    except (TypeError, ValueError):
+        num_ctx = 8192
+    effective = max(512, num_ctx - 2000)
+    pct = int(real_tokens * 100 / effective)
+    key = (kin, place)
+    if pct < at:
+        _COMPACT_HINTED.pop(key, None)   # below again: re-armed
+        return ""
+    since = _COMPACT_HINTED.get(key)
+    if since is not None and since + 1 < COMPACT_REMIND_EVERY:
+        _COMPACT_HINTED[key] = since + 1
+        return ""
+    _COMPACT_HINTED[key] = 0
+    return (f"{kin}'s conversation is {min(pct, 100)} percent full, so every "
+            f"message now sends about {real_tokens:,} tokens. {how}")
