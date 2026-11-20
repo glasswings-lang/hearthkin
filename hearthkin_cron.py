@@ -502,6 +502,17 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
         convo = _load_own_history(history_path)
     else:
         convo = load_agent_conversation(kin) or []
+    # A compacted conversation is sent from its latest note onward, as on
+    # every other surface (20 Nov 2026: wake-ups ignored compaction and sent
+    # the whole window). The note itself comes along, as the kin's own.
+    from chat_helpers import view_after_compaction
+    _was_compacted = any(isinstance(m, dict) and m.get("compact")
+                         for m in convo)
+    convo = view_after_compaction(convo)
+    if _was_compacted and convo and isinstance(convo[0], dict):
+        # view_after_compaction hands the note back as a plain system row;
+        # tag it so it is sent (below) and kept by the size budget.
+        convo[0] = dict(convo[0], compact=True)
     if history_tokens and history_tokens > 0:
         # Budget by SIZE, not turn count. Counting turns sounds equivalent and
         # is not: a kin being fed long passages has turns of 1,200+ tokens, so
@@ -511,7 +522,8 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
         # been talking about.
         readable = [m for m in convo
                     if isinstance(m, dict)
-                    and m.get("role") in ("user", "assistant")
+                    and (m.get("role") in ("user", "assistant")
+                         or m.get("compact"))
                     and isinstance(m.get("content"), str)]
         kept, spent = [], 0
         for m in reversed(readable):
@@ -532,10 +544,16 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
         if not isinstance(m, dict):
             continue
         role = m.get("role")
-        if role not in ("user", "assistant"):
-            continue
         content = m.get("content")
         if not isinstance(content, str):
+            continue
+        if m.get("compact"):
+            # The compaction note: a harness row ("[hearthkin: ... compacted
+            # here ...]" then the kin's own note). Sent as a turn, not as a
+            # system message -- providers hoist system messages to the front.
+            messages.append({"role": "user", "content": content})
+            continue
+        if role not in ("user", "assistant"):
             continue
         messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": user_turn_text})

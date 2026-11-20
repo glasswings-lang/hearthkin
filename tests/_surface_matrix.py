@@ -300,6 +300,22 @@ CAPABILITIES = [
     ),
 
     Capability(
+        key="compaction_respected",
+        what="Sends a compacted conversation from its latest note onward",
+        why="On 20 Nov 2026 wake-ups ignored compaction entirely, and every "
+            "surface lost the marker when reading the conversation back from "
+            "disk: a person compacted and the kin was still sent the whole "
+            "window, at full cost, every call",
+        markers="view_after_compaction",
+        surfaces={
+            "desktop": Present(),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": Present(),
+        },
+    ),
+
+    Capability(
         key="memory_index_repair",
         what="Rebuilds the pointer list of depth logs before the kin reads it",
         why="A kin whose index is stale cannot see files it wrote itself, and "
@@ -977,6 +993,10 @@ CAPABILITIES = [
 # live text would already have been read aloud).
 
 ROOMS = {
+    "compaction_respected": NotHere(
+        "A room keeps its own history, which is never compacted: compacting "
+        "is a one-to-one conversation's Chat menu and /compact command, and "
+        "neither exists in a room."),
     "per_turn_recall": Present(),
     "memory_index_repair": Present(),
     "speaker_attribution": Present(

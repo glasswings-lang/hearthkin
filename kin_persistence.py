@@ -5889,6 +5889,20 @@ def _clean_chat_message(m):
     if isinstance(sid, (int, str)) and sid != "":
         entry["sender_id"] = sid
 
+    # A compaction marker (chat_helpers.compact_marker) must come back as
+    # one. Until 20 Nov 2026 this function dropped both fields, so every
+    # conversation read back from disk lost its compaction point: Telegram
+    # (which always reads from disk) never compacted at all, and the desktop
+    # stopped compacting at the next restart. The note stayed; the "stop
+    # here" was gone, and the kin was sent everything, full window, every
+    # call, while its person was told it had compacted.
+    if m.get("compact") is True:
+        entry["compact"] = True
+        try:
+            entry["keep"] = max(0, int(m.get("keep", 0)))
+        except (TypeError, ValueError):
+            entry["keep"] = 0
+
     # Preserve `attachments` (list of relative paths under the kin
     # dir) on USER turns only. Stored as references; the LLM
     # dispatcher expands them to base64 at send time. We don't try
