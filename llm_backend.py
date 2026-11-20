@@ -5489,6 +5489,16 @@ _LIMIT_REACHED_NOTE = (
     "to do, say what, and it can carry on next message.]"
 )
 
+# The rounds limit's version of the same note. Without it, the final
+# no-tools turn arrived with nothing saying why tools were gone; a kin deep
+# in reading (20 Nov 2026: seven file reads in one reply) often answered
+# with nothing, and the person got "[Tool loop exceeded ...]" instead.
+_ROUNDS_REACHED_NOTE = (
+    "[hearthkin: this reply has used all {n} of its rounds of tool use, so "
+    "no more tools will run this turn. Answer now with what you have. If "
+    "there's more to do, say what, and it can carry on next message.]"
+)
+
 
 def _take_interjections(interject):
     """Ask the `interject` callback for any messages that arrived mid-turn.
@@ -5949,14 +5959,18 @@ def run_tool_loop(model, messages, tools, tool_executor, *, options=None, cache=
     # the 8000 num_predict floor) and omit tools so chat()'s budget
     # math doesn't over-reserve for schemas + tool-output reserve
     # that this final no-tools call doesn't need (audit L7).
-    final = chat(model, history, options=dict(options or {}), stream=False, cache=cache, **kwargs)
+    final = chat(model, history + [{
+        "role": "system",
+        "content": _ROUNDS_REACHED_NOTE.format(n=max_iterations)}],
+        options=dict(options or {}), stream=False, cache=cache, **kwargs)
     # Same hygiene as the stuck-loop bail: strip any content-form tool
     # marker the model emitted on this final no-tools turn so it doesn't
     # reach the user as raw markup.
     final.content = _strip_extracted_tool_calls(final.content or "")
     if not final.content:
-        final.content = (f"[Tool loop exceeded {max_iterations} iterations "
-                         "without a final answer.]")
+        final.content = (f"[Stopped: this reply used all {max_iterations} "
+                         "of its rounds of tool use.]")
     _show_final_turn(final.content)
     final.messages_added = messages_added
+    final.hit_tool_limit = True
     return final
