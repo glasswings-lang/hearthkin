@@ -4173,8 +4173,9 @@ class TelegramBot:
         # The kin's own settings (get_config is only its Telegram part).
         cfg = load_agent_config(self.agent_name) or {}
         num_ctx = int((options or {}).get("num_ctx") or 0) or 2048
+        from chat_helpers import compact_options
         r = llm_backend.chat_collect(
-            model, msgs, options=options,
+            model, msgs, options=compact_options(options, cfg),
             max_context_tokens=max(512, num_ctx - 2000),
             kin_name=self.agent_name, surface="compact",
             ollama_host=resolve_kin_ollama_host(

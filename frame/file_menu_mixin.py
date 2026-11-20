@@ -89,17 +89,19 @@ class FileMenuMixin:
         self._compact_say(f"Asking {kin} to write its note. This can take a "
                           "moment.")
 
+        from chat_helpers import compact_options
+
         def worker():
             note, err = "", None
             try:
                 result = llm_backend.chat(
                     strip_model_annotation(str(cfg.get("model", "") or "")),
                     messages,
-                    options={
+                    options=compact_options({
                         "temperature": cfg.get("temperature", 0.8),
                         "top_p": cfg.get("top_p", 0.9),
                         "num_ctx": _num_ctx_of(cfg),
-                    },
+                    }, cfg),
                     stream=False, cache=bool(cfg.get("cache", True)),
                     cache_ttl=str(cfg.get("cache_ttl", "auto")),
                     max_context_tokens=max(512, _num_ctx_of(cfg) - 2000),

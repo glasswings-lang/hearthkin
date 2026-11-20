@@ -636,6 +636,26 @@ class EditKinDialog(wx.Dialog):
                              flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=4)
         compact_keep_row.Add(self.compact_keep_field)
 
+        # Room for the note itself (20 Nov 2026): it used to borrow the
+        # short chat reply cap and got cut off mid-note.
+        compact_note_row = wx.BoxSizer(wx.HORIZONTAL)
+        compact_note_lbl = wx.StaticText(
+            host,
+            label="Room for the compaction note, in tokens, thinking "
+                  "included:")
+        self.compact_note_field = _IntField(
+            host,
+            value=self.cfg.get("compact_note_tokens", 6000),
+            min_val=500, max_val=64000,
+            size=(80, -1),
+            name=("Room for the compaction note, in tokens, thinking "
+                  "included. Raise it if notes come back cut off."),
+            on_commit=lambda v: self._save_param("compact_note_tokens", v),
+        )
+        compact_note_row.Add(compact_note_lbl,
+                             flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=4)
+        compact_note_row.Add(self.compact_note_field)
+
         # Memory-log index cap. Created here so tab order reads it with the
         # other memory-size controls (wxPython tab order follows CREATION
         # order, not sizer order).
@@ -883,6 +903,8 @@ class EditKinDialog(wx.Dialog):
         memory_sizer.Add(compact_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(compact_keep_row,
+                         flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        memory_sizer.Add(compact_note_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(log_idx_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)

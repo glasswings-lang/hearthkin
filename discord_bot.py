@@ -965,8 +965,9 @@ class DiscordBot:
         from kin_persistence import compact_request_text
         msgs.append({"role": "user", "content": compact_request_text(
             self.agent_name, user)})
+        from chat_helpers import compact_options
         r = llm_backend.chat_collect(
-            cfg.get("model", ""), msgs, options=options,
+            cfg.get("model", ""), msgs, options=compact_options(options, cfg),
             max_context_tokens=max(512, num_ctx - 2000),
             kin_name=self.agent_name, surface="compact",
             ollama_host=resolve_kin_ollama_host(

@@ -1395,3 +1395,30 @@ def compact_hint(kin, cfg, place, how, today=None, real_tokens=None):
     _COMPACT_HINTED[key] = 0
     return (f"{kin}'s conversation is {min(pct, 100)} percent full, so every "
             f"message now sends about {real_tokens:,} tokens. {how}")
+
+
+# Room for a compaction note (20 Nov 2026). Telegram and Discord borrowed the
+# CHAT reply cap for the note -- telegram_token_cap, 1024 for the kin it was
+# found on -- and that kin thinks before it writes, so its last two notes both
+# stopped at exactly 1,024 tokens, cut off mid-note. The desktop set no cap at
+# all and left it to the provider. A note is the one reply that must not be
+# cut short: it is all the kin carries forward. So it has its own allowance,
+# the kin's "compact_note_tokens" setting (its person's words: "That's gotta
+# be an adjustable setting"), shown in Memory settings. This is only the
+# fallback when the setting is missing or unreadable.
+COMPACT_NOTE_MIN_TOKENS = 6000
+
+
+def compact_options(options, cfg):
+    """`options` for the compaction request, with the note's own allowance
+    (thinking included) from the kin's setting in place of any chat cap."""
+    out = dict(options or {})
+    try:
+        want = int((cfg or {}).get("compact_note_tokens",
+                                   COMPACT_NOTE_MIN_TOKENS))
+        if want <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        want = COMPACT_NOTE_MIN_TOKENS
+    out["num_predict"] = want
+    return out

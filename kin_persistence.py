@@ -1292,6 +1292,10 @@ DEFAULT_AGENT_CONFIG = {
     # recent messages: kept, they hand the kin fresh examples of the very
     # pattern the note was meant to leave behind (15 Nov 2026).
     "compact_keep_messages": 6,
+    # Room for the compaction note itself, in tokens, thinking included
+    # (20 Nov 2026). The note used to borrow the short chat reply cap and got
+    # cut off mid-note. The person's setting, in the kin's Memory settings.
+    "compact_note_tokens": 6000,
     # Minutes to wait before the AUTOMATIC triggers may fire again on a
     # scope that is working through a BACKLOG — one so large that the run
     # just finished digested less than what is still left. 0 = no wait
