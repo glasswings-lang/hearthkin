@@ -577,6 +577,36 @@ def strip_trailing_other_speakers(text):
     return text
 
 
+def speakers_shown(rows, also=()):
+    """The other speakers' names a kin was shown in `rows`: each row's
+    speaker / sender fields, and a "[Name] " bracket opening a person's
+    message (after an optional "[time] "). What clean_kin_reply needs as
+    known_speakers to catch a reply that opens as one of them; rooms,
+    Discord and wake-ups never passed it (audit, 20 Nov 2026). Never
+    raises."""
+    import re as _re
+    names = set()
+    pat = _re.compile(r"^(?:\[\d{4}-\d\d-\d\d[^\]]*\]\s*)?\[([^\]\n]{1,80})\]\s")
+    try:
+        for r in rows or []:
+            if not isinstance(r, dict):
+                continue
+            for key in ("speaker", "sender_attribution", "sender_name"):
+                v = str(r.get(key) or "").strip()
+                if v:
+                    names.add(v)
+            if r.get("role") == "user":
+                m = pat.match(str(r.get("content") or ""))
+                if m:
+                    names.add(m.group(1).strip())
+        for n in also or ():
+            if str(n or "").strip():
+                names.add(str(n).strip())
+    except Exception:
+        pass
+    return names
+
+
 def clean_kin_reply(text, kin_name, known_speakers=None):
     """Run the full anti-impersonation chain in the only order that works.
 

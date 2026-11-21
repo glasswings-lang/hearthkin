@@ -1281,7 +1281,13 @@ class RoomsMixin:
         # clean_kin_reply owns the ORDER (timestamp unwrapped first — see its
         # docstring; the old order here let "[TS] [OtherKin]:" through and
         # that is exactly how the room impersonation leak persisted).
-        reply, _imp = clean_kin_reply(reply, self._current_room_speaker)
+        from chat_helpers import speakers_shown
+        _shown = {n for n in speakers_shown(
+            self.room_conversation,
+            also=((self.config or {}).get("user_name", ""), "You"))
+            if n.casefold() != (self._current_room_speaker or "").casefold()}
+        reply, _imp = clean_kin_reply(reply, self._current_room_speaker,
+                                      known_speakers=_shown)
         if _imp:
             logging.getLogger("hearthkin").warning(
                 "IMPERSONATION (room): %s opened its reply as another kin. "

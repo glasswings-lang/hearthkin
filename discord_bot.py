@@ -1363,6 +1363,10 @@ class DiscordBot:
         user_text = speaker_attribution_prefix(who_for_kin) + content
 
         history = self._channel_history(channel_id, share)
+        # The names this reply was shown, so one that opens as one of them is
+        # caught (audit, 20 Nov 2026: Discord never passed them).
+        from chat_helpers import speakers_shown
+        _shown = speakers_shown(history, also=(who_for_kin,))
 
         # Persist the user turn NOW, before generating — if generation
         # fails the message is still on record, never orphaned. `said` keeps
@@ -1547,7 +1551,8 @@ class DiscordBot:
             # opens with its own name tag shows the tag and then has it edited
             # away, and a tool call mid-reply would take back the sentence in
             # front of it — see _TelegramStreamEditor, which owns that rule.
-            return clean_kin_reply(t, self.agent_name)[0]
+            return clean_kin_reply(t, self.agent_name,
+                                   known_speakers=_shown)[0]
 
         ed = _TelegramStreamEditor(_send, _edit, throttle_secs=4.0,
                                    max_len=DISCORD_MSG_LIMIT,
@@ -1592,7 +1597,8 @@ class DiscordBot:
         # survived the anti-impersonation passes.
         raw_model_content = text
         text, _ = extract_inline_thinking(text, thinking)
-        text, _imp = clean_kin_reply(text, self.agent_name)
+        text, _imp = clean_kin_reply(text, self.agent_name,
+                                     known_speakers=_shown)
         text = (text or "").strip()
 
         # Empty after cleanup. This used to fall off the end of the method:
@@ -1610,7 +1616,8 @@ class DiscordBot:
             salvaged = ""
             for candidate in reversed(intermediate_seen):
                 cand, _ = extract_inline_thinking(candidate, "")
-                cand, _ = clean_kin_reply(cand, self.agent_name)
+                cand, _ = clean_kin_reply(cand, self.agent_name,
+                                          known_speakers=_shown)
                 cand = (cand or "").strip()
                 if cand:
                     salvaged = cand

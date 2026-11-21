@@ -1543,7 +1543,13 @@ def _finish_cron_reply(kin, result, messages, model, options, cache,
     # will find it.
     try:
         from chat_helpers import clean_kin_reply
-        reply, _impersonated = clean_kin_reply(reply, kin)
+        try:
+            from chat_helpers import speakers_shown
+            _shown = speakers_shown(load_agent_conversation(kin)[-200:])
+        except Exception:
+            _shown = set()
+        reply, _impersonated = clean_kin_reply(reply, kin,
+                                               known_speakers=_shown)
         reply = (reply or "").strip()
         if _impersonated:
             cron_helpers.log_cron_error(
