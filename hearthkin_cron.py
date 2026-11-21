@@ -1629,7 +1629,9 @@ def _finish_cron_reply(kin, result, messages, model, options, cache,
             _all_thinking = "\n\n".join(
                 t for t in ((getattr(result, "thinking", "") or "").strip(),
                             (_thinking or "").strip()) if t)
-            _block = turn_steering.reasoning_block(_all_thinking)
+            from kin_persistence import load_agent_config as _lac
+            _block = turn_steering.reasoning_block(
+                _all_thinking, cfg=_lac(kin))  # its own length setting
             if _block:
                 bridge_confirm = ((bridge_confirm + "\n\n") if bridge_confirm
                                   else "") + _block

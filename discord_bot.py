@@ -1622,7 +1622,9 @@ class DiscordBot:
         # diagnostic value is in seeing what the model returned versus what
         # survived the anti-impersonation passes.
         raw_model_content = text
-        text, _ = extract_inline_thinking(text, thinking)
+        # Keep reasoning that came inside the reply text with the rest of
+        # it (it was thrown away; audit, 20 Nov 2026).
+        text, thinking = extract_inline_thinking(text, thinking)
         text, _imp = clean_kin_reply(text, self.agent_name,
                                      known_speakers=_shown)
         text = (text or "").strip()

@@ -986,7 +986,8 @@ class LifecycleMixin:
                     self._private_view(convo_snapshot, cfg)), keep_window)
             history = []
             for _m in compacted:
-                _entry = self._history_entry_for_model(_m)
+                # This kin's own settings, not the one open in the window.
+                _entry = self._history_entry_for_model(_m, cfg)
                 if _entry is not None:
                     history.append(_entry)
             messages = []

@@ -6257,7 +6257,8 @@ class TelegramBot:
                 # BEFORE the answer it explains, not appended after it.
                 if show_thinking:
                     import turn_steering
-                    _block = turn_steering.reasoning_block(thinking)
+                    _block = turn_steering.reasoning_block(
+                        thinking, cfg=full_cfg)  # its own length setting
                     if _block:
                         self._send_chunked(chat_id, _block)
             # Authoring-bridge confirmation (basename-only — no full paths in a

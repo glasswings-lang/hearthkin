@@ -121,7 +121,7 @@ class RenderMixin:
                     if not str((m or {}).get("source") or "").startswith(
                         ("telegram:group:", "discord:"))]
 
-    def _history_entry_for_model(self, msg):
+    def _history_entry_for_model(self, msg, kin_cfg=None):
         """Translate one stored conversation message into the dict shape the
         chat backend expects. Preserves the fields the model needs to see:
         tool_calls on assistant turns (so the next turn pairs results with
@@ -239,7 +239,9 @@ class RenderMixin:
         if isinstance(msg.get("thinking"), str) and msg["thinking"]:
             feed = False
             try:
-                feed = bool((self.agent_cfg or {}).get("feed_thinking", False))
+                feed = bool((kin_cfg if kin_cfg is not None
+                             else (self.agent_cfg or {})).get(
+                                 "feed_thinking", False))
             except Exception:
                 feed = False
             if feed:
