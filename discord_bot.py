@@ -694,7 +694,12 @@ class DiscordBot:
             waiting[uid] = max(0, waiting.get(uid, 1) - 1)
         if self.on_activity:
             try:
-                self.on_activity("discord", message.channel.id)
+                # Where this conversation is stored decides which memory
+                # counter ticks: the same per-person, per-channel rule as
+                # the storage itself (audit, 20 Nov 2026).
+                self.on_activity("discord", message.channel.id,
+                                 self._shares_desktop(message.author.id,
+                                                      message.channel.id))
             except Exception:
                 pass
 

@@ -242,8 +242,8 @@ class BotIntegrationMixin:
                 # ticks the right per-(kin, scope) distillation counter —
                 # so Discord conversations become long-term memory too,
                 # exactly like Telegram. ident is the channel_id.
-                on_activity=lambda kind, ident, an=agent_name: wx.CallAfter(
-                    self._on_discord_activity, an, ident),
+                on_activity=lambda kind, ident, share=None, an=agent_name:
+                    wx.CallAfter(self._on_discord_activity, an, ident, share),
                 # Routes exec approval to THIS desktop (wx dialog), never
                 # to the Discord server — a member can trigger a command,
                 # but only the operator can approve it running. The REMOTE
@@ -294,14 +294,19 @@ class BotIntegrationMixin:
         share = bool((cfg.get("discord") or {}).get("share_desktop", False))
         return "desktop" if share else f"discord:{channel_id}"
 
-    def _on_discord_activity(self, agent_name, channel_id):
+    def _on_discord_activity(self, agent_name, channel_id, share=None):
         """A Discord mention was handled — tick that scope's distillation
         counter and maybe fire distillation, same as _on_telegram_activity."""
         if getattr(self, "_loading_agent", False):
             return
         if not isinstance(channel_id, (int, str)):
             return
-        scope_key = self._distill_scope_for_discord(agent_name, channel_id)
+        # The bot says where it stored this turn (per person and channel);
+        # the kin-wide box is only the fallback for an older bot.
+        if share is None:
+            scope_key = self._distill_scope_for_discord(agent_name, channel_id)
+        else:
+            scope_key = "desktop" if share else f"discord:{channel_id}"
         key = (agent_name, scope_key)
         self._messages_since_distill[key] = (
             self._messages_since_distill.get(key, 0) + 1

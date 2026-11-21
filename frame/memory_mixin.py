@@ -879,16 +879,17 @@ class MemoryMixin:
             if bool(group_share.get(sid) or group_share.get(chat_id)):
                 continue
             keys.append(f"tg:group:{sid}")
-        # Discord channels aren't pre-configured (the bot learns them at
-        # runtime), so enumerate the ones with segregated history on disk.
-        # Shared Discord history rolls into the "desktop" scope instead.
-        if not bool((cfg.get("discord") or {}).get("share_desktop", False)):
-            try:
-                from kin_persistence import load_discord_history
-                for cid in (load_discord_history(agent_name) or {}).keys():
-                    keys.append(f"discord:{cid}")
-            except Exception:
-                pass
+        # Discord channels with history of their own on disk. Shared Discord
+        # history rolls into the "desktop" scope. Whether a channel is kept
+        # apart is decided per person and per channel now, so every channel
+        # with its own history is listed, not only when the old kin-wide
+        # box is off (audit, 20 Nov 2026).
+        try:
+            from kin_persistence import load_discord_history
+            for cid in (load_discord_history(agent_name) or {}).keys():
+                keys.append(f"discord:{cid}")
+        except Exception:
+            pass
         # Rooms the kin is in that have distill_to_memory on. Always
         # their own scope — a room never rolls into "desktop".
         keys.extend(self._room_scopes_for_kin(agent_name))

@@ -637,12 +637,17 @@ class CronExecMixin:
                 _dests = entry.get("destinations")
                 destinations = (
                     _dests if isinstance(_dests, list) and _dests else None)
-            hearthkin_cron._run_isolated(
-                kin, hearthkin_cron.cfg_for_entry(cfg, entry), time_label, prompt,
-                tend_retry=tend_retry,
-                destinations=destinations,
-                history_path=hearthkin_cron.own_history_path(kin, entry, entry_index),
-                gesture_retry=hearthkin_cron.gesture_retry_enabled(entry))
+            # The limit and the stop a subprocess wake-up gets (audit, 20 Nov
+            # 2026: run here, it had neither).
+            with hearthkin_cron.in_app_wake_limits(cfg):
+                hearthkin_cron._run_isolated(
+                    kin, hearthkin_cron.cfg_for_entry(cfg, entry), time_label,
+                    prompt,
+                    tend_retry=tend_retry,
+                    destinations=destinations,
+                    history_path=hearthkin_cron.own_history_path(
+                        kin, entry, entry_index),
+                    gesture_retry=hearthkin_cron.gesture_retry_enabled(entry))
         except Exception as e:
             cron_helpers.log_cron_error(kin, type(e).__name__, str(e))
             try:

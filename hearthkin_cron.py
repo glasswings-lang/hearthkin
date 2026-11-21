@@ -158,10 +158,48 @@ _WAKE_STARTED = None        # set in main(); None = never stop (tests, imports)
 _WAKE_TOOL_CAP = None       # the kin's limit, set once the config is loaded
 
 
-def _cron_should_stop():
-    if _WAKE_STARTED is None:
+# The same two, per thread, for wake-ups the desktop app runs on worker
+# threads (several kins at once). Those never went through main(), so they
+# had no tool-call limit and Ctrl+Shift+X couldn't stop them (audit, 20 Nov
+# 2026). Set by in_app_wake_limits.
+_WAKE_LOCAL = threading.local()
+
+
+def _wake_started():
+    return getattr(_WAKE_LOCAL, "started", None) or _WAKE_STARTED
+
+
+def _wake_tool_cap():
+    return getattr(_WAKE_LOCAL, "cap", None) or _WAKE_TOOL_CAP
+
+
+class in_app_wake_limits:
+    """Context manager: give a wake-up run on this thread the limit and the
+    stop a subprocess wake-up gets from main()."""
+
+    def __init__(self, cfg):
+        try:
+            self.cap = max(0, int((cfg or {}).get("remote_max_tool_calls", 15)))
+        except (TypeError, ValueError):
+            self.cap = 15
+
+    def __enter__(self):
+        import time as _time
+        _WAKE_LOCAL.started = _time.time()
+        _WAKE_LOCAL.cap = self.cap
+        return self
+
+    def __exit__(self, *exc):
+        _WAKE_LOCAL.started = None
+        _WAKE_LOCAL.cap = None
         return False
-    return cron_helpers.wakeup_stop_requested(_WAKE_STARTED)
+
+
+def _cron_should_stop():
+    started = _wake_started()
+    if started is None:
+        return False
+    return cron_helpers.wakeup_stop_requested(started)
 
 
 # Per-thread: the desktop app runs isolated wake-ups on worker threads, so two
@@ -186,8 +224,8 @@ def _cron_tool_loop(*args, **kwargs):
                     pass
             sink(name, args_, result, is_error)
         kwargs["on_tool_call"] = _both
-    if _WAKE_TOOL_CAP:
-        kwargs.setdefault("max_tool_calls", _WAKE_TOOL_CAP)
+    if _wake_tool_cap():
+        kwargs.setdefault("max_tool_calls", _wake_tool_cap())
     result = llm_backend.run_tool_loop(*args, **kwargs)
     if getattr(result, "stopped", False) and _cron_should_stop():
         raise WakeStopped()
