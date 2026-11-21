@@ -8,6 +8,8 @@ written for you. It's a working brief for AI coding assistants, written by them,
 and it talks *about* the maintainer rather than *to* the reader. Useful as
 reference, wrong as an introduction. Start here instead, then read
 [`docs/architecture.md`](docs/architecture.md) for the structural tour.
+For what has changed lately and what's still open, read
+[`docs/where-things-stand.md`](docs/where-things-stand.md) after that.
 
 ## What this is
 
