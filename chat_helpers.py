@@ -1203,8 +1203,9 @@ def _where_label(place, kin_cfg):
         return f'the Telegram group "{name}"' if name else "a Telegram group"
     if place.startswith("discord:"):
         cid = place[len("discord:"):]
-        names = (cfg.get("discord") or {}).get("channel_labels") or {}
-        name = str(names.get(cid) or "").strip()
+        entry = ((cfg.get("discord") or {}).get("channel_entries")
+                 or {}).get(cid) or {}
+        name = str(entry.get("label") or "").strip()
         return f'the Discord channel "{name}"' if name else "a Discord channel"
     return "your private chats"
 

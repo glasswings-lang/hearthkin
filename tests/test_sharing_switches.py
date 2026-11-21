@@ -91,7 +91,8 @@ def cfg_with(share=None, ps=None, sp=None, cps=None, csp=None):
         tg["group_private_sees"] = {GROUP: ps}
     if sp is not None:
         tg["group_sees_private"] = {GROUP: sp}
-    dc = {"channel_labels": {CHAN: "general"}}
+    dc = {"channel_entries": {CHAN: {"label": "general", "policy": "always",
+                                     "exclude": []}}}
     if cps is not None:
         dc["channel_private_sees"] = {CHAN: cps}
     if csp is not None:

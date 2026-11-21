@@ -1,29 +1,32 @@
 # SPDX-License-Identifier: CC0-1.0
 
-"""dialogs.discord_channel - one Discord server channel's sharing switches.
+"""dialogs.discord_channel - one Discord server channel, like a Telegram group.
 
-Added 20 Nov 2026, the Discord counterpart of the Telegram group window's
-two switches. Discord channels had no window of their own: which channels a
-kin answers in is a line of IDs on the Discord tab, and that stays as it is.
-This window is only about what a channel shares with the person's private
-chats, so it sits next to the people list on the same tab.
+Added 20 Nov 2026 so Discord channels work the way Telegram groups do: each
+channel the kin is in has its own window, with a name the kin sees, when the
+kin answers there, a mute list, and the two switches for what the channel
+shares with the person's private chats. Before, Discord had one line of
+channel IDs, one answering rule for every channel, one people list for every
+place, and no way to mute anyone.
 """
 
 import wx
 
 
 class _DiscordChannelDialog(wx.Dialog):
-    """Add or edit one channel: its ID, a name for it, and the two sharing
-    switches. get_values() returns (channel_id, name, private_sees,
-    sees_private); channel_id is digits only, "" when what was typed
-    wasn't an ID.
+    """Add or edit one channel. get_values() returns (channel_id, name,
+    policy, exclude, private_sees, sees_private); channel_id is digits only,
+    "" when what was typed wasn't an ID; exclude is a list of user ID
+    strings.
 
-    Tab order: ID, name, the two switches, Save, Cancel."""
+    Tab order: ID, name, the two answering choices, the mute list and its
+    buttons, the two switches, Save, Cancel."""
 
-    def __init__(self, parent, channel_id="", name="", private_sees=False,
-                 sees_private=False):
+    def __init__(self, parent, channel_id="", name="", policy="mention_only",
+                 exclude=None, private_sees=False, sees_private=False):
         super().__init__(parent, title="Discord channel",
                          style=wx.DEFAULT_DIALOG_STYLE)
+        self._exclude = [str(x) for x in (exclude or []) if str(x).strip()]
         outer = wx.BoxSizer(wx.VERTICAL)
 
         id_lbl = wx.StaticText(self, label="Channel &ID:")
@@ -33,11 +36,40 @@ class _DiscordChannelDialog(wx.Dialog):
                   border=8)
 
         name_lbl = wx.StaticText(
-            self, label="&Name (the kin sees it with what's said there):")
+            self, label="&Name (the kin sees this as the channel's name):")
         self.name_field = wx.TextCtrl(self, value=str(name or ""))
         outer.Add(name_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         outer.Add(self.name_field, flag=wx.EXPAND | wx.LEFT | wx.RIGHT,
                   border=8)
+
+        self.mention_rb = wx.RadioButton(
+            self, label="&Mention-only: the kin answers when @-mentioned "
+                        "or replied to with a mention",
+            style=wx.RB_GROUP)
+        self.always_rb = wx.RadioButton(
+            self, label="Al&ways: the kin answers every message here "
+                        "(best in a quiet channel)")
+        (self.always_rb if policy == "always" else self.mention_rb).SetValue(
+            True)
+        outer.Add(self.mention_rb, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        outer.Add(self.always_rb, flag=wx.LEFT | wx.RIGHT, border=8)
+
+        muted_lbl = wx.StaticText(self, label="Muted in this channel:")
+        self.muted_list = wx.ListBox(self, style=wx.LB_SINGLE)
+        self.muted_list.SetName(
+            "Muted in this channel (the kin ignores these people here)")
+        self.muted_list.SetMinSize((-1, 70))
+        outer.Add(muted_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        outer.Add(self.muted_list, flag=wx.EXPAND | wx.LEFT | wx.RIGHT,
+                  border=8)
+        mute_row = wx.BoxSizer(wx.HORIZONTAL)
+        add_btn = wx.Button(self, label="Mute someone by I&D…")
+        add_btn.Bind(wx.EVT_BUTTON, self._on_mute)
+        unmute_btn = wx.Button(self, label="&Unmute")
+        unmute_btn.Bind(wx.EVT_BUTTON, self._on_unmute)
+        mute_row.Add(add_btn, flag=wx.RIGHT, border=6)
+        mute_row.Add(unmute_btn)
+        outer.Add(mute_row, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
 
         self.private_sees_check = wx.CheckBox(
             self,
@@ -60,15 +92,17 @@ class _DiscordChannelDialog(wx.Dialog):
 
         hint = wx.TextCtrl(
             self,
-            value=("With either switch on, what's said in this channel is "
-                   "kept with your desktop chat, so clearing the desktop "
-                   "chat clears it too. To find a channel's ID, turn on "
-                   "Developer Mode in Discord (Settings, Advanced), then "
-                   "right-click the channel and choose Copy ID."),
+            value=("Everyone in this channel can talk to the kin except the "
+                   "people muted here. Your people list is for direct "
+                   "messages only. With either switch on, what's said here is "
+                   "kept with your desktop chat, so clearing the desktop chat "
+                   "clears it too. To find an ID, turn on Developer Mode in "
+                   "Discord (Settings, Advanced), then right-click the "
+                   "channel or person and choose Copy ID."),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
             | wx.TE_WORDWRAP)
-        hint.SetName("What these switches do")
-        hint.SetMinSize((420, 80))
+        hint.SetName("How this channel works")
+        hint.SetMinSize((460, 100))
         outer.Add(hint, flag=wx.EXPAND | wx.ALL, border=8)
 
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
@@ -82,10 +116,32 @@ class _DiscordChannelDialog(wx.Dialog):
 
         self.SetSizer(outer)
         self.Fit()
+        self._refresh_muted()
         (self.name_field if channel_id else self.id_field).SetFocus()
+
+    def _refresh_muted(self):
+        self.muted_list.Set(list(self._exclude))
+
+    def _on_mute(self, _event):
+        dlg = wx.TextEntryDialog(
+            self, "Discord user ID to mute in this channel:", "Mute someone")
+        if dlg.ShowModal() == wx.ID_OK:
+            uid = "".join(c for c in dlg.GetValue() if c.isdigit())
+            if uid and uid not in self._exclude:
+                self._exclude.append(uid)
+                self._refresh_muted()
+        dlg.Destroy()
+
+    def _on_unmute(self, _event):
+        idx = self.muted_list.GetSelection()
+        if 0 <= idx < len(self._exclude):
+            self._exclude.pop(idx)
+            self._refresh_muted()
 
     def get_values(self):
         cid = "".join(c for c in self.id_field.GetValue() if c.isdigit())
-        return (cid, self.name_field.GetValue().strip(),
+        policy = "always" if self.always_rb.GetValue() else "mention_only"
+        return (cid, self.name_field.GetValue().strip(), policy,
+                list(self._exclude),
                 bool(self.private_sees_check.GetValue()),
                 bool(self.sees_private_check.GetValue()))

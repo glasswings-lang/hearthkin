@@ -81,8 +81,13 @@ d.id_field.SetValue(" 12 34x5 ")
 d.name_field.SetValue(" general ")
 d.private_sees_check.SetValue(True)
 d.sees_private_check.SetValue(True)
-check("the Discord channel window gives back digits, name and both switches",
-      d.get_values() == ("12345", "general", True, True))
+check("the Discord channel window gives back digits, name, when to answer, "
+      "nobody muted, and both switches",
+      d.get_values() == ("12345", "general", "mention_only", [], True, True))
+d.always_rb.SetValue(True)
+d._exclude.append("42")
+check("...and answering every message, with someone muted",
+      d.get_values()[2:4] == ("always", ["42"]))
 d.Destroy()
 
 frame.Destroy()

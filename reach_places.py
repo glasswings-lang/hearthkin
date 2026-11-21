@@ -60,12 +60,18 @@ def place_rows(cfg):
             rows.append({"surface": "discord_dm", "id": s, "label": nm or s,
                          "display": (f"Discord DM: {nm} ({s})" if nm
                                      else f"Discord DM: {s}")})
-        for cid in (dc.get("channels") or []):
+        # The channel list, with the names given there (20 Nov 2026: this
+        # read the older line of IDs and showed only numbers).
+        from discord_bot import channel_entries
+        for cid, e in channel_entries(dc).items():
             s = str(cid).strip()
             if not s or not s.isdigit():
                 continue
-            rows.append({"surface": "discord_channel", "id": s, "label": s,
-                         "display": f"Discord channel: {s}"})
+            nm = str(e.get("label") or "").strip()
+            rows.append({"surface": "discord_channel", "id": s,
+                         "label": nm or s,
+                         "display": (f"Discord channel: {nm} ({s})" if nm
+                                     else f"Discord channel: {s}")})
     # A kin addresses a place by its label, so two places may never share
     # one: "Wren" on Telegram and "Wren" on Discord become "Wren on
     # Telegram" and "Wren on Discord". Without this the kin naming one

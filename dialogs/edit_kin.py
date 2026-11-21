@@ -1385,7 +1385,9 @@ class EditKinDialog(wx.Dialog):
         self.dc_token_field.Bind(wx.EVT_KILL_FOCUS, self._on_dc_token_changed)
         self.dc_token_field.Bind(wx.EVT_TEXT_ENTER, self._on_dc_token_changed)
 
-        dc_policy_lbl = wx.StaticText(host, label="When to &respond:")
+        dc_policy_lbl = wx.StaticText(
+            host, label="When to &respond in servers, if no channels are "
+                        "listed below:")
         self.dc_policy_choice = wx.Choice(host, choices=[
             "Only when mentioned (@)",
             "Every message (quiet channels only)",
@@ -1400,32 +1402,32 @@ class EditKinDialog(wx.Dialog):
         self.dc_guilds_field = wx.TextCtrl(host, style=wx.TE_PROCESS_ENTER)
         self.dc_guilds_field.Bind(wx.EVT_KILL_FOCUS, self._on_dc_where_changed)
         self.dc_guilds_field.Bind(wx.EVT_TEXT_ENTER, self._on_dc_where_changed)
-        dc_channels_lbl = wx.StaticText(
-            host, label="Only answer in these c&hannels (IDs, blank means any):")
-        self.dc_channels_field = wx.TextCtrl(host, style=wx.TE_PROCESS_ENTER)
-        self.dc_channels_field.Bind(wx.EVT_KILL_FOCUS, self._on_dc_where_changed)
-        self.dc_channels_field.Bind(wx.EVT_TEXT_ENTER, self._on_dc_where_changed)
         dc_where_hint = wx.TextCtrl(
             host,
             value=("To find an ID, turn on Developer Mode in Discord "
                    "(Settings, Advanced), then right-click a server or channel "
-                   "and choose Copy ID. Separate several with commas. If you "
-                   "list servers, the kin stops answering direct messages, "
-                   "since those aren't in a server. Anything that isn't a "
-                   "number is dropped when you leave the box."),
+                   "and choose Copy ID. Separate several servers with commas. "
+                   "The server list only matters when no channels are listed "
+                   "below; it never affects direct messages. Anything that "
+                   "isn't a number is dropped when you leave the box."),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
             | wx.TE_WORDWRAP)
         dc_where_hint.SetName("How the server and channel lists work")
         dc_where_hint.SetMinSize((-1, 80))
 
-        # Channels and the person's private chats (20 Nov 2026): each
-        # channel listed here has two switches, as a Telegram group does.
-        # The line of channel IDs above still decides where the kin answers.
+        # The channels the kin is in (20 Nov 2026), each with its own window
+        # like a Telegram group: a name, when to answer, a mute list, and the
+        # two sharing switches. Everyone in a listed channel can talk except
+        # the muted; the people list below is for direct messages. This
+        # replaced a line of channel IDs that shared one answering rule and
+        # one people list with everywhere else.
         dc_sharing_lbl = wx.StaticText(
-            host, label="Channels that share with your private chats:")
+            host, label="C&hannels the kin is in (everyone there can talk "
+                        "except muted people):")
         self.dc_sharing_list = wx.ListBox(host, style=wx.LB_SINGLE)
         self.dc_sharing_list.SetName(
-            "Channels that share with your private chats")
+            "Channels the kin is in (everyone there can talk except muted "
+            "people; the people list is for direct messages)")
         self.dc_sharing_list.SetMinSize((-1, 80))
         dc_sharing_btn_row = wx.BoxSizer(wx.HORIZONTAL)
         self.dc_add_channel_btn = wx.Button(host, label="Add channel...")
@@ -1448,8 +1450,9 @@ class EditKinDialog(wx.Dialog):
         # editor dialog fixes all three.
         dc_allow_lbl = wx.StaticText(
             host,
-            label=("&Who can talk to this kin on Discord (nobody until you "
-                   "add someone; tool access set per person):"))
+            label=("&Who can message this kin directly on Discord (nobody "
+                   "until you add someone; tool access set per person, in "
+                   "channels too):"))
         self.dc_users_list = wx.ListBox(host, style=wx.LB_SINGLE)
         self.dc_users_list.SetMinSize((-1, 140))
         dc_users_btn_row = wx.BoxSizer(wx.HORIZONTAL)
@@ -1513,12 +1516,12 @@ class EditKinDialog(wx.Dialog):
         # The people list and the token field stretch with the tab; everything
         # else keeps its natural width.
         _wide = (self.dc_token_field, self.dc_users_list,
-                 self.dc_guilds_field, self.dc_channels_field, dc_where_hint,
+                 self.dc_guilds_field, dc_where_hint,
                  self.dc_sharing_list)
         for _w in (dc_label, dc_token_lbl, self.dc_token_field, dc_policy_lbl,
                    self.dc_policy_choice,
                    dc_guilds_lbl, self.dc_guilds_field,
-                   dc_channels_lbl, self.dc_channels_field, dc_where_hint,
+                   dc_where_hint,
                    dc_sharing_lbl, self.dc_sharing_list, dc_sharing_btn_row,
                    dc_allow_lbl, self.dc_users_list,
                    dc_users_btn_row,
@@ -1854,8 +1857,6 @@ class EditKinDialog(wx.Dialog):
         self._refresh_dc_users_list()
         self.dc_guilds_field.SetValue(
             ", ".join(str(x) for x in (dc.get("guilds") or [])))
-        self.dc_channels_field.SetValue(
-            ", ".join(str(x) for x in (dc.get("channels") or [])))
         self._refresh_dc_sharing_list()
         self.dc_share_check.SetValue(bool(dc.get("share_desktop", False)))
         self.dc_enabled_check.SetValue(bool(dc.get("enabled", False)))
@@ -3720,8 +3721,7 @@ class EditKinDialog(wx.Dialog):
             event.Skip()
         if self._loading:
             return
-        for key, field in (("guilds", self.dc_guilds_field),
-                           ("channels", self.dc_channels_field)):
+        for key, field in (("guilds", self.dc_guilds_field),):
             ids = self._parse_discord_ids(field.GetValue())
             shown = ", ".join(ids)
             if field.GetValue() != shown:
@@ -3822,52 +3822,74 @@ class EditKinDialog(wx.Dialog):
         save_agent_config(self.kin, cfg)
         self.cfg = cfg
 
-    # --- Discord channels' sharing switches (20 Nov 2026) --- #
+    # --- Discord channels, like Telegram groups (20 Nov 2026) --- #
 
-    def _dc_sharing_ids(self):
+    def _dc_entries(self):
+        """{channel id: entry} from the config, the older line of channel
+        IDs read as channels on the kin's one policy (people list only)."""
+        from discord_bot import channel_entries
         dc = self.cfg.get("discord") or {}
-        ids = []
-        for key in ("channel_labels", "channel_private_sees",
-                    "channel_sees_private"):
-            for cid in (dc.get(key) or {}):
-                if str(cid) not in ids:
-                    ids.append(str(cid))
-        return ids
+        out = {}
+        for cid, e in channel_entries(dc).items():
+            out[cid] = {"label": e["label"], "policy": e["policy"],
+                        "exclude": sorted(e["exclude"])}
+            if e.get("people_only"):
+                out[cid]["people_only"] = True
+        return out
 
     def _refresh_dc_sharing_list(self):
+        _prev_idx = self.dc_sharing_list.GetSelection()
+        _ids = getattr(self, "_dc_sharing_ids_in_order", [])
+        _prev = _ids[_prev_idx] if 0 <= _prev_idx < len(_ids) else None
         dc = self.cfg.get("discord") or {}
-        names = dc.get("channel_labels") or {}
         ps = dc.get("channel_private_sees") or {}
         sp = dc.get("channel_sees_private") or {}
-        self._dc_sharing_ids_in_order = self._dc_sharing_ids()
+        entries = self._dc_entries()
+        self._dc_sharing_ids_in_order = list(entries)
         items = []
-        for cid in self._dc_sharing_ids_in_order:
-            name = str(names.get(cid) or "").strip()
-            parts = []
+        for cid, e in entries.items():
+            parts = ["answers when mentioned" if e["policy"] == "mention_only"
+                     else "answers every message"]
+            if e["exclude"]:
+                parts.append(f"{len(e['exclude'])} muted")
             if ps.get(cid):
                 parts.append("your private chats include it")
             if sp.get(cid):
                 parts.append("it gets your private chats")
-            what = ", ".join(parts) if parts else "shares nothing"
-            items.append(f"{name or 'Channel'} ({cid}): {what}")
-        self.dc_sharing_list.Set(items)
+            if e.get("people_only"):
+                parts.append("people list only")
+            items.append(f"{e['label'] or 'Channel'} ({cid}): "
+                         + ", ".join(parts))
+        rebuild_listbox(self.dc_sharing_list, items,
+                        keys=self._dc_sharing_ids_in_order,
+                        saved_key=_prev, saved_index=_prev_idx)
 
-    def _write_dc_channel(self, cid, name, private_sees, sees_private,
-                          old_cid=None):
+    def _write_dc_channel(self, cid, values, old_cid=None):
+        """Store one channel (values = name, policy, exclude, private_sees,
+        sees_private), or remove `old_cid` when cid is None. Writes the
+        channel list in its own shape and retires the older line of IDs."""
+        entries = self._dc_entries()
         cfg = load_agent_config(self.kin)
         dc = cfg.setdefault("discord", dict(DEFAULT_DISCORD_CONFIG))
-        for key, val in (("channel_labels", name),
-                         ("channel_private_sees", private_sees),
-                         ("channel_sees_private", sees_private)):
-            m = dict(dc.get(key) or {})
-            if old_cid and old_cid != cid:
-                m.pop(old_cid, None)
-            if cid is not None:
-                if val is None:
-                    m.pop(cid, None)
-                else:
-                    m[cid] = val
-            dc[key] = m
+        ps = dict(dc.get("channel_private_sees") or {})
+        sp = dict(dc.get("channel_sees_private") or {})
+        if old_cid and old_cid != cid:
+            entries.pop(old_cid, None)
+            ps.pop(old_cid, None)
+            sp.pop(old_cid, None)
+        if cid is not None:
+            name, policy, exclude, private_sees, sees_private = values
+            keep = entries.get(cid, {})
+            entries[cid] = {"label": name, "policy": policy,
+                            "exclude": list(exclude)}
+            if keep.get("people_only"):
+                entries[cid]["people_only"] = True
+            ps[cid] = bool(private_sees)
+            sp[cid] = bool(sees_private)
+        dc["channel_entries"] = entries
+        dc["channels"] = []
+        dc["channel_private_sees"] = ps
+        dc["channel_sees_private"] = sp
         save_agent_config(self.kin, cfg)
         self.cfg = cfg
         self._refresh_dc_sharing_list()
@@ -3884,13 +3906,13 @@ class EditKinDialog(wx.Dialog):
     def _on_dc_add_channel(self, _event):
         dlg = _DiscordChannelDialog(self)
         if dlg.ShowModal() == wx.ID_OK:
-            cid, name, ps, sp = dlg.get_values()
+            cid, *values = dlg.get_values()
             if not cid:
                 wx.MessageBox("A channel ID is a number. Copy it from "
                               "Discord with Developer Mode on.",
                               "Add channel", wx.OK | wx.ICON_WARNING)
             else:
-                self._write_dc_channel(cid, name, ps, sp)
+                self._write_dc_channel(cid, values)
         dlg.Destroy()
 
     def _on_dc_edit_channel(self, _event):
@@ -3898,20 +3920,22 @@ class EditKinDialog(wx.Dialog):
         if cid_old is None:
             return
         dc = self.cfg.get("discord") or {}
+        e = self._dc_entries().get(cid_old) or {}
         dlg = _DiscordChannelDialog(
-            self, channel_id=cid_old,
-            name=(dc.get("channel_labels") or {}).get(cid_old, ""),
+            self, channel_id=cid_old, name=e.get("label", ""),
+            policy=e.get("policy", "mention_only"),
+            exclude=e.get("exclude", []),
             private_sees=bool((dc.get("channel_private_sees") or {}).get(
                 cid_old)),
             sees_private=bool((dc.get("channel_sees_private") or {}).get(
                 cid_old)))
         if dlg.ShowModal() == wx.ID_OK:
-            cid, name, ps, sp = dlg.get_values()
+            cid, *values = dlg.get_values()
             if not cid:
                 wx.MessageBox("A channel ID is a number.", "Edit channel",
                               wx.OK | wx.ICON_WARNING)
             else:
-                self._write_dc_channel(cid, name, ps, sp, old_cid=cid_old)
+                self._write_dc_channel(cid, values, old_cid=cid_old)
         dlg.Destroy()
 
     def _on_dc_remove_channel(self, _event):
@@ -3919,12 +3943,13 @@ class EditKinDialog(wx.Dialog):
         if cid is None:
             return
         if wx.MessageBox(
-                f"Stop sharing channel {cid} with your private chats? What "
+                f"Remove channel {cid}? The kin stops talking there. What "
                 f"was already said there stays where it's kept.",
                 "Remove channel",
-                wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION) != wx.YES:
+                wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT
+                | wx.ICON_QUESTION) != wx.YES:
             return
-        self._write_dc_channel(None, None, None, None, old_cid=cid)
+        self._write_dc_channel(None, None, old_cid=cid)
 
     def _save_discord_param(self, key, val):
         if self._loading:

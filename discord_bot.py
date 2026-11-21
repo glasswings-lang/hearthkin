@@ -88,6 +88,41 @@ _COMMANDS = frozenset({"help", "commands", "status", "regen", "regenerate",
                        "retry", "undo", "clear", "forget", "compact"})
 
 
+def channel_entries(dcfg):
+    """The server channels a kin is in: {channel id: {"label", "policy",
+    "exclude"}}, from the Discord tab's channel list. A list kept the older
+    way (a line of channel IDs) is read as channels answering on the kin's
+    one policy, with nobody muted, and (as it was then) only people on the
+    people list talking. Never raises."""
+    out = {}
+    try:
+        d = dcfg if isinstance(dcfg, dict) else {}
+        entries = d.get("channel_entries")
+        if isinstance(entries, dict) and entries:
+            for cid, e in entries.items():
+                e = e if isinstance(e, dict) else {}
+                pol = str(e.get("policy") or "mention_only").lower()
+                out[str(cid)] = {
+                    "label": str(e.get("label") or ""),
+                    "policy": pol if pol in ("mention_only", "always")
+                    else "mention_only",
+                    "exclude": {str(x).strip() for x in (e.get("exclude") or [])
+                                if str(x).strip()},
+                }
+            return out
+        pol = str(d.get("policy") or "mention_only").lower()
+        for cid in d.get("channels") or []:
+            if str(cid).strip():
+                # Kept as it was: in a list from before, only people on
+                # the people list could talk, and that doesn't widen unasked.
+                out[str(cid).strip()] = {"label": "", "policy": pol,
+                                         "exclude": set(),
+                                         "people_only": True}
+    except Exception:
+        return {}
+    return out
+
+
 def _parse_command(content):
     """(name, rest) for a known command, else None."""
     s = (content or "").strip()
@@ -435,36 +470,54 @@ class DiscordBot:
 
         cfg = self.get_config() or {}
         dcfg = cfg.get("discord", {}) or {}
-        policy = (dcfg.get("policy") or "mention_only").lower()
+        in_dm = getattr(message, "guild", None) is None
 
-        # A direct message is spoken to the kin by definition (12 Nov 2026):
-        # it used to need an @-mention too under the default policy, which
-        # a voice message can't carry at all.
-        addressed = (client.user in message.mentions
-                     or getattr(message, "guild", None) is None)
-        if policy == "mention_only" and not addressed:
-            return  # not spoken to — stay quiet (the whole point on a busy server)
+        # Server channels work like Telegram groups (20 Nov 2026): the kin
+        # talks in the channels on its list, with everyone there except the
+        # people muted in that channel, each channel answering on its own
+        # terms. The people list is for direct messages. Before, one people
+        # list decided everywhere and one policy covered every channel, the
+        # opposite of Telegram's design for the same thing.
+        listed = channel_entries(dcfg)
+        if not in_dm and listed:
+            entry = listed.get(str(message.channel.id))
+            if entry is None:
+                return  # not a channel the kin is in
+            if str(message.author.id) in entry["exclude"]:
+                return  # muted here
+            if entry.get("people_only") and not self._is_allowed(
+                    message.author.id, dcfg.get("allow_from")):
+                return  # a channel listed the older way: people list only
+            if (entry["policy"] == "mention_only"
+                    and client.user not in message.mentions):
+                return  # not spoken to
+        else:
+            policy = (dcfg.get("policy") or "mention_only").lower()
+            # A direct message is spoken to the kin by definition (12 Nov
+            # 2026): it used to need an @-mention too under the default
+            # policy, which a voice message can't carry at all.
+            addressed = client.user in message.mentions or in_dm
+            if policy == "mention_only" and not addressed:
+                return  # not spoken to — stay quiet on a busy server
 
-        # Location gate (coarse, optional): when guilds/channels allowlists
-        # are configured, only engage there — so a bot added to an
-        # unexpected server stays silent even if a listed user is present.
-        # Empty lists mean "no location restriction" and access falls to
-        # allow_from alone.
-        guilds = [str(x) for x in (dcfg.get("guilds") or []) if str(x).strip()]
-        if guilds:
-            gid = getattr(getattr(message, "guild", None), "id", None)
-            if gid is None or str(gid) not in guilds:
-                return
-        channels = [str(x) for x in (dcfg.get("channels") or []) if str(x).strip()]
-        if channels and str(message.channel.id) not in channels:
-            return
+            # Location gate, for servers only: a direct message is in no
+            # server, and listing servers used to shut direct messages off
+            # without a word (audit, 20 Nov 2026).
+            guilds = [str(x) for x in (dcfg.get("guilds") or [])
+                      if str(x).strip()]
+            if guilds and not in_dm:
+                gid = getattr(getattr(message, "guild", None), "id", None)
+                if gid is None or str(gid) not in guilds:
+                    return
 
-        # Access control (deny-by-default). Empty allow_from = nobody; "*" =
-        # anyone; otherwise only listed user IDs. Silent ignore in-channel
-        # (no "you're not allowed" chatter), but the empty-allow_from case is
-        # surfaced once via on_status so it doesn't look like a dead bot.
+        # Access control for direct messages, and for server channels when no
+        # channel is listed (deny-by-default). Empty allow_from = nobody;
+        # "*" = anyone; otherwise only listed user IDs. Silent ignore in a
+        # channel, but the empty-allow_from case is surfaced once via
+        # on_status so it doesn't look like a dead bot.
         allow_from = dcfg.get("allow_from")
-        if not self._is_allowed(message.author.id, allow_from):
+        if (in_dm or not listed) and not self._is_allowed(
+                message.author.id, allow_from):
             allow = [str(x) for x in (allow_from or []) if str(x).strip()]
             if not allow and not self._warned_empty_allow:
                 self._warned_empty_allow = True

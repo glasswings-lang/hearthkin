@@ -219,34 +219,35 @@ check("a non-number limit is refused with a message, and nothing is saved",
 
 # Where Discord listens: these two lists were file-only until 12 Nov 2026.
 dlg.dc_guilds_field.SetValue("123, abc 456,123")
-dlg.dc_channels_field.SetValue("")
 dlg._on_dc_where_changed(None)
 dc = (load_agent_config(KIN).get("discord") or {})
 check("Discord servers box: IDs saved, junk and repeats dropped",
       dc.get("guilds") == ["123", "456"])
 check("...and the box shows what was kept",
       dlg.dc_guilds_field.GetValue() == "123, 456")
-check("Discord channels box: blank saves as 'anywhere'",
-      dc.get("channels") == [])
-dlg.dc_channels_field.SetValue("789")
-dlg._on_dc_where_changed(None)
-check("...and a channel ID saves",
-      (load_agent_config(KIN).get("discord") or {}).get("channels") == ["789"])
 _tab_stops = [c for c in dlg.dc_guilds_field.GetParent().GetChildren()
               if c.CanAcceptFocusFromKeyboard()]
-check("both boxes, and their explainer, are tab stops",
-      dlg.dc_guilds_field in _tab_stops and dlg.dc_channels_field in _tab_stops
+check("the servers box, the channel list (20 Nov 2026: was a line of IDs), "
+      "and their explainer are tab stops",
+      dlg.dc_guilds_field in _tab_stops and dlg.dc_sharing_list in _tab_stops
       and any(c.GetName() == "How the server and channel lists work"
               for c in _tab_stops))
+# A channel listed the older way, straight in the config.
+_c = load_agent_config(KIN)
+_c.setdefault("discord", {})["channels"] = ["789"]
+from kin_persistence import save_agent_config as _sac
+_sac(KIN, _c)
 
 pw.PersonWindow.ShowModal = real_show
 dlg.Destroy()
 
 # Reopen: the saved lists show up again.
 dlg2 = EditKinDialog(_Frame(None), KIN)
-check("reopening Settings shows the saved servers and channels",
+check("reopening Settings shows the saved servers, and an older-style "
+      "channel in the channel list",
       dlg2.dc_guilds_field.GetValue() == "123, 456"
-      and dlg2.dc_channels_field.GetValue() == "789")
+      and any("(789)" in dlg2.dc_sharing_list.GetString(i)
+              for i in range(dlg2.dc_sharing_list.GetCount())))
 dlg2.Destroy()
 
 print()
