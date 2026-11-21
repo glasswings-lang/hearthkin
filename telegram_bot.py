@@ -5608,8 +5608,8 @@ class TelegramBot:
         supergroup that's listed in cfg.telegram.groups.
 
         Behavior:
-          - Sender is already known to be in allow_from (caller gates
-            on that). Non-allowed senders never reach this function.
+          - The group is listed and the sender isn't muted there (the
+            caller gates on that); allow_from is for DMs only.
           - Participation gate: per-group policy. "mention_only"
             requires @-mention or reply-to-bot to engage; "always"
             engages on every message (and needs BotFather privacy

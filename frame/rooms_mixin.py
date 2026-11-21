@@ -887,7 +887,7 @@ class RoomsMixin:
             "presence_penalty": cfg.get("presence_penalty", 0.0),
             "frequency_penalty": cfg.get("frequency_penalty", 0.0),
             "num_ctx": _num_ctx_of(cfg),
-            "num_predict": self.room_cfg.get("per_turn_token_cap", 800),
+            "num_predict": self.room_cfg.get("per_turn_token_cap", 2000),
             # Halt the moment the model tries to open another speaker's
             # bracket block — this is what stops SpeakerNine from writing a whole
             # fake transcript of Jade/Finn/Luna.

@@ -254,9 +254,9 @@ class BotIntegrationMixin:
                 wrap_exec=lambda ex, an, user_id=None: self._wrap_exec_for_remote(
                     ex, an, "discord", user_id=user_id),
                 # Webcam approval, same shape as Telegram's: the dialog pops
-                # on THIS desktop. Discord has no per-user ask/auto/deny
-                # radio, so the bot always asks — a missing setting must read
-                # as "ask", never as "auto".
+                # on THIS desktop when the person's webcam setting is "ask"
+                # (the bot applies "auto" and "deny" itself). A missing
+                # setting must read as "ask", never as "auto".
                 request_webcam_approval=lambda label, uid, an=agent_name:
                     self._request_webcam_approval(an, label, uid),
                 on_long_reply=lambda kin, surface, who, n: wx.CallAfter(

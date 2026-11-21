@@ -271,7 +271,7 @@ class RoomEditDialog(wx.Dialog):
         tok_lbl = wx.StaticText(panel, label="Per-turn token cap (per kin):", size=(220, -1))
         self.tok_spin = _IntField(
             panel,
-            value=cfg.get("per_turn_token_cap", 800),
+            value=cfg.get("per_turn_token_cap", 2000),
             min_val=64, max_val=4096,
             size=(80, -1),
             name="Per-turn token cap per kin",

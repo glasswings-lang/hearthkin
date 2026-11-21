@@ -112,10 +112,13 @@ def test_scope_filename_safe():
 def test_config_defaults_and_backfill():
     d = kp.DEFAULT_AGENT_CONFIG.get("discord")
     check("discord section present",
-          set(d or {}) == {"enabled", "bot_token", "policy",
-                           "share_desktop", "allow_from",
-                           "user_tools", "guilds", "channels",
-                           "show_tool_calls"})
+          {"enabled", "bot_token", "policy", "share_desktop", "allow_from",
+           "user_tools", "guilds", "channels", "show_tool_calls"}
+          <= set(d or {}))
+    check("...and lists every per-person setting and the channel list "
+          "(20 Nov 2026)",
+          {"user_is_operator", "user_labels", "user_reach_said",
+           "channel_entries", "channel_sees_private"} <= set(d or {}))
     check("tool lines default off, like Telegram's (20 Nov 2026)",
           d.get("show_tool_calls") is False)
     check("policy default mention_only", d.get("policy") == "mention_only")

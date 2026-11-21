@@ -675,6 +675,11 @@ class ChatSendMixin:
         only the buffer + cursor reset."""
         if gen != self._stream_id:
             return
+        # Remember what was already shown before this tool step, so a reply
+        # rescued from it isn't shown a second time (audit, 20 Nov 2026).
+        self._painted_before_tools = (
+            getattr(self, "_painted_before_tools", "")
+            + (self._stream_buf or "")[:self._paint_cursor])
         self._stream_buf = ""
         self._paint_cursor = 0
 

@@ -737,11 +737,10 @@ DEFAULT_TELEGRAM_CONFIG = {
     #              Turn off), otherwise Telegram won't deliver normal
     #              group messages to the bot.
     #
-    # Access still goes through the existing per-user `allow_from` and
-    # `user_tools` settings — the sender must be in allow_from for the
-    # kin to engage, and their bucket controls tool access. No
-    # per-group override today; the group entry only decides whether
-    # this kin is willing to be in that chat at all.
+    # In a listed group everyone can talk to the kin except the people on
+    # that group's mute list (`exclude`); `allow_from` is for direct
+    # messages only. Each person's `user_tools` bucket still controls their
+    # tool access. The group entry also carries its own answering policy.
     "groups": {},
     # Per-group opt-in (parallel to user_share_desktop): when True for
     # a chat_id, that group's conversation merges into the kin's main
@@ -811,6 +810,25 @@ DEFAULT_DISCORD_CONFIG = {
     "guilds": [],
     "channels": [],
 }
+
+# Settings that are stored but were missing from the defaults above, so the
+# defaults describe the config that's really there (audit, 20 Nov 2026).
+# All empty: nothing changes for anyone. Per-person settings come from the
+# shared list (tools/_person_settings.py); the rest are the group and channel
+# switches and lists added on 20 Nov.
+for _section, _surface, _extra in (
+        (DEFAULT_TELEGRAM_CONFIG, "telegram",
+         ("group_private_sees", "group_sees_private")),
+        (DEFAULT_DISCORD_CONFIG, "discord",
+         ("channel_entries", "channel_private_sees", "channel_sees_private"))):
+    for _key in ("user_labels", "user_is_operator", "user_tools",
+                 "user_share_desktop", "user_webcam_permission",
+                 "user_tool_caps", "user_exec_approval", "user_file_reach",
+                 "user_reach_said",
+                 "user_mirror_to_telegram" if _surface == "telegram"
+                 else "user_mirror_desktop") + _extra:
+        _section.setdefault(_key, {})
+del _section, _surface, _extra, _key
 
 
 DEFAULT_AGENT_CONFIG = {
@@ -942,8 +960,8 @@ DEFAULT_AGENT_CONFIG = {
     # default stays 8 (cost-safe); raise deliberately. Settings → Tools.
     "max_tool_iterations": 8,
     # Ceiling on tool calls (counted one by one, not by round) in a single
-    # reply for anyone who isn't the operator: Discord members, and Telegram
-    # users not sharing the desktop conversation. max_tool_iterations counts
+    # reply on Telegram, Discord and wake-ups, the operator included (each
+    # person can have their own number). max_tool_iterations counts
     # rounds, and one round can carry dozens of calls -- a model once put
     # sixty in one. 0 = no ceiling. Settings -> Tools.
     "remote_max_tool_calls": 15,
@@ -981,7 +999,8 @@ DEFAULT_AGENT_CONFIG = {
     # field exists even when exec isn't enabled, so flipping exec on later
     # picks up whatever the user already configured.
     "tool_trust": "untrusted",
-    # Remote-surface unattended exec opt-in (advanced, JSON-only override).
+    # Remote-surface unattended exec opt-in (advanced; a box in Settings,
+    # Tools).
     # By default (False) an exec call that arrives over a REMOTE surface
     # (Telegram, Discord) always needs approval — a chat prompt on Telegram,
     # the operator's desktop dialog on Discord — regardless of tool_trust.

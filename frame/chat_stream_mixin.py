@@ -539,6 +539,8 @@ class ChatStreamMixin:
         user_text = self._stream_user_text
         thinking = self._think_buf
         paint_cursor = self._paint_cursor
+        painted_before_tools = getattr(self, "_painted_before_tools", "")
+        self._painted_before_tools = ""
         self._stream_buf = ""
         self._stream_user_text = ""
         self._think_buf = ""
@@ -589,8 +591,15 @@ class ChatStreamMixin:
                 # and persist as the assistant turn. A system note
                 # gets spliced in below so the kin's next read knows
                 # what happened.
-                self.chat_display.AppendText(salvaged_content + "\n")
-                self._maybe_speak_sentence(salvaged_content)
+                # Shown already if it was painted live before the tool step;
+                # showing and speaking it again doubled it (audit, 20 Nov
+                # 2026).
+                _norm = " ".join(salvaged_content.split())
+                if _norm and _norm in " ".join(painted_before_tools.split()):
+                    self.chat_display.AppendText("\n")
+                else:
+                    self.chat_display.AppendText(salvaged_content + "\n")
+                    self._maybe_speak_sentence(salvaged_content)
                 reply_to_save = salvaged_content
                 self._salvaged_intermediate = True
                 self._salvaged_tool_names = tool_names
