@@ -71,11 +71,11 @@ DISCORD_SPLIT_LEN = 1990
 # just sees "hey".
 _MENTION_RE = re.compile(r"<@!?\d+>")
 
-# Words that end an in-flight reply when sent on their own. Discord has no
-# slash-command surface here, so the stop has to be something a person would
-# plausibly type; kept to an exact match on the whole message so "stop that,
-# it's funny" is a remark to the kin, not a control instruction.
-_STOP_WORDS = frozenset({"stop", "/stop", "cancel", "/cancel", "!stop"})
+# Words that end an in-flight reply when sent on their own: the one list,
+# chat_helpers.is_stop_word, shared with Telegram. The whole message has to
+# be the word, so "stop that, it's funny" is a remark to the kin, not a
+# control instruction.
+from chat_helpers import is_stop_word as _is_stop_word
 
 # Typed commands, with / or ! in front (Discord's own command menu can get in
 # the way of a leading /). Discord's own /shrug, /me and the like are turned
@@ -129,7 +129,7 @@ def _unknown_command(content):
     s = (content or "").strip()
     if len(s) < 2 or s[0] not in "/!" or not (s[1].isalpha()):
         return None
-    if _parse_command(s) is not None or s.lower() in _STOP_WORDS:
+    if _parse_command(s) is not None or _is_stop_word(s):
         return None
     return s[1:].split(maxsplit=1)[0]
 
@@ -393,7 +393,7 @@ class DiscordBot:
                 entry = self._active_turns.get(cid)
             # A bare "stop" only while a reply is running here: in a busy
             # channel people say "stop" to each other.
-            if entry and text.lower() in _STOP_WORDS:
+            if entry and _is_stop_word(text):
                 return True
             return (cid, aid) in (self.__dict__.get("_coalescing") or {})
         except Exception:
@@ -617,7 +617,7 @@ class DiscordBot:
         # Safe to do here because, unlike Telegram's single poll thread, the
         # Gateway loop keeps running throughout: inference is handed to an
         # executor, so this handler is never blocked by the reply it stops.
-        if content.strip().lower() in _STOP_WORDS:
+        if _is_stop_word(content):
             with self._turn_lock:
                 running = message.channel.id in self._active_turns
             if self._request_turn_stop(message.channel.id, message.author.id):
@@ -1755,7 +1755,10 @@ class DiscordBot:
         # a kin drawing on the wrong note is indistinguishable from a kin
         # being odd — recall ran here and its result was even stored on the
         # bot, but nothing ever showed it. Per-kin opt-out.
-        shown = text
+        # "_used: ..._", the receipt of which tools really ran, as on
+        # Telegram (chat_helpers.tool_summary_footer, 21 Nov 2026).
+        from chat_helpers import tool_summary_footer
+        shown = text + tool_summary_footer(added_turns, dcfg)
         if dcfg.get("show_recall_summary", True):
             names = []
             for used in (self._last_recall_used or []):
@@ -1763,7 +1766,7 @@ class DiscordBot:
                 if rel and rel not in names:
                     names.append(rel)
             if names:
-                shown = text + "\n\n_recalled: " + ", ".join(names) + "_"
+                shown = shown + "\n\n_recalled: " + ", ".join(names) + "_"
         if _cut_off:
             from chat_helpers import CUT_OFF_LINE
             shown = shown + "\n\n" + CUT_OFF_LINE
@@ -2042,11 +2045,20 @@ class DiscordBot:
             _remote_cap = _entry.get(
                 "tool_cap", _cfg_count(cfg, "remote_max_tool_calls", 15))
             _notice_at = _cfg_count(cfg, "remote_tool_call_notice", 10)
+            _dc = cfg.get("discord") or {}
+            _show_calls = bool(_dc.get("show_tool_calls", False))
+            # Telegram's "still working" message, shared (chat_helpers).
+            from chat_helpers import ProgressPing
+            _progress = ProgressPing(
+                _dc.get("tool_progress_interval_secs", 90),
+                lambda t: self._post_from_thread(channel, t))
 
             def on_tool_call(name, args, result, is_error):
                 # Append-only tool display, same discipline as Telegram:
                 # a call posts what it did + a result preview; never edits.
                 tool_names_called.append(name)
+                _progress.called(name, may_ping=not _show_calls
+                                 and not is_error)
                 if len(tool_names_called) == _notice_at:
                     self._announce_long_reply(channel_id, len(tool_names_called))
                 try:

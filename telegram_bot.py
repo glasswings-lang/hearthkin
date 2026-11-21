@@ -1277,28 +1277,9 @@ class TelegramBot:
         stripped first. That keeps the footer's ground-truth property
         intact — a footer the operator sees was emitted by the
         harness, not faked by the model."""
-        tg_cfg = (full_cfg or {}).get("telegram") or {}
-        if not tg_cfg.get("show_tool_summary", True):
-            return ""
-        seen = []
-        for turn in (added_turns or []):
-            if not isinstance(turn, dict):
-                continue
-            if turn.get("role") != "assistant":
-                continue
-            for tc in (turn.get("tool_calls") or []):
-                if not isinstance(tc, dict):
-                    continue
-                fn = tc.get("function") or {}
-                name = fn.get("name") if isinstance(fn, dict) else None
-                if name and name not in seen:
-                    seen.append(name)
-        if not seen:
-            return ""
-        # Markdown italics survive in Telegram. Leading blank line
-        # separates the footer from the reply visually + via NVDA
-        # paragraph navigation.
-        return "\n\n_used: " + ", ".join(seen) + "_"
+        from chat_helpers import tool_summary_footer
+        return tool_summary_footer(
+            added_turns, (full_cfg or {}).get("telegram") or {})
 
     def _build_recall_footer(self, full_cfg):
         """Small italic "_recalled: log1, log2_" footer naming the memory
@@ -2148,11 +2129,8 @@ class TelegramBot:
         # its own: someone watching a reply run away types the word, not the
         # command. A longer message that merely contains "stop" is not a
         # stop -- it goes to the running turn as a message instead.
-        if text.startswith("/"):
-            token = text.split(maxsplit=1)[0].lower().lstrip("/").split("@", 1)[0]
-        else:
-            token = text.lower().strip(" .!")
-        if token not in ("cancel", "stop"):
+        from chat_helpers import is_stop_word
+        if not is_stop_word(text):
             return False
         user_id = (msg.get("from") or {}).get("id")
         chat_id = (msg.get("chat") or {}).get("id")
@@ -6650,47 +6628,9 @@ class TelegramBot:
             progress_interval = int(tg_cfg.get("tool_progress_interval_secs", 90))
         except (TypeError, ValueError):
             progress_interval = 90
-        import time
-        progress_state = {
-            "started_at": time.monotonic(),
-            "last_ping_at": time.monotonic(),
-            "call_count": 0,
-            "tool_names": [],  # ordered list, deduped at display time
-        }
-
-        def _maybe_send_progress_ping():
-            """Emit a periodic 'still working' message when the loop
-            runs longer than the interval without chat-side output.
-            Each ping is a fresh message (append-only — never edits a
-            prior one, matching the documented convention)."""
-            if show_tool_calls or progress_interval <= 0:
-                return
-            now = time.monotonic()
-            if now - progress_state["last_ping_at"] < progress_interval:
-                return
-            progress_state["last_ping_at"] = now
-            elapsed = int(now - progress_state["started_at"])
-            mins = elapsed // 60
-            secs = elapsed % 60
-            elapsed_str = f"{mins}m {secs}s" if mins else f"{secs}s"
-            # Dedupe tool-name list while preserving order so display
-            # reads naturally ("read_file, edit_file, write_file").
-            seen = set()
-            distinct = []
-            for n in progress_state["tool_names"]:
-                if n not in seen:
-                    seen.add(n)
-                    distinct.append(n)
-            tools_text = ", ".join(distinct) if distinct else "—"
-            try:
-                self._send_chunked(
-                    chat_id,
-                    f"⏳ still working ({elapsed_str}, "
-                    f"{progress_state['call_count']} tool calls): "
-                    f"{tools_text}",
-                )
-            except Exception:
-                pass
+        from chat_helpers import ProgressPing
+        progress = ProgressPing(progress_interval,
+                                lambda t: self._send_chunked(chat_id, t))
 
         # on_tool_call is always installed. When "show tool calls" is on,
         # every call posts call + result (append-only, as before). When
@@ -6705,11 +6645,10 @@ class TelegramBot:
 
         def on_tool_call(name, args, result, is_error):
             try:
-                progress_state["call_count"] += 1
-                progress_state["tool_names"].append(name)
-                if progress_state["call_count"] == _notice_at:
-                    self._announce_long_reply(
-                        user_id, chat_id, progress_state["call_count"])
+                progress.called(name, may_ping=not show_tool_calls
+                                and not is_error)
+                if progress.count == _notice_at:
+                    self._announce_long_reply(user_id, chat_id, progress.count)
                 if show_tool_calls:
                     args_str = self._format_tool_args(args)
                     self._send_chunked(chat_id, f"🔧 {name}({args_str})")
@@ -6720,8 +6659,6 @@ class TelegramBot:
                     # so the preview alone carries the tool name.
                     preview = self._tool_result_preview(result)
                     self._send_chunked(chat_id, f"⚠️ {preview}")
-                else:
-                    _maybe_send_progress_ping()
             except Exception:
                 pass
 

@@ -773,6 +773,12 @@ DEFAULT_DISCORD_CONFIG = {
     # Telegram's; a failed call is always shown. Discord used to post every
     # call, with no setting, even in public channels (audit, 20 Nov 2026).
     "show_tool_calls": False,
+    # Telegram's two tool signals, on Discord too (21 Nov 2026): the
+    # "_used: ..._" line at the end of a reply naming the tools that really
+    # ran, and a "still working" message every N seconds of a long quiet
+    # tool run (0 = never; only while the per-call lines are off).
+    "show_tool_summary": True,
+    "tool_progress_interval_secs": 90,
     # How many messages each channel's own history keeps (the ones not kept
     # with the desktop), trimmed a quarter at a time. 0 = no cap. The same
     # setting and rule as Telegram's (21 Nov 2026).

@@ -235,7 +235,8 @@ class BotIntegrationMixin:
                 get_soul=lambda an=agent_name: load_soul(an),
                 # Same reason as the Telegram bot above.
                 get_memory=lambda an=agent_name: load_memory_for_prompt(an),
-                get_model_options=lambda an=agent_name: self._model_options_for(an),
+                get_model_options=lambda an=agent_name: self._model_options_for(
+                    an, surface="discord"),
                 on_status=lambda label, an=agent_name: wx.CallAfter(
                     self._on_discord_bot_status, an, label),
                 # Fires after each handled mention so Discord activity
@@ -322,7 +323,7 @@ class BotIntegrationMixin:
         except Exception:
             pass
 
-    def _model_options_for(self, agent_name):
+    def _model_options_for(self, agent_name, surface="telegram"):
         cfg = load_agent_config(agent_name)
         model = strip_model_annotation(cfg.get("model", "qwen2.5:7b-instruct"))
         options = {
@@ -342,6 +343,12 @@ class BotIntegrationMixin:
             # configs predating this field.
             "num_predict": cfg.get("telegram_token_cap", 900),
         }
+        if surface == "discord":
+            # Discord's own reply cap, on the Discord tab (21 Nov 2026). It
+            # used Telegram's setting, which only Telegram's window shows.
+            # Until it's set, it follows Telegram's, so nothing changes.
+            from chat_helpers import discord_reply_cap
+            options["num_predict"] = discord_reply_cap(cfg)
         return model, options
 
     def _on_bot_status(self, agent_name, label):

@@ -1364,6 +1364,10 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
         "presence_penalty": cfg.get("presence_penalty", 0.0),
         "frequency_penalty": cfg.get("frequency_penalty", 0.0),
         "num_ctx": cfg.get("num_ctx", 8192),
+        # The desktop's reply cap: a wake-up is part of the desktop
+        # conversation. It had no cap at all, so a model that started
+        # cascading ran until the context ceiling (21 Nov 2026).
+        "num_predict": cfg.get("num_predict", 2000),
     }
     cache = bool(cfg.get("cache", True))
     cache_ttl = str(cfg.get("cache_ttl", "auto"))
@@ -1490,7 +1494,9 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     # depended on which of the two settings its person had chosen.
     try:
         if not history_path:  # own-history turns aren't chat turns
-            cron_helpers.note_unattended_turns(kin, "desktop", 2)
+            # One per reply, as every other place counts (21 Nov 2026; this
+            # counted two, so wake-ups set off summaries twice as often).
+            cron_helpers.note_unattended_turns(kin, "desktop", 1)
     except Exception:
         pass
     # Notes about this run go where the run itself was saved.
@@ -1852,6 +1858,10 @@ def run_heartbeat(kin, cfg, should_stop=None):
         "presence_penalty": cfg.get("presence_penalty", 0.0),
         "frequency_penalty": cfg.get("frequency_penalty", 0.0),
         "num_ctx": cfg.get("num_ctx", 8192),
+        # The desktop's reply cap: a wake-up is part of the desktop
+        # conversation. It had no cap at all, so a model that started
+        # cascading ran until the context ceiling (21 Nov 2026).
+        "num_predict": cfg.get("num_predict", 2000),
     }
     max_ctx = max(2048, int(cfg.get("num_ctx", 8192) or 8192) - 2000)
     _kin_host = resolve_kin_ollama_host(cfg.get("ollama_host_name", ""))

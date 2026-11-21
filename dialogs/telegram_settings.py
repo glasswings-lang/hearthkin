@@ -156,7 +156,9 @@ class TelegramMessageSettingsDialog(wx.Dialog):
         sizer.Add(cap_row, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
         help("Soft cap on how long each Telegram reply can grow — the circuit "
              "breaker that stops a cascading model from generating to the "
-             "context ceiling. Default 900 (matches desktop chat).")
+             "context ceiling. Telegram only: Discord has its own on the "
+             "Discord tab, and the desktop its own in the kin's settings. "
+             "Default 900.")
 
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         close_btn = wx.Button(panel, wx.ID_CLOSE, "&Close")

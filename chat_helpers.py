@@ -375,6 +375,103 @@ def live_visible(text):
         return text or ""
 
 
+def discord_reply_cap(cfg):
+    """Discord's reply-length cap in tokens: the Discord tab's own setting
+    (discord.reply_token_cap), else Telegram's, which Discord used to share,
+    else 900."""
+    for v in (((cfg or {}).get("discord") or {}).get("reply_token_cap"),
+              (cfg or {}).get("telegram_token_cap"), 900):
+        try:
+            if v is not None and int(v) > 0:
+                return int(v)
+        except (TypeError, ValueError):
+            continue
+    return 900
+
+
+def tool_summary_footer(added_turns, section):
+    """The small "_used: tool1, tool2_" line at the end of a reply on
+    Telegram and Discord, naming the tools that really ran this turn, in
+    the order they first ran. It's the one signal a model can't fake (a
+    model's own "_used:" line is stripped before this is added). Off when
+    the app's settings section has show_tool_summary False; "" when no
+    tool ran. Shared since 21 Nov 2026; Discord had none."""
+    if not (section or {}).get("show_tool_summary", True):
+        return ""
+    seen = []
+    for turn in (added_turns or []):
+        if not isinstance(turn, dict) or turn.get("role") != "assistant":
+            continue
+        for tc in (turn.get("tool_calls") or []):
+            fn = (tc or {}).get("function") if isinstance(tc, dict) else None
+            name = fn.get("name") if isinstance(fn, dict) else None
+            if name and name not in seen:
+                seen.append(name)
+    if not seen:
+        return ""
+    return "\n\n_used: " + ", ".join(seen) + "_"
+
+
+class ProgressPing:
+    """A "still working" message during a long, quiet tool run, on Telegram
+    and Discord: every `interval` seconds (0 = never) while the per-call
+    lines are off, naming how long and which tools so far. Each ping is a
+    new message, never an edit. Shared since 21 Nov 2026; Discord had none,
+    so a long tool run there looked like a hang."""
+
+    def __init__(self, interval, send, now=None):
+        import time as _t
+        self._now = now or _t.monotonic
+        try:
+            self.interval = int(interval)
+        except (TypeError, ValueError):
+            self.interval = 90
+        self.send = send
+        self.started = self.last = self._now()
+        self.count = 0
+        self.names = []
+
+    def called(self, name, may_ping=True):
+        """Count a tool call; ping if it's been long enough and `may_ping`
+        (False while per-call lines are showing, or for a failed call that
+        has its own line)."""
+        self.count += 1
+        if name and name not in self.names:
+            self.names.append(name)
+        if self.interval <= 0 or not may_ping:
+            return
+        now = self._now()
+        if now - self.last < self.interval:
+            return
+        self.last = now
+        el = int(now - self.started)
+        when = f"{el // 60}m {el % 60}s" if el >= 60 else f"{el}s"
+        try:
+            self.send(f"⏳ still working ({when}, {self.count} tool calls): "
+                      + (", ".join(self.names) or "—"))
+        except Exception:
+            pass
+
+
+def is_stop_word(text):
+    """True when a whole message means "stop the reply": /stop or /cancel
+    (with or without a bot name after @, or ! instead of /, anything after
+    it ignored, as Telegram always did), or the bare
+    word stop or cancel on its own, punctuation allowed ("Stop!"). A longer
+    message that merely contains "stop" is not one. The one list for
+    Telegram and Discord (21 Nov 2026): Discord's missed "Stop!", "stop."
+    and "!cancel"."""
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if t[0] in "/!":
+        t = t[1:].split(maxsplit=1)[0] if len(t) > 1 else ""
+        t = t.split("@", 1)[0]
+    else:
+        t = t.strip(" .!?")
+    return t in ("stop", "cancel")
+
+
 # A reply that stopped at the kin's reply-length cap (llm_backend
 # take_cut_off). The person sees this line after it; the kin is left
 # cut_off_note_row. One wording for every surface (21 Nov 2026).

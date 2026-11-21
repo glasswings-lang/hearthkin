@@ -575,7 +575,7 @@ class EditKinDialog(wx.Dialog):
         self.distill_on_close_check.Bind(wx.EVT_CHECKBOX, self._on_distill_on_close_toggle)
 
         every_n_row = wx.BoxSizer(wx.HORIZONTAL)
-        every_n_lbl = wx.StaticText(host, label="Auto-distill every N messages (0 = off):")
+        every_n_lbl = wx.StaticText(host, label="Auto-distill every N replies (0 = off):")
         self.distill_every_n_spin = _IntField(
             host,
             value=self.cfg.get("memory_distill_every_n", 0),
@@ -589,7 +589,7 @@ class EditKinDialog(wx.Dialog):
             # everyone else. Worse than unclear: asked what 0 does, a reader
             # with only the spoken label reasonably guesses "every 0 messages"
             # = constantly, which is the exact opposite of what it does.
-            name="Auto-distill every N messages (0 = off)",
+            name="Auto-distill every N replies (0 = off)",
             on_commit=lambda v: self._save_param("memory_distill_every_n", v),
         )
         every_n_row.Add(every_n_lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=4)
@@ -1484,6 +1484,36 @@ class EditKinDialog(wx.Dialog):
             wx.EVT_CHECKBOX,
             lambda e: self._save_discord_param(
                 "show_tool_calls", bool(self.dc_tools_check.GetValue())))
+        # Telegram's two tool signals, on the Discord tab (21 Nov 2026).
+        self.dc_summary_check = wx.CheckBox(
+            host, label="Name the tools a reply used, at the end of the "
+                        "rep&ly")
+        self.dc_summary_check.Bind(
+            wx.EVT_CHECKBOX,
+            lambda e: self._save_discord_param(
+                "show_tool_summary", bool(self.dc_summary_check.GetValue())))
+        dc_prog_row = wx.BoxSizer(wx.HORIZONTAL)
+        dc_prog_row.Add(wx.StaticText(
+            host, label="\"Still workin&g\" message every N seconds of a "
+                        "long tool run (0 = off):"),
+            flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
+        self.dc_progress_field = _IntField(
+            host, value=90, min_val=0, max_val=3600, size=(80, -1),
+            name="Still working message every N seconds (0 = off)",
+            on_commit=lambda v: self._save_discord_param(
+                "tool_progress_interval_secs", int(v)))
+        dc_prog_row.Add(self.dc_progress_field)
+        # Discord's own reply cap (21 Nov 2026); it used to share Telegram's.
+        dc_cap_row = wx.BoxSizer(wx.HORIZONTAL)
+        dc_cap_row.Add(wx.StaticText(
+            host, label="Reply length cap (t&okens):"),
+            flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
+        self.dc_reply_cap_field = _IntField(
+            host, value=900, min_val=50, max_val=32768, size=(100, -1),
+            name="Discord reply length cap (tokens)",
+            on_commit=lambda v: self._save_discord_param(
+                "reply_token_cap", int(v)))
+        dc_cap_row.Add(self.dc_reply_cap_field)
         # Telegram's "History cap", on the Discord tab: how many messages a
         # channel's own history keeps, trimmed a quarter at a time
         # (history_rows.trim_front, 21 Nov 2026).
@@ -1557,6 +1587,7 @@ class EditKinDialog(wx.Dialog):
                    dc_allow_lbl, self.dc_users_list,
                    dc_users_btn_row,
                    self.dc_share_check, self.dc_tools_check,
+                   self.dc_summary_check, dc_prog_row, dc_cap_row,
                    dc_hist_row, dc_hist_help,
                    self.dc_enabled_check,
                    self.dc_status_label, dc_help):
@@ -1893,6 +1924,14 @@ class EditKinDialog(wx.Dialog):
         self._refresh_dc_sharing_list()
         self.dc_share_check.SetValue(bool(dc.get("share_desktop", False)))
         self.dc_tools_check.SetValue(bool(dc.get("show_tool_calls", False)))
+        self.dc_summary_check.SetValue(bool(dc.get("show_tool_summary", True)))
+        from chat_helpers import discord_reply_cap
+        self.dc_reply_cap_field.SetValue(str(discord_reply_cap(self.cfg)))
+        try:
+            self.dc_progress_field.SetValue(
+                str(int(dc.get("tool_progress_interval_secs", 90))))
+        except (TypeError, ValueError):
+            pass
         try:
             self.dc_history_cap_field.SetValue(
                 str(int(dc.get("history_cap", 100))))

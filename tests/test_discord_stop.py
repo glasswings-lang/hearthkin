@@ -50,7 +50,8 @@ def check(label, cond):
 
 
 import threading                                             # noqa: E402
-from discord_bot import DiscordBot, _STOP_WORDS              # noqa: E402
+from discord_bot import DiscordBot                           # noqa: E402
+from chat_helpers import is_stop_word                        # noqa: E402
 
 
 def _bot():
@@ -106,18 +107,17 @@ check("shutting down asks every reply to wind down, not just one",
 
 print("--- what counts as a stop ---")
 
-for word in ("stop", "/stop", "cancel", "/cancel"):
-    check(f"'{word}' on its own is a stop", word in _STOP_WORDS)
-check("case doesn't matter -- the handler lowercases before matching",
-      "STOP".lower() in _STOP_WORDS)
+for word in ("stop", "/stop", "cancel", "/cancel", "!stop", "!cancel",
+             "Stop!", "stop.", "STOP", "/stop@SomeBot"):
+    check(f"'{word}' on its own is a stop", is_stop_word(word))
 for phrase in ("stop that, it's funny", "don't stop", "cancel the meeting",
-               "stopping by later"):
+               "stopping by later", "please stop"):
     check(f"'{phrase}' is a remark to the kin, not a control instruction",
-          phrase.strip().lower() not in _STOP_WORDS)
+          not is_stop_word(phrase))
 
 import inspect                                               # noqa: E402
 on_msg = inspect.getsource(DiscordBot._on_message)
-stop_at = on_msg.find("_STOP_WORDS")
+stop_at = on_msg.find("_is_stop_word(")
 # Since 12 Nov 2026 the lock is taken inside _generate_in_turn, which the
 # handler calls; where it calls it is where the lock is waited on.
 lock_at = on_msg.find("_generate_in_turn(")

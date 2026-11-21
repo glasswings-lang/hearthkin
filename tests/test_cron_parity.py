@@ -260,6 +260,16 @@ check("a kin deleted since the wake-up is skipped, not counted",
       f2._messages_since_distill == {} and f2.asked == [])
 
 
+# One per reply, as every other place counts: a wake-up counted two, so it
+# set off memory summaries twice as often as the same talk elsewhere.
+_src = (ROOT / "hearthkin_cron.py").read_text(encoding="utf-8")
+check("a wake-up counts once toward memory summaries, like a reply anywhere",
+      'note_unattended_turns(kin, "desktop", 1)' in _src
+      and 'note_unattended_turns(kin, "desktop", 2)' not in _src)
+check("a wake-up's reply has the desktop's length cap, not none",
+      _src.count('"num_predict": cfg.get("num_predict", 2000)') == 2)
+
+
 print()
 if _fails:
     print(f"test_cron_parity: {len(_fails)} FAILED")
