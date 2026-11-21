@@ -904,7 +904,8 @@ class TelegramBot:
         if cap <= 0 or len(history) <= cap:
             return history
         step = max(1, cap // 4)
-        return history[-max(10, cap - step):]
+        from chat_helpers import keep_compaction_note
+        return keep_compaction_note(history, history[-max(10, cap - step):])
 
     def __init__(self, agent_name, get_config, get_soul, get_memory,
                  get_model_options, on_status, on_activity=None,

@@ -1416,12 +1416,19 @@ class ChatStreamMixin:
         # note (_on_stream_done appends it after the assistant turn).
         # Pop it first so the turn beneath can regenerate — otherwise
         # a salvaged turn was permanently un-regenerable (audit L-B22).
-        if (self.conversation
-                and self.conversation[-1].get("role") == "system"
-                and str(self.conversation[-1].get("content") or "").startswith(
-                    "[hearthkin: your post-tool reply")):
-            self.conversation.pop()
+        # Every note Hearthkin left after the reply goes with it: the
+        # salvage note, a fenced-file save, a reading nudge, a park move.
+        # Only one exact wording used to be recognised, and the salvage note
+        # doesn't even start with it, so after any of these the person got
+        # "Nothing to regenerate" (audit, 20 Nov 2026). A compaction note is
+        # never one of them.
+        _notes = []
+        while (self.conversation
+               and self.conversation[-1].get("role") == "system"
+               and not self.conversation[-1].get("compact")):
+            _notes.append(self.conversation.pop())
         if not self.conversation or self.conversation[-1].get("role") != "assistant":
+            self.conversation.extend(reversed(_notes))
             self._set_status("Nothing to regenerate (last message wasn't a reply).")
             return
         # Pop the final assistant reply plus any preceding tool round-trip

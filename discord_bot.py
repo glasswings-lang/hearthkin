@@ -783,6 +783,10 @@ class DiscordBot:
         # A compacted conversation is read from its latest note onward
         # (/compact); nothing before it was deleted.
         from chat_helpers import view_after_compaction
+        # view_after_compaction hands the note back without its compact flag,
+        # so note whether there was one before (the window below keeps it).
+        _was_compacted = any(isinstance(m, dict) and m.get("compact")
+                             for m in rows)
         rows = view_after_compaction(rows)
         # Since 12 Nov 2026 the kin gets back its own tool steps and the
         # notes Hearthkin gave it ("you described it but didn't do it", "your
@@ -806,7 +810,12 @@ class DiscordBot:
                 turns.append(t)
             elif role in ("user", "assistant", "system") and content:
                 turns.append({"role": role, "content": content})
+        # Keep the compaction note at the head however long it's been since:
+        # the window used to cut it off after about 40 rows.
+        note_turn = turns[0] if (_was_compacted and turns) else None
         turns = _stable_history_window(turns, DISCORD_HISTORY_CAP)
+        if note_turn is not None and not any(t is note_turn for t in turns):
+            turns = [note_turn] + turns
         # A window can start between a call and its results; a tool result
         # whose call scrolled away can't be sent (providers reject it).
         while turns and turns[0].get("role") == "tool":

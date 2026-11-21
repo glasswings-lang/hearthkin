@@ -1256,6 +1256,27 @@ def _marked_where(row, place, kin_cfg):
     return dict(row, content=f"(said in {where}) " + row["content"])
 
 
+def keep_compaction_note(full, kept):
+    """`kept` (a trimmed or windowed part of `full`) with the latest
+    compaction note still at its head. Three places trimmed history after
+    compacting and cut the note off once enough came after it: Discord's
+    40-row window, Telegram's stored-history trim, and the heartbeat's size
+    budget. The kin then carried on with neither the note nor what it
+    replaced (audit, 20 Nov 2026). Returns `kept` unchanged when there's no
+    note or it's already there; never raises."""
+    try:
+        note = None
+        for m in reversed(full or []):
+            if isinstance(m, dict) and m.get("compact"):
+                note = m
+                break
+        if note is None or any(m is note for m in kept):
+            return kept
+        return [note] + list(kept)
+    except Exception:
+        return kept
+
+
 def view_after_compaction(conversation):
     """What a model is sent from `conversation`: everything, if it was never
     compacted; else the latest compaction's note, the few rows it kept from

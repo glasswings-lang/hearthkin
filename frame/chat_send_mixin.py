@@ -168,7 +168,15 @@ class ChatSendMixin:
         if sys_content:
             messages.append({"role": "system", "content": sys_content})
         messages.extend(history)
-        new_user_msg = {"role": "user", "content": user_text}
+        # With its time, like every earlier message and like the message
+        # being answered on every other surface. Without it the kin couldn't
+        # see when it was being spoken to, and the row changed shape the next
+        # turn (gaining "[ts]"), redoing the end of the prompt cache each time
+        # (audit, 20 Nov 2026).
+        from chat_helpers import format_ts_prefix
+        import datetime as _dt
+        new_user_msg = {"role": "user", "content": format_ts_prefix(
+            _dt.datetime.now().isoformat(timespec="seconds")) + user_text}
         if attachment_refs:
             new_user_msg["attachments"] = attachment_refs
         messages.append(new_user_msg)

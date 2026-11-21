@@ -546,7 +546,10 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
                 break
             kept.append(m)
             spent += cost
-        convo = list(reversed(kept))
+        # The compaction note is the oldest row, so the walk used to drop it
+        # first; it's what stands in for everything before it.
+        from chat_helpers import keep_compaction_note
+        convo = keep_compaction_note(readable, list(reversed(kept)))
 
     messages = []
     if sys_content:
