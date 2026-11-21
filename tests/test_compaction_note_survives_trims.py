@@ -70,7 +70,7 @@ trimmed = b._trim_history(history(60), 100)
 check("trimmed past the note, the note is still there", has_note(trimmed))
 check("...first", trimmed[0].get("compact") is True)
 
-print("--- Discord's 40-row window ---")
+print("--- Discord (sends everything since the note, as Telegram) ---")
 KIN = "Bracken"
 kin_dir(KIN).mkdir(parents=True, exist_ok=True)
 cfg = dict(DEFAULT_AGENT_CONFIG)
@@ -85,9 +85,19 @@ d.agent_name = KIN
 d.get_config = lambda: load_agent_config(KIN)
 d._dm_channels = set()
 turns = d._channel_history("555", True)
-check("120 rows after the note: the window still opens with it",
+check("120 rows after the note: what's sent still opens with it",
       bool(turns) and NOTE in str(turns[0].get("content")))
-check("...and the window is still a window", len(turns) <= 41)
+check("...and nothing after the note is cut away (Discord used to send only "
+      "the newest 40)", len(turns) >= 120)
+
+print("--- Discord's own store, trimmed by the shared rule ---")
+from kin_persistence import append_discord_turn, load_discord_history  # noqa: E402
+for r in history(60):
+    append_discord_turn(KIN, "777", r, cap=40)
+kept = load_discord_history(KIN)["777"]
+check("the store keeps the note through its trims",
+      any(NOTE in str(r.get("content")) for r in kept))
+check("...and is still capped", len(kept) <= 41)
 
 print("--- the heartbeat's size budget ---")
 save_agent_conversation(KIN, history(60))

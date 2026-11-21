@@ -1078,6 +1078,8 @@ class RoomsMixin:
                 wx.CallAfter(self._on_room_chunk, my_gen, content)
             if thinking:
                 wx.CallAfter(self._on_room_thinking_chunk, my_gen, thinking)
+        from chat_helpers import take_cut_off
+        self._room_cut_off_for = (my_gen, take_cut_off())
         wx.CallAfter(self._on_room_kin_done, my_gen)
 
     def _run_room_tool_loop_inline(self, my_gen, kin_name, model, messages, options,
@@ -1210,6 +1212,8 @@ class RoomsMixin:
             self._paint_cursor = 0
             self._pending_room_tool_history = added_turns
             self._on_room_kin_done(my_gen)
+        from chat_helpers import take_cut_off
+        self._room_cut_off_for = (my_gen, take_cut_off())
         wx.CallAfter(_hand_off)
 
     def _on_room_thinking_chunk(self, gen, text):
@@ -1386,6 +1390,15 @@ class RoomsMixin:
             # Shown, never saved as the kin's words: the other kin read it as
             # something it said (audit, 20 Nov 2026).
             self.room_conversation.append(room_msg)
+            # Stopped at the reply-length cap: said, and noted for everyone
+            # in the room (21 Nov 2026).
+            _cut = getattr(self, "_room_cut_off_for", None)
+            self._room_cut_off_for = None
+            if _cut and _cut[0] == gen and _cut[1]:
+                from chat_helpers import CUT_OFF_LINE, cut_off_note_row
+                self.chat_display.AppendText(CUT_OFF_LINE + "\n")
+                self.room_conversation.append(cut_off_note_row(
+                    self._current_room_speaker, ts=ts, room=True))
         # Salvage system note — if the room kin's reply was salvaged
         # from intermediate tool-loop content, append a system note so
         # next read of room history shows the kin what happened.

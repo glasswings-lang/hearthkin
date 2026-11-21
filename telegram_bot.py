@@ -645,7 +645,7 @@ class _TelegramStreamEditor:
     are best-effort; a rendering hiccup must never break the tool loop or the
     caller's own send."""
 
-    def __init__(self, send, edit, *, throttle_secs=3.0, max_len=4000,
+    def __init__(self, send, edit, *, throttle_secs=3.0, max_len=4096,
                  now=None, clean=None):
         import time as _t
         self._send = send
@@ -701,7 +701,7 @@ class _TelegramStreamEditor:
         self._buf += text
         self._dirty = True
         if self._msg_id is None:
-            first = self._render()[:self._max_len] or "…"
+            first = self._head(self._render()) or "…"
             try:
                 self._msg_id = self._send(first)
                 self._written = first
@@ -716,7 +716,7 @@ class _TelegramStreamEditor:
     def _flush(self):
         if self._msg_id is None or not self._dirty:
             return
-        text = self._render()[:self._max_len] or "…"
+        text = self._head(self._render()) or "…"
         # Nothing new to show. Past max_len this is EVERY tick — the head
         # stopped changing while the reply kept growing — and Telegram answers
         # a no-op edit with 400 "message is not modified", so this was pure
@@ -759,22 +759,34 @@ class _TelegramStreamEditor:
         # Write the WHOLE turn into its message before moving on; the last
         # throttled edit may have shown only part of it. This only adds.
         text = self._render_text(said)
-        head = text[:self._max_len] or "…"
+        pieces = self._pieces(text)
+        head = (pieces[0] if pieces else "") or "…"
         if head != self._written:
             try:
                 self._edit(self._msg_id, head)
             except Exception:
                 pass
-        rest = text[self._max_len:]
-        while rest:
+        for piece in pieces[1:]:
             try:
-                self._send(rest[:self._max_len])
+                self._send(piece)
             except Exception:
                 break
-            rest = rest[self._max_len:]
         self._closed.append(text.strip())
         self._msg_id = None
         self._written = None
+
+    def _pieces(self, text):
+        """`text` split for this app's per-message ceiling by the shared
+        splitter: counted as the app counts, broken at a line or a space,
+        never mid-word. Every cut here used to be a raw slice (21 Nov
+        2026)."""
+        from chat_helpers import split_for_limit
+        return split_for_limit(text or "", self._max_len)
+
+    def _head(self, text):
+        """The first piece of `text`: what fits in the live message."""
+        pieces = self._pieces(text)
+        return pieces[0] if pieces else ""
 
     def _render_text(self, raw):
         """`raw` shaped by the cleaner, the way _render shapes the live
@@ -815,21 +827,21 @@ class _TelegramStreamEditor:
             if not final_text.strip() or final_text.strip() in self._closed:
                 return True
         if self._msg_id is None:
-            if final_text:
+            pieces = self._pieces(final_text)
+            if pieces:
                 try:
-                    self._send(final_text[:self._max_len])
+                    self._send(pieces[0])
                 except Exception:
                     return False
-                rest = final_text[self._max_len:]
-                while rest:
+                for piece in pieces[1:]:
                     try:
-                        self._send(rest[:self._max_len])
+                        self._send(piece)
                     except Exception:
                         break
-                    rest = rest[self._max_len:]
                 return True
             return False
-        head = final_text[:self._max_len] or "…"
+        pieces = self._pieces(final_text)
+        head = (pieces[0] if pieces else "") or "…"
         if head != self._written:
             try:
                 self._edit(self._msg_id, head)
@@ -852,13 +864,11 @@ class _TelegramStreamEditor:
                     # Better a possibly-duplicated full reply than a message
                     # frozen mid-sentence.
                     return False
-        rest = final_text[self._max_len:]
-        while rest:
+        for piece in pieces[1:]:
             try:
-                self._send(rest[:self._max_len])
+                self._send(piece)
             except Exception:
                 return False
-            rest = rest[self._max_len:]
         return True
 
 
@@ -942,11 +952,8 @@ class TelegramBot:
         waiting. Raise `history_cap` if you want the old depth back; it costs
         only memory, not speed, now that the trim is rare.
         """
-        if cap <= 0 or len(history) <= cap:
-            return history
-        step = max(1, cap // 4)
-        from chat_helpers import keep_compaction_note
-        return keep_compaction_note(history, history[-max(10, cap - step):])
+        from history_rows import trim_front
+        return trim_front(history, cap)
 
     def __init__(self, agent_name, get_config, get_soul, get_memory,
                  get_model_options, on_status, on_activity=None,
@@ -5157,6 +5164,10 @@ class TelegramBot:
             # Snapshot pre-cleanup content for empty-reply diagnostics
             # below. Matches the group handler's pattern so log lines
             # have the same shape across surfaces.
+            # Did the reply stop at its length cap? Asked here, on the
+            # thread that ran it, before anything else calls a model.
+            from chat_helpers import take_cut_off
+            _cut_off = take_cut_off() and not turn_stopped
             raw_model_content = content
 
             # Pull any inline <thinking>...</thinking> markup out of
@@ -5312,6 +5323,9 @@ class TelegramBot:
                         surface="telegram-dm", model=model,
                         chat_id=chat_id, user_id=user_id,
                     )
+                if _cut_off:
+                    from chat_helpers import cut_off_note_row
+                    new_turns.append(cut_off_note_row(self.agent_name))
                 if roleplay_note:
                     new_turns.append({
                         "role": "system",
@@ -5376,6 +5390,9 @@ class TelegramBot:
                 footer = self._build_tool_summary_footer(
                     added_turns, full_cfg)
                 footer += self._build_recall_footer(full_cfg)
+                if _cut_off:
+                    from chat_helpers import CUT_OFF_LINE
+                    footer += "\n\n" + CUT_OFF_LINE
                 # If the reply streamed in-place, finalize THAT message with the
                 # cleaned text (returns True → don't also send). ed is None on
                 # the non-tool path, so we fall through to a normal send.
@@ -6072,6 +6089,10 @@ class TelegramBot:
             # up empty after cleanup, this is the forensic record of
             # whether the model returned empty or the cleanup ate the
             # reply. Logged below when content goes empty.
+            # Did the reply stop at its length cap? Asked here, on the
+            # thread that ran it, before anything else calls a model.
+            from chat_helpers import take_cut_off
+            _cut_off = take_cut_off() and not turn_stopped
             raw_model_content = content
 
             # Pull any inline <thinking>...</thinking> markup out of
@@ -6223,6 +6244,9 @@ class TelegramBot:
                     surface="telegram-group", model=model,
                     chat_id=chat_id, user_id=user_id,
                 )
+                if _cut_off:
+                    from chat_helpers import cut_off_note_row
+                    new_turns.append(cut_off_note_row(self.agent_name))
                 if roleplay_note:
                     new_turns.append({
                         "role": "system",
@@ -6290,6 +6314,9 @@ class TelegramBot:
                 footer = self._build_tool_summary_footer(
                     added_turns, full_cfg)
                 footer += self._build_recall_footer(full_cfg)
+                if _cut_off:
+                    from chat_helpers import CUT_OFF_LINE
+                    footer += "\n\n" + CUT_OFF_LINE
                 if not (_stream_ed and _stream_ed.finalize(content + footer)):
                     self._send_chunked(chat_id, content + footer)
                 # "Show reasoning in chat" reached the model call and stopped
@@ -7369,11 +7396,15 @@ class TelegramBot:
 
         cfg = self.get_config() or {}
         token = cfg.get("bot_token", "").strip()
-        LIMIT = 4000
         if not text:
             return
 
-        chunks = [text[i:i + LIMIT] for i in range(0, len(text), LIMIT)]
+        # Telegram's ceiling is 4096 UTF-16 units. The shared splitter counts
+        # that way (an emoji is two) and breaks at a line or a space; this
+        # used to cut every 4000 characters, mid-word, and an emoji-heavy
+        # piece could still be over (21 Nov 2026).
+        from chat_helpers import split_for_limit
+        chunks = split_for_limit(text, 4096)
         consecutive_429s = 0
         MAX_CONSEC_429S = 3
         MAX_PER_CHUNK_RETRIES = 2

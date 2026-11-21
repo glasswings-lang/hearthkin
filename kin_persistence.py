@@ -773,6 +773,10 @@ DEFAULT_DISCORD_CONFIG = {
     # Telegram's; a failed call is always shown. Discord used to post every
     # call, with no setting, even in public channels (audit, 20 Nov 2026).
     "show_tool_calls": False,
+    # How many messages each channel's own history keeps (the ones not kept
+    # with the desktop), trimmed a quarter at a time. 0 = no cap. The same
+    # setting and rule as Telegram's (21 Nov 2026).
+    "history_cap": 100,
     # "mention_only": reply only when @-mentioned — the sane default for
     # busy servers. "always": reply to every message — only viable in a
     # quiet channel on local hardware (one generation at a time).
@@ -4525,6 +4529,19 @@ DEFAULT_EMPTY_REPLY_NOTE = (
     "yours to pick up. If you meant the quiet, the quiet was fine.]"
 )
 
+DEFAULT_CUT_OFF_NOTE = (
+    "[hearthkin: your last reply stopped partway because it reached the "
+    "length limit for one reply, not because you ended it. Whatever came "
+    "after that point never got written. If you weren't finished, you can "
+    "carry on from where it stopped, or say it more briefly.]"
+)
+
+DEFAULT_CUT_OFF_NOTE_ROOM = (
+    "[hearthkin: {speaker}'s last reply stopped partway because it reached "
+    "the length limit for one reply, not because {speaker} ended it. If "
+    "{speaker} wasn't finished, it can carry on from where it stopped.]"
+)
+
 DEFAULT_EMPTY_REPLY_NOTE_GROUP = (
     "[hearthkin: nothing of yours reached the group on that turn — the reply "
     "came back empty, so nothing was posted. That is usually something going "
@@ -4823,6 +4840,23 @@ APP_PROMPT_REGISTRY = {
                 "and the operator saw a placeholder. Deliberately grants the "
                 "kin intent — it may have meant to stay silent, which is a "
                 "legitimate outcome, not a failure to explain away.",
+    },
+    "cut_off_note": {
+        "default": DEFAULT_CUT_OFF_NOTE,
+        "version": 1,
+        "placeholders": [],
+        "title": "Cut-off note (every surface)",
+        "desc": "Left for the kin after a reply that stopped because it hit "
+                "the reply-length cap, so it knows the reply was cut short "
+                "rather than finished, and can carry on.",
+    },
+    "cut_off_note_room": {
+        "default": DEFAULT_CUT_OFF_NOTE_ROOM,
+        "version": 1,
+        "placeholders": ["{speaker}"],
+        "title": "Cut-off note (rooms)",
+        "desc": "Room variant of the cut-off note. Third person because it "
+                "lands in shared room history.",
     },
     "empty_reply_note_group": {
         "default": DEFAULT_EMPTY_REPLY_NOTE_GROUP,
@@ -6235,9 +6269,10 @@ def save_discord_history(name, data, rows_added=None):
                           json.dumps(out, ensure_ascii=False))
 
 
-def append_discord_turn(name, channel_id, turn, cap=200):
-    """Append one turn to a channel's segregated Discord history, capped to
-    the newest `cap`. Load-modify-save under the per-kin conversation lock
+def append_discord_turn(name, channel_id, turn, cap=None):
+    """Append one turn to a channel's segregated Discord history, capped by
+    the Discord tab's "History cap" (history_rows.trim_front, the same rule
+    as Telegram's; `cap` overrides it). Load-modify-save under the per-kin conversation lock
     (reused — writes to different files never nest, so no deadlock) so a
     worker-thread append can't interleave with another. Best-effort: logs
     to save_failures.log rather than crashing the Discord worker."""
@@ -6260,7 +6295,14 @@ def append_discord_turn(name, channel_id, turn, cap=200):
         note_added(counts, key, len(lst), 1)
         data[ROWS_ADDED_KEY] = counts
         lst.append(turn)
-        data[key] = lst[-cap:]
+        from history_rows import history_cap, trim_front
+        if cap is None:
+            try:
+                cap = history_cap(
+                    (load_agent_config(name) or {}).get("discord") or {})
+            except Exception:
+                cap = history_cap({})
+        data[key] = trim_front(lst, cap)
         try:
             agent_dir(name).mkdir(parents=True, exist_ok=True)
             # Atomic, like every other history file: written in place, a

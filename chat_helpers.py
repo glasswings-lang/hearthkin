@@ -375,6 +375,77 @@ def live_visible(text):
         return text or ""
 
 
+# A reply that stopped at the kin's reply-length cap (llm_backend
+# take_cut_off). The person sees this line after it; the kin is left
+# cut_off_note_row. One wording for every surface (21 Nov 2026).
+CUT_OFF_LINE = "(Cut off: this reply reached its length limit.)"
+
+
+def cut_off_note_row(kin, ts=None, room=False):
+    """The note left in the kin's history after a cut-off reply. In a room
+    it's in the third person, since every kin there reads it."""
+    from kin_persistence import load_app_prompt, now_iso
+    if room:
+        text = load_app_prompt("cut_off_note_room", kin).replace(
+            "{speaker}", str(kin))
+    else:
+        text = load_app_prompt("cut_off_note", kin)
+    return {"role": "system", "content": text, "ts": ts or now_iso()}
+
+
+def take_cut_off():
+    """Whether the reply just finished on this thread hit its length cap.
+    Ask once, on the thread that ran the reply, straight after the model
+    call. Never raises."""
+    try:
+        import llm_backend
+        return llm_backend.take_cut_off()
+    except Exception:
+        return False
+
+
+def utf16_len(text):
+    """Length in UTF-16 code units: how Telegram counts, and never less than
+    a plain character count, so it's the cautious count for Discord too
+    (whose docs don't say how they count). An emoji is two."""
+    return len((text or "").encode("utf-16-le")) // 2
+
+
+def split_for_limit(text, limit):
+    """Split `text` into pieces of at most `limit` UTF-16 units, for an app
+    with a per-message ceiling (Telegram 4096, Discord 2000). Breaks at the
+    last line break in the second half of the piece, else the last space,
+    else at the limit itself, and never inside a character. The one splitter
+    for both apps (21 Nov 2026): Telegram cut every 4000 characters even
+    mid-word, Discord counted characters plainly so an emoji-heavy piece
+    could be refused, and both did it their own way."""
+    out = []
+    rest = text or ""
+    while rest:
+        if utf16_len(rest) <= limit:
+            out.append(rest)
+            break
+        # The most whole characters that fit.
+        n, used = 0, 0
+        for ch in rest:
+            w = 2 if ord(ch) > 0xFFFF else 1
+            if used + w > limit:
+                break
+            used += w
+            n += 1
+        head = rest[:n]
+        cut = head.rfind('\n')
+        if cut < n // 2:
+            cut = max(head.rfind(" "), head.rfind('\t'))
+            if cut < n // 2:
+                cut = n
+        piece = rest[:cut].rstrip()
+        rest = rest[cut:].lstrip()
+        if piece:
+            out.append(piece)
+    return out
+
+
 def extract_inline_thinking(content, existing_thinking=""):
     """Pull `<thinking>...</thinking>` / `<think>...</think>` blocks out
     of `content` and merge them into `existing_thinking`. Returns

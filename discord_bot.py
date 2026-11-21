@@ -50,10 +50,6 @@ except ImportError:
 # Discord's hard per-message character limit.
 DISCORD_MSG_LIMIT = 2000
 
-# How many prior turns from a channel to feed back as context. The kin's
-# num_ctx truncation is the real backstop; this just bounds the disk read
-# and keeps a busy channel's history from dominating the prompt.
-DISCORD_HISTORY_CAP = 40
 
 # Abuse throttles (parity with Telegram's flood handling). A single user
 # can't force back-to-back generations faster than the cooldown, and no
@@ -148,36 +144,6 @@ def _parse_command(content):
     if name not in _COMMANDS:
         return None
     return name, (parts[1] if len(parts) > 1 else "")
-
-
-def _stable_history_window(turns, cap):
-    """The last `cap`-ish turns, with a start that moves in RARE, BIG steps
-    instead of by one every single turn.
-
-    `turns[-cap:]` is the obvious version and it is the same prompt-cache bug
-    already fixed one layer up in TelegramBot._trim_history. A local model
-    reuses its cached work only for an unbroken run from the very start of the
-    prompt, so once a channel passes `cap` messages, every new message pushes
-    one off the FRONT and the whole context is read again from cold. A channel
-    below the cap is fast and a channel at the cap is slow forever, and the two
-    are indistinguishable from a chair.
-
-    So the window is allowed to fill to `cap`, then its start jumps a whole
-    `step` at once and sits still until the next jump. Between jumps the prompt
-    is genuinely append-only. One turn in `step` pays the re-read instead of
-    all of them.
-
-    `ceil`, not `floor`: the window must never EXCEED `cap`, because an
-    oversized context on local Ollama returns nothing at all rather than
-    degrading. What changes is the floor — the window now runs between
-    `cap - step` and `cap` instead of sitting pinned at `cap`.
-    """
-    n = len(turns)
-    if cap <= 0 or n <= cap:
-        return list(turns)
-    step = max(1, cap // 4)
-    start = -(-(n - cap) // step) * step      # ceil((n - cap) / step) * step
-    return list(turns[start:])
 
 
 def _cfg_count(cfg, key, default):
@@ -412,11 +378,12 @@ class DiscordBot:
 
     def _needs_no_mention(self, message):
         """Messages that reach the kin in a mentions-only channel without an
-        @mention, as on Telegram: a stop or a command; a message from the
-        person whose reply is running here (it goes to that reply); and the
-        next piece of a message Discord split, while the first is waiting to
-        be joined. All of these used to be dropped first for having no
-        mention (audit, 20 Nov 2026)."""
+        @mention, as on Telegram: a stop or a command, and the next piece of
+        a message Discord split, while the first is waiting to be joined.
+        These used to be dropped first for having no mention (audit, 20 Nov
+        2026). A follow-up from the person whose reply is running is NOT one
+        of them any more: in a channel they may be talking to someone else,
+        as Telegram groups already assume (21 Nov 2026)."""
         try:
             text = _MENTION_RE.sub("", message.content or "").strip()
             if _parse_command(text) is not None:
@@ -427,8 +394,6 @@ class DiscordBot:
             # A bare "stop" only while a reply is running here: in a busy
             # channel people say "stop" to each other.
             if entry and text.lower() in _STOP_WORDS:
-                return True
-            if entry and entry.get("author_id") == str(aid):
                 return True
             return (cid, aid) in (self.__dict__.get("_coalescing") or {})
         except Exception:
@@ -697,8 +662,14 @@ class DiscordBot:
         # "wait, that's wrong" was only read after the wrong thing was done.
         # Attachments keep their usual path. If the reply takes no further
         # step, the message is answered straight after (_end_turn keeps it).
-        if not getattr(message, "attachments", None) and self._hold_for_turn(
-                message.channel.id, message.author.id, content):
+        # Direct messages only, as on Telegram: in a server channel the
+        # person whose reply is running may be talking to someone else, and
+        # pulling that into the kin's turn (and posting "Got it" there) would
+        # be wrong (21 Nov 2026).
+        if (getattr(message, "guild", None) is None
+                and not getattr(message, "attachments", None)
+                and self._hold_for_turn(
+                    message.channel.id, message.author.id, content)):
             await self._send_chunked(
                 message.channel,
                 f"Got it. {self.agent_name} will see this before its next "
@@ -914,7 +885,9 @@ class DiscordBot:
 
     def _channel_history(self, channel_id, share):
         """This channel's prior turns, model-shaped (role + content only),
-        newest DISCORD_HISTORY_CAP kept. `share` picks the store:
+        everything since the last compaction, as on Telegram (its own store
+        is capped as Telegram's is, history_rows.trim_front; the newest 40 used to be all that was
+        sent, 21 Nov 2026). `share` picks the store:
 
           share=True  — MERGED: filter the unified conversation.jsonl for
                         rows tagged source=discord:<channel_id>.
@@ -952,10 +925,6 @@ class DiscordBot:
         # A compacted conversation is read from its latest note onward
         # (/compact); nothing before it was deleted.
         from chat_helpers import view_after_compaction
-        # view_after_compaction hands the note back without its compact flag,
-        # so note whether there was one before (the window below keeps it).
-        _was_compacted = any(isinstance(m, dict) and m.get("compact")
-                             for m in rows)
         rows = view_after_compaction(rows)
         from chat_helpers import person_row_text
         try:
@@ -990,14 +959,8 @@ class DiscordBot:
                     m, _kin_cfg, "discord")[0]})
             elif role in ("user", "assistant", "system") and content:
                 turns.append({"role": role, "content": content})
-        # Keep the compaction note at the head however long it's been since:
-        # the window used to cut it off after about 40 rows.
-        note_turn = turns[0] if (_was_compacted and turns) else None
-        turns = _stable_history_window(turns, DISCORD_HISTORY_CAP)
-        if note_turn is not None and not any(t is note_turn for t in turns):
-            turns = [note_turn] + turns
-        # A window can start between a call and its results; a tool result
-        # whose call scrolled away can't be sent (providers reject it).
+        # A trimmed store can start between a call and its results; a tool
+        # result whose call scrolled away can't be sent (providers reject it).
         while turns and turns[0].get("role") == "tool":
             turns.pop(0)
         # "Tool history kept" (Settings, Tools), as on the desktop.
@@ -1703,6 +1666,10 @@ class DiscordBot:
         # Snapshot before cleanup, for the empty-reply log below: the whole
         # diagnostic value is in seeing what the model returned versus what
         # survived the anti-impersonation passes.
+        # Did the reply stop at its length cap? Asked on this thread, before
+        # anything else calls a model (chat_helpers.take_cut_off).
+        from chat_helpers import take_cut_off
+        _cut_off = take_cut_off() and not turn_stopped
         raw_model_content = text
         # Keep reasoning that came inside the reply text with the rest of
         # it (it was thrown away; audit, 20 Nov 2026).
@@ -1797,6 +1764,9 @@ class DiscordBot:
                     names.append(rel)
             if names:
                 shown = text + "\n\n_recalled: " + ", ".join(names) + "_"
+        if _cut_off:
+            from chat_helpers import CUT_OFF_LINE
+            shown = shown + "\n\n" + CUT_OFF_LINE
 
         if not ed.finalize(shown):
             self._post_sync(channel, shown)
@@ -1825,6 +1795,10 @@ class DiscordBot:
         # The footer is for the reader, not the record — storing it would put
         # the harness's bookkeeping into the kin's own voice.
         self._persist_turn(channel_id, "assistant", text, share)
+        if _cut_off and text:
+            from chat_helpers import cut_off_note_row
+            self._persist_turn(channel_id, "system", cut_off_note_row(
+                self.agent_name)["content"], share)
 
         # Suggest compacting once a day when it's full (18 Nov 2026). Direct
         # messages only: /compact doesn't work in a server channel.
@@ -2375,13 +2349,25 @@ class DiscordBot:
     def _post_sync(self, channel, text):
         """Blocking chunked send from the executor thread — the fallback
         when the streamed finalize edit fails."""
-        rest = text or ""
-        while rest:
-            chunk, rest = rest[:DISCORD_MSG_LIMIT], rest[DISCORD_MSG_LIMIT:]
+        from chat_helpers import split_for_limit
+        for i, chunk in enumerate(split_for_limit(text or "",
+                                                  DISCORD_MSG_LIMIT)):
             try:
                 asyncio.run_coroutine_threadsafe(
                     channel.send(chunk), self._loop).result(timeout=20)
-            except Exception:
+            except Exception as e:
+                # Told, not silently cut short (21 Nov 2026), as in
+                # _send_chunked.
+                append_failure_log("discord_failures.log", self.agent_name,
+                                   f"send channel={channel.id} piece={i}", e)
+                try:
+                    asyncio.run_coroutine_threadsafe(channel.send(
+                        "(Part of this reply couldn't be sent: Discord "
+                        "refused it. The rest is missing here, though "
+                        f"{self.agent_name} still has the whole of it.)"),
+                        self._loop).result(timeout=20)
+                except Exception:
+                    pass
                 return
 
     @staticmethod
@@ -2415,22 +2401,33 @@ class DiscordBot:
         return ", ".join(parts)[:200]
 
     async def _send_chunked(self, channel, text):
-        """Send `text` respecting Discord's 2000-char limit. Split on a
-        paragraph/line boundary near the limit when possible so a message
-        doesn't get sliced mid-word."""
-        while text:
-            if len(text) <= DISCORD_MSG_LIMIT:
-                chunk, text = text, ""
-            else:
-                cut = text.rfind("\n", 0, DISCORD_MSG_LIMIT)
-                if cut < DISCORD_MSG_LIMIT // 2:
-                    cut = DISCORD_MSG_LIMIT
-                chunk, text = text[:cut], text[cut:].lstrip("\n")
+        """Send `text` within Discord's 2000-character limit, split by the
+        shared splitter (chat_helpers.split_for_limit): counted cautiously,
+        so an emoji-heavy piece can't come out over, and broken at a line or
+        a space, never mid-word.
+
+        Discord refuses anything over its limit rather than trimming it.
+        If a piece is refused anyway, the person is TOLD part of the reply
+        didn't arrive. It used to stop silently there, and everything after
+        the refused piece was simply gone (21 Nov 2026). The kin's own copy
+        of its reply is whole either way; only the delivery fell short.
+        Rate limits need nothing here: the discord library waits and retries
+        those itself."""
+        from chat_helpers import split_for_limit
+        pieces = split_for_limit(text, DISCORD_MSG_LIMIT)
+        for i, chunk in enumerate(pieces):
             try:
                 await channel.send(chunk)
             except Exception as e:
                 append_failure_log("discord_failures.log", self.agent_name,
-                                   f"send channel={channel.id}", e)
+                                   f"send channel={channel.id} piece={i}", e)
+                try:
+                    await channel.send(
+                        "(Part of this reply couldn't be sent: Discord "
+                        "refused it. The rest is missing here, though "
+                        f"{self.agent_name} still has the whole of it.)")
+                except Exception:
+                    pass
                 return
 
     # ── helpers ────────────────────────────────────────────────────

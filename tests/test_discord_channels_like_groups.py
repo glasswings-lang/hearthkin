@@ -156,8 +156,9 @@ check("...'stop' while a reply is running here",
       passes(NEW, _Msg(555, 8, G, text="stop"), running_for=8))
 check("...but not 'stop' said in passing with nothing running",
       not passes(NEW, _Msg(555, 8, G, text="stop")))
-check("...a follow-up from the person whose reply is running",
-      passes(NEW, _Msg(555, 8, G, text="wait, also this"), running_for=8))
+check("...but not an unmentioned follow-up from the person whose reply is "
+      "running: as in Telegram groups, they may be talking to someone else",
+      not passes(NEW, _Msg(555, 8, G, text="wait, also this"), running_for=8))
 check("...not someone else's chatter during it",
       not passes(NEW, _Msg(555, 9, G, text="lol"), running_for=8))
 check("...and the next piece of a split message",

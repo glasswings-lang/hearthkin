@@ -94,8 +94,11 @@ def test_segregated_store_roundtrip():
         for i in range(250):
             kp.append_discord_turn(tk, 555, {"role": "user", "content": str(i)},
                                    cap=200)
-        check("segregated: cap trims to newest 200",
-              len(kp.load_discord_history(tk)["555"]) == 200)
+        # Trimmed a quarter at a time, as on Telegram (history_rows).
+        _n = len(kp.load_discord_history(tk)["555"])
+        check("segregated: the cap holds, trimmed in big steps",
+              150 <= _n <= 200
+              and kp.load_discord_history(tk)["555"][-1]["content"] == "249")
     finally:
         d = kp.agent_dir(tk)
         if os.path.isdir(d):

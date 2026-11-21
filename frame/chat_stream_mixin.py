@@ -727,6 +727,16 @@ class ChatStreamMixin:
                     thinking = thinking[:cap] + "\n... [reasoning truncated]"
                 assistant_msg["thinking"] = thinking
             self.conversation.append(assistant_msg)
+            # Stopped at the reply-length cap: say so, and tell the kin, as
+            # on every surface (21 Nov 2026). It used to look as if the kin
+            # had chosen to stop mid-sentence.
+            _cut = getattr(self, "_cut_off_for", None)
+            self._cut_off_for = None
+            if _cut and _cut[0] == gen and _cut[1]:
+                from chat_helpers import CUT_OFF_LINE, cut_off_note_row
+                self.chat_display.AppendText(CUT_OFF_LINE + "\n")
+                self.conversation.append(cut_off_note_row(
+                    self.current_agent, ts=ts))
         # When the assistant turn was salvaged from a tool-loop's
         # intermediate content (model returned empty after a tool
         # result), append a system note explaining what happened so

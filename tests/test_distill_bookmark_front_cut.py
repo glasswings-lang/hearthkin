@@ -131,20 +131,22 @@ check("no count yet: the stored bookmark is used as it was",
 check("counts start from what a history already holds",
       (lambda c: (hr.note_added(c, "k", 50, 2), c["k"])[1])({}) == 52)
 
-print("--- Discord: one row off the front every message once full ---")
-for i in range(200):
-    kp.append_discord_turn(KIN, 555, {"role": "user", "content": f"d{i}"})
+print("--- Discord: rows come off the front once full ---")
+for i in range(40):
+    kp.append_discord_turn(KIN, 555, {"role": "user", "content": f"d{i}"},
+                           cap=40)
 rows, front = kp.discord_history_with_front(KIN, 555)
-check("200 rows, none off the front", len(rows) == 200 and front == 0)
+check("40 rows, none off the front", len(rows) == 40 and front == 0)
 cfg = {}
-hr.set_scope_bookmark(cfg, "discord:555", 150, front)
-nxt = rows[150]["content"]
-for i in range(200, 220):
-    kp.append_discord_turn(KIN, 555, {"role": "user", "content": f"d{i}"})
+hr.set_scope_bookmark(cfg, "discord:555", 35, front)
+nxt = rows[35]["content"]
+for i in range(40, 45):
+    kp.append_discord_turn(KIN, 555, {"role": "user", "content": f"d{i}"},
+                           cap=40)
 rows, front = kp.discord_history_with_front(KIN, 555)
 bm = hr.scope_bookmark(cfg, "discord:555", hr.scope_rows(rows, front))
-check("20 came off the front; the bookmark followed",
-      front == 20 and rows[bm]["content"] == nxt)
+check("rows came off the front; the bookmark followed",
+      front > 0 and rows[bm]["content"] == nxt)
 check("the count never shows up as a channel",
       list((kp.load_discord_history(KIN) or {}).keys()) == ["555"])
 

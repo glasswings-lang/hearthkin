@@ -404,7 +404,7 @@ CAPABILITIES = [
         why="A window that sheds its oldest message every turn makes the model "
             "re-read everything from cold, permanently, with nothing on screen "
             "to say why",
-        markers=("_trim_history", "_stable_history_window"),
+        markers=("_trim_history", "trim_front"),
         surfaces={
             "desktop": NotHere(
                 "Keeps the whole conversation and lets the shared truncation "
@@ -412,7 +412,9 @@ CAPABILITIES = [
                 "stability guard. There is no second per-surface cap here to "
                 "get wrong."),
             "telegram": Present(),
-            "discord": Present(),
+            # Its own store is trimmed by the shared rule inside
+            # append_discord_turn (history_rows.trim_front), since 21 Nov 2026.
+            "discord": Present(markers="append_discord_turn"),
             "cron": NotHere(
                 "A wake-up builds a fresh prompt each time and has no prior "
                 "turn to reuse, so there is no cached prefix to protect."),

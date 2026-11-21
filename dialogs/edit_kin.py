@@ -1484,6 +1484,27 @@ class EditKinDialog(wx.Dialog):
             wx.EVT_CHECKBOX,
             lambda e: self._save_discord_param(
                 "show_tool_calls", bool(self.dc_tools_check.GetValue())))
+        # Telegram's "History cap", on the Discord tab: how many messages a
+        # channel's own history keeps, trimmed a quarter at a time
+        # (history_rows.trim_front, 21 Nov 2026).
+        dc_hist_row = wx.BoxSizer(wx.HORIZONTAL)
+        dc_hist_row.Add(wx.StaticText(host, label="History &cap (messages):"),
+                        flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
+        self.dc_history_cap_field = _IntField(
+            host, value=100,
+            min_val=0, max_val=100000, size=(100, -1),
+            name="Discord history cap (messages)",
+            on_commit=lambda v: self._save_discord_param("history_cap",
+                                                         int(v)))
+        dc_hist_row.Add(self.dc_history_cap_field)
+        dc_hist_help = wx.TextCtrl(host, value=(
+            "How many messages each channel or direct message keeps when it "
+            "isn't kept with the desktop, before the oldest are trimmed. "
+            "0 means no cap. Default 100, as on Telegram."),
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP
+            | wx.TE_NO_VSCROLL)
+        dc_hist_help.SetMinSize((520, 40))
+        dc_hist_help.SetName("Discord history cap notes")
 
         # "&r" belongs to "When to &respond" above — this checkbox had the
         # same letter, so Alt+R on this tab reached whichever wx happened to
@@ -1536,6 +1557,7 @@ class EditKinDialog(wx.Dialog):
                    dc_allow_lbl, self.dc_users_list,
                    dc_users_btn_row,
                    self.dc_share_check, self.dc_tools_check,
+                   dc_hist_row, dc_hist_help,
                    self.dc_enabled_check,
                    self.dc_status_label, dc_help):
             _flag = wx.LEFT | wx.RIGHT | wx.TOP
@@ -1871,6 +1893,11 @@ class EditKinDialog(wx.Dialog):
         self._refresh_dc_sharing_list()
         self.dc_share_check.SetValue(bool(dc.get("share_desktop", False)))
         self.dc_tools_check.SetValue(bool(dc.get("show_tool_calls", False)))
+        try:
+            self.dc_history_cap_field.SetValue(
+                str(int(dc.get("history_cap", 100))))
+        except (TypeError, ValueError):
+            pass
         self.dc_enabled_check.SetValue(bool(dc.get("enabled", False)))
 
         existing_bot = self.frame.bots.get(self.kin)

@@ -131,3 +131,38 @@ def set_scope_bookmark(cfg, scope_key, value, front=None):
         cfg["distill_front_seen"] = seen
     else:
         cfg.pop("distill_front_seen", None)
+
+
+HISTORY_CAP_DEFAULT = 100
+
+
+def history_cap(section, default=HISTORY_CAP_DEFAULT):
+    """The "History cap (messages)" setting of a Telegram or Discord settings
+    section: a whole number, 0 for no cap, else the default."""
+    try:
+        v = int((section or {}).get("history_cap", default))
+    except (TypeError, ValueError, AttributeError):
+        return default
+    return v if v >= 0 else default
+
+
+def trim_front(history, cap):
+    """A history kept apart from the desktop's, capped at `cap` messages,
+    trimmed in RARE, BIG steps rather than one message per turn. The one
+    rule for Telegram's and Discord's own histories (21 Nov 2026; Discord
+    used to keep 200 and send the newest 40).
+
+    Trimming one message per turn costs minutes a turn on a local model: it
+    reuses its cached work only for an unbroken run from the very start of
+    the prompt, so every message pushed off the FRONT makes it read the whole
+    prompt again from cold (measured: 22,000+ tokens re-read, about five
+    minutes before a reply began, every turn). So the history fills to
+    `cap` and, when it overflows, is cut back by a quarter at once. `cap`
+    stays a true ceiling, because an oversized context on local Ollama
+    returns nothing at all. The compaction note, if any, is kept.
+    `cap` of 0 means no cap."""
+    if cap <= 0 or len(history) <= cap:
+        return history
+    step = max(1, cap // 4)
+    from chat_helpers import keep_compaction_note
+    return keep_compaction_note(history, history[-max(10, cap - step):])

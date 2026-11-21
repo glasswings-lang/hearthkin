@@ -797,6 +797,39 @@ def token_calibration_ratio(kin_name):
 
 # ─── Result types ────────────────────────────────────────────────────────────
 
+# Why the last model call on THIS thread stopped. Every surface runs a reply
+# on a thread of its own, so after a reply it can ask whether the model ran
+# into its reply-length cap (Ollama done_reason "length", OpenRouter
+# finish_reason "length") instead of finishing. Nothing looked before 21 Nov
+# 2026: a cut-off reply was saved as though the kin had chosen to stop
+# mid-sentence, and neither the person nor the kin was told.
+_STOP = threading.local()
+
+
+def _field(obj, name):
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
+
+
+def _reset_stop():
+    _STOP.cut = False
+
+
+def _note_stop(reason):
+    if reason:
+        _STOP.cut = str(reason).lower() in ("length", "max_tokens")
+
+
+def take_cut_off():
+    """True when the most recent model call on this thread stopped because
+    it hit its reply-length cap. Clears the answer, so ask once per reply,
+    on the thread that ran it."""
+    v = bool(getattr(_STOP, "cut", False))
+    _STOP.cut = False
+    return v
+
+
 @dataclass
 class Chunk:
     """One streamed delta from a model. Empty strings if absent."""
@@ -3633,9 +3666,11 @@ def _chat_ollama_stream(model, messages, options, think, tools, keep_alive=None,
         kwargs["keep_alive"] = ka
 
     chat_fn = _ollama_chat_callable(ollama_host, request_timeout_secs)
+    _reset_stop()
     raw = chat_fn(**kwargs)
     final_usage = None
     for chunk in raw:
+        _note_stop(_field(chunk, "done_reason"))
         c = _normalize_ollama_chunk(chunk)
         if c is not None:
             yield c
@@ -3744,6 +3779,8 @@ def _chat_ollama_blocking(model, messages, options, think, tools, keep_alive=Non
         if not tools or not _is_pydantic_validation_error(e):
             raise
         resp = _ollama_chat_raw(model, messages, options, think, tools, keep_alive, ollama_host)
+    _reset_stop()
+    _note_stop(_field(resp, "done_reason"))
     return _normalize_ollama_response(resp)
 
 
@@ -4389,6 +4426,7 @@ def _chat_openrouter_stream(model, messages, options, think_effort, tools, cache
     resp = _openrouter_request(
         payload, stream=True, provider=provider_for_model(model))
     # SSE: lines starting with "data: ", terminated by "data: [DONE]".
+    _reset_stop()
     final_usage = None
     last_progress = time.monotonic()
     try:
@@ -4428,6 +4466,7 @@ def _chat_openrouter_stream(model, messages, options, think_effort, tools, cache
                     last_progress = time.monotonic()
                 final_usage = _merge_streaming_usage(final_usage, event)
                 continue
+            _note_stop(choices[0].get("finish_reason"))
             delta = choices[0].get("delta") or {}
             content = _extract_delta_content(delta)
             thinking = _extract_delta_thinking(delta)
@@ -4469,6 +4508,7 @@ def _chat_openrouter_blocking(model, messages, options, think_effort, tools, cac
     # actually wrong (model misconfigured, prompt too long, etc.)
     # and we should surface the empty result so the user knows.
     last_data = None
+    _reset_stop()
     for attempt in range(2):
         data = _openrouter_blocking_request(
             payload, provider=provider_for_model(model))
@@ -4486,6 +4526,7 @@ def _chat_openrouter_blocking(model, messages, options, think_effort, tools, cac
                 time.sleep(0.5)
                 continue
             return ChatResult(usage=usage_dict)
+        _note_stop(choices[0].get("finish_reason"))
         message = choices[0].get("message") or {}
         content = _extract_message_content(message)
         thinking = _extract_message_thinking(message)

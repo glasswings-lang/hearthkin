@@ -1460,10 +1460,17 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
                 max_iterations=_max_iter,
                 ollama_host=_kin_host,
             ))
+    # Asked before the finishing steps, which may call a model again.
+    from chat_helpers import take_cut_off, cut_off_note_row
+    _cut_off = take_cut_off()
     reply, bridge_note, bridge_confirm, steer_notes = _finish_cron_reply(
         kin, result, messages, model, options, cache, cache_ttl,
         show_thinking, max_ctx, _kin_host, safe_tools, toolless_scopes,
         "cron-subprocess")
+    if _cut_off and reply and reply != "[no reply produced]":
+        # Stopped at its length cap: the kin is told, as everywhere.
+        steer_notes = list(steer_notes) + [
+            cut_off_note_row(kin)["content"]]
     _added = getattr(result, "messages_added", None) or []
     # Persist tool round-trips (if any) so the kin's next read of
     # conversation.jsonl sees what they actually did. Without this the
@@ -2209,12 +2216,17 @@ def _main(args):
             # impersonation, park moves, empty-reply rescue, fenced saves or
             # tool-less memory notes, steering notes). This branch used to do
             # only the tool-less notes (12 Nov 2026).
+            from chat_helpers import take_cut_off, cut_off_note_row
+            _cut_off = take_cut_off()
             reply, bridge_note, bridge_confirm, steer_notes = (
                 _finish_cron_reply(
                     kin, result, messages, model, options,
                     bool(cfg.get("cache", True)), cache_ttl,
                     bool(cfg.get("show_thinking", False)), max_ctx,
                     _kin_host, safe_tools, toolless_scopes, "cron-isolated"))
+            if _cut_off and reply and reply != "[no reply produced]":
+                steer_notes = list(steer_notes) + [
+                    cut_off_note_row(kin)["content"]]
             if history_path:
                 # This branch keeps no chat record, but a job with its own
                 # history still needs one, or it loses its continuity here;

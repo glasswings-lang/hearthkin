@@ -502,6 +502,10 @@ class ChatSendMixin:
                 wx.CallAfter(self._on_stream_chunk, my_gen, content)
             if thinking:
                 wx.CallAfter(self._on_stream_thinking_chunk, my_gen, thinking)
+        # Asked here, on the worker thread that ran the reply
+        # (chat_helpers.take_cut_off); _on_stream_done reads it.
+        from chat_helpers import take_cut_off
+        self._cut_off_for = (my_gen, take_cut_off())
         wx.CallAfter(self._on_stream_done, my_gen)
 
     def _run_tool_loop_inline(self, my_gen, model, messages, options, think, cache, max_ctx_tokens, enabled_tool_names, *, think_effort=None, cache_ttl="auto", openrouter_provider=None):
@@ -632,6 +636,8 @@ class ChatSendMixin:
             self.current_agent, model, result,
             [s["function"]["name"] for s in schemas],
         )
+        from chat_helpers import take_cut_off
+        self._cut_off_for = (my_gen, take_cut_off())
         wx.CallAfter(self._on_tool_loop_done, my_gen, result)
 
     def _on_tool_loop_done(self, gen, result):

@@ -218,6 +218,39 @@ check("a message sent mid-reply is held for the reply, with a 'Got it'",
           "actually, stop at February"))
 
 
+async def scenario_midreply_channel():
+    # In a server channel the same message is NOT pulled into the reply,
+    # as in Telegram groups: they may be talking to someone else there.
+    b = bare_bot(CFG)
+    ch = _Channel()
+    answered = []
+
+    async def fake_gen(message, content, imgs, docs):
+        answered.append(content)
+    b._generate_in_turn = fake_gen
+    b._loop = asyncio.get_running_loop()
+
+    async def no_dl(m):
+        return []
+    b._download_images = no_dl
+    b._download_text_documents = no_dl
+
+    async def send(channel, text):
+        channel.sent.append(text)
+    b._send_chunked = send
+    b._begin_turn(99, "Wren", author_id=7)
+    m = _Msg("actually, stop at February", ch)
+    m.guild = object()
+    await b._on_message(_Client(), m)
+    return b, ch.sent
+
+
+b3, sent3 = drive(scenario_midreply_channel())
+check("in a server channel it isn't pulled into the running reply",
+      not any(s.startswith("Got it.") for s in sent3)
+      and b3._take_interjections(99) == [])
+
+
 async def scenario_leftover():
     b = bare_bot(CFG)
     ch = _Channel()
