@@ -809,10 +809,20 @@ def _append_to_conversation(kin, prompt, reply, intermediate_turns=None,
             # _clean_chat_message inside append normalizes the shape;
             # malformed turns are dropped, valid ones are persisted.
             append_agent_conversation_turn(kin, turn, raise_on_failure=True)
-        append_agent_conversation_turn(
-            kin, {"role": "assistant", "content": reply, "ts": now_iso},
-            raise_on_failure=True,
-        )
+        if reply == "[no reply produced]":
+            # Never saved as the kin's words; a note that it came back empty
+            # instead, as on Telegram and Discord (audit, 20 Nov 2026).
+            from kin_persistence import load_app_prompt
+            append_agent_conversation_turn(
+                kin, {"role": "system", "ts": now_iso,
+                      "content": load_app_prompt("empty_reply_note", kin)},
+                raise_on_failure=True,
+            )
+        else:
+            append_agent_conversation_turn(
+                kin, {"role": "assistant", "content": reply, "ts": now_iso},
+                raise_on_failure=True,
+            )
     except Exception as e:
         # If conversation.jsonl can't be written, the wake-up is
         # effectively lost from the kin's perspective on next launch.

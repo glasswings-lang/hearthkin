@@ -699,13 +699,25 @@ class ChatStreamMixin:
         # Truncate at persist time per the per-kin cap to keep file
         # size bounded; the cap controls record verbosity AND subsequent-
         # turn cost in one knob.
-        assistant_msg = {"role": "assistant", "content": reply_to_save, "ts": ts}
-        if thinking:
-            cap = int(cfg.get("think_max_chars", 1200) or 0)
-            if cap > 0 and len(thinking) > cap:
-                thinking = thinking[:cap] + "\n... [reasoning truncated]"
-            assistant_msg["thinking"] = thinking
-        self.conversation.append(assistant_msg)
+        # The placeholder is shown, never saved as the kin's words: read
+        # back, it's a turn the kin thinks it said, and it explains or
+        # apologises for it. A note saying a placeholder went out is kept
+        # instead, as on Telegram and Discord (audit, 20 Nov 2026).
+        if reply_to_save == "[no reply produced]":
+            self.conversation.append({
+                "role": "system",
+                "content": load_app_prompt("empty_reply_note",
+                                           self.current_agent),
+                "ts": ts})
+        else:
+            assistant_msg = {"role": "assistant", "content": reply_to_save,
+                             "ts": ts}
+            if thinking:
+                cap = int(cfg.get("think_max_chars", 1200) or 0)
+                if cap > 0 and len(thinking) > cap:
+                    thinking = thinking[:cap] + "\n... [reasoning truncated]"
+                assistant_msg["thinking"] = thinking
+            self.conversation.append(assistant_msg)
         # When the assistant turn was salvaged from a tool-loop's
         # intermediate content (model returned empty after a tool
         # result), append a system note explaining what happened so
@@ -1427,10 +1439,21 @@ class ChatStreamMixin:
                and self.conversation[-1].get("role") == "system"
                and not self.conversation[-1].get("compact")):
             _notes.append(self.conversation.pop())
-        if not self.conversation or self.conversation[-1].get("role") != "assistant":
+        _last = self.conversation[-1].get("role") if self.conversation else None
+        # An empty reply leaves a note, not a reply: the message under it
+        # is the one to send again.
+        _empty_turn = bool(_notes) and _last in ("user", "tool") or (
+            bool(_notes) and _last == "assistant"
+            and self.conversation[-1].get("tool_calls"))
+        if _last != "assistant" and not _empty_turn:
             self.conversation.extend(reversed(_notes))
             self._set_status("Nothing to regenerate (last message wasn't a reply).")
             return
+        if _empty_turn:
+            while (self.conversation
+                   and self.conversation[-1].get("role") in ("tool", "assistant")):
+                self.conversation.pop()
+            self.conversation.append({"role": "assistant", "content": ""})
         # Pop the final assistant reply plus any preceding tool round-trip
         # turns (assistant-with-tool_calls / tool-result) back to but not
         # including the user message that started the turn. Without this,

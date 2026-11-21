@@ -1376,7 +1376,10 @@ class RoomsMixin:
             if cap > 0 and len(thinking) > cap:
                 thinking = thinking[:cap] + "\n... [reasoning truncated]"
             room_msg["thinking"] = thinking
-        self.room_conversation.append(room_msg)
+        if reply_to_save != "[no reply produced]":
+            # Shown, never saved as the kin's words: the other kin read it as
+            # something it said (audit, 20 Nov 2026).
+            self.room_conversation.append(room_msg)
         # Salvage system note — if the room kin's reply was salvaged
         # from intermediate tool-loop content, append a system note so
         # next read of room history shows the kin what happened.
