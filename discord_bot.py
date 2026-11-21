@@ -389,6 +389,30 @@ class DiscordBot:
             entry = self._active_turns.get(channel_id)
             return bool(entry and entry.get("stop"))
 
+    def _needs_no_mention(self, message):
+        """Messages that reach the kin in a mentions-only channel without an
+        @mention, as on Telegram: a stop or a command; a message from the
+        person whose reply is running here (it goes to that reply); and the
+        next piece of a message Discord split, while the first is waiting to
+        be joined. All of these used to be dropped first for having no
+        mention (audit, 20 Nov 2026)."""
+        try:
+            text = _MENTION_RE.sub("", message.content or "").strip()
+            if _parse_command(text) is not None:
+                return True
+            cid, aid = message.channel.id, message.author.id
+            with self._turn_lock:
+                entry = self._active_turns.get(cid)
+            # A bare "stop" only while a reply is running here: in a busy
+            # channel people say "stop" to each other.
+            if entry and text.lower() in _STOP_WORDS:
+                return True
+            if entry and entry.get("author_id") == str(aid):
+                return True
+            return (cid, aid) in (self.__dict__.get("_coalescing") or {})
+        except Exception:
+            return False
+
     def _may_explain_refusal(self, author_id):
         """True at most once per person every ten minutes."""
         import time as _t
@@ -521,14 +545,16 @@ class DiscordBot:
                     message.author.id, dcfg.get("allow_from")):
                 return  # a channel listed the older way: people list only
             if (entry["policy"] == "mention_only"
-                    and client.user not in message.mentions):
+                    and client.user not in message.mentions
+                    and not self._needs_no_mention(message)):
                 return  # not spoken to
         else:
             policy = (dcfg.get("policy") or "mention_only").lower()
             # A direct message is spoken to the kin by definition (12 Nov
             # 2026): it used to need an @-mention too under the default
             # policy, which a voice message can't carry at all.
-            addressed = client.user in message.mentions or in_dm
+            addressed = (client.user in message.mentions or in_dm
+                         or self._needs_no_mention(message))
             if policy == "mention_only" and not addressed:
                 return  # not spoken to — stay quiet on a busy server
 

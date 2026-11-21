@@ -138,6 +138,33 @@ check("...even with a server list set (it used to block every DM)",
 check("a direct message from someone not on the people list isn't",
       not answered(NEW, _Msg(702, 8, None)))
 
+# In a mentions-only channel, some things reach the kin without a mention,
+# as on Telegram (audit, 20 Nov 2026).
+def passes(dcfg, msg, running_for=None, waiting=False):
+    d = bot(dcfg)
+    if running_for is not None:
+        d._active_turns[msg.channel.id] = {"author_id": str(running_for),
+                                           "stop": False, "who": "x"}
+    if waiting:
+        d._coalescing = {(msg.channel.id, msg.author.id): {"parts": ["a"]}}
+    return d._needs_no_mention(msg)
+
+
+check("mentions-only: a command gets through without a mention",
+      passes(NEW, _Msg(555, 8, G, text="/help")))
+check("...'stop' while a reply is running here",
+      passes(NEW, _Msg(555, 8, G, text="stop"), running_for=8))
+check("...but not 'stop' said in passing with nothing running",
+      not passes(NEW, _Msg(555, 8, G, text="stop")))
+check("...a follow-up from the person whose reply is running",
+      passes(NEW, _Msg(555, 8, G, text="wait, also this"), running_for=8))
+check("...not someone else's chatter during it",
+      not passes(NEW, _Msg(555, 9, G, text="lol"), running_for=8))
+check("...and the next piece of a split message",
+      passes(NEW, _Msg(555, 8, G, text="rest of it"), waiting=True))
+check("ordinary chatter still needs a mention",
+      not passes(NEW, _Msg(555, 8, G, text="hello all")))
+
 OLD = {"allow_from": ["7"], "policy": "always", "channels": ["555"]}
 check("a channel listed the older way still lets the people list talk",
       answered(OLD, _Msg(555, 7, G)))
