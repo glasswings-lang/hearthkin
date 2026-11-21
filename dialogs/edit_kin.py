@@ -1876,6 +1876,13 @@ class EditKinDialog(wx.Dialog):
         self.tg_status_label.SetValue(
             f"Status: {existing_bot.status_label() if existing_bot else 'Off'}"
         )
+        # Discord's, filled the same way (it opened blank even when running).
+        _dc_bot = (getattr(self.frame, "discord_bots", None) or {}).get(self.kin)
+        try:
+            self.dc_status_label.SetValue(
+                f"Status: {_dc_bot.status_label() if _dc_bot else 'Off'}")
+        except Exception:
+            pass
 
         # Voice
         v_cfg = self.cfg.get("voice") or {}
@@ -3347,7 +3354,7 @@ class EditKinDialog(wx.Dialog):
                                    seen_members=[])
         if dlg.ShowModal() == wx.ID_OK:
             chat_id, label, policy, share_desktop, exclude = dlg.get_values()
-            if not chat_id:
+            if not chat_id.lstrip("-"):
                 wx.MessageBox("Chat ID can't be empty.", "Add group",
                               wx.OK | wx.ICON_WARNING)
             elif not chat_id.startswith("-"):
@@ -3403,7 +3410,7 @@ class EditKinDialog(wx.Dialog):
         if dlg.ShowModal() == wx.ID_OK:
             (chat_id_new, label_new, policy_new, share_new,
              exclude_new) = dlg.get_values()
-            if not chat_id_new:
+            if not chat_id_new.lstrip("-"):
                 wx.MessageBox("Chat ID can't be empty.", "Edit group",
                               wx.OK | wx.ICON_WARNING)
             elif not chat_id_new.startswith("-"):

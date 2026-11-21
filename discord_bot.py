@@ -2310,7 +2310,13 @@ class DiscordBot:
 
     # ── helpers ────────────────────────────────────────────────────
 
+    def status_label(self):
+        """The last status line, for the settings window to show when it
+        opens (it was always blank there; audit, 20 Nov 2026)."""
+        return getattr(self, "_last_status", "") or "Off"
+
     def _status(self, msg):
+        self._last_status = msg
         try:
             if self.on_status:
                 self.on_status(msg)

@@ -6193,8 +6193,9 @@ def append_discord_turn(name, channel_id, turn, cap=200):
         data[key] = lst[-cap:]
         try:
             agent_dir(name).mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(data, ensure_ascii=False),
-                            encoding="utf-8")
+            # Atomic, like every other history file: written in place, a
+            # crash mid-save could leave half a file (audit, 20 Nov 2026).
+            atomic_write_text(path, json.dumps(data, ensure_ascii=False))
         except Exception as e:
             try:
                 append_failure_log(

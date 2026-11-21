@@ -2646,6 +2646,11 @@ class TelegramBot:
 
         # --- Slash commands ---
         if text.startswith("/"):
+            if not is_private:
+                _g = ((self.get_config() or {}).get("groups") or {}).get(
+                    str(chat_id))
+                if _g is not None and user_id in self._group_excluded_ids(_g):
+                    return  # muted here: commands too (audit, 20 Nov 2026)
             self._handle_command(
                 text, user_id, chat_id,
                 chat_type=chat_type, chat_title=chat_title,
@@ -2908,7 +2913,9 @@ class TelegramBot:
             self._cmd_think(user_id, chat_id)
         elif cmd == "play":
             self._cmd_play(chat_id, arg)
-        elif cmd == "cancel":
+        elif cmd in ("cancel", "stop"):
+            # /stop is the same word as /cancel everywhere else; with nothing
+            # running it was "Unknown command" (audit, 20 Nov 2026).
             self._cmd_cancel(user_id, chat_id)
         elif cmd in ("allow", "deny", "remember"):
             # No pending approval (covered above) — let user know.
