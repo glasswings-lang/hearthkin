@@ -88,6 +88,32 @@ _COMMANDS = frozenset({"help", "commands", "status", "regen", "regenerate",
                        "retry", "undo", "clear", "forget", "compact"})
 
 
+def discord_test_token(token):
+    """Check a bot token with Discord, as Telegram's "Test token" does with
+    getMe: asks Discord who the token belongs to. Returns (ok, message).
+    Needs no running bot and no discord library (21 Nov 2026)."""
+    token = (token or "").strip()
+    if not token:
+        return False, "no token"
+    import json as _json
+    import urllib.error as _ue
+    import urllib.request as _ur
+    req = _ur.Request("https://discord.com/api/v10/users/@me", headers={
+        "Authorization": f"Bot {token}",
+        "User-Agent": "DiscordBot (https://github.com, 1)"})
+    try:
+        with _ur.urlopen(req, timeout=10) as r:
+            data = _json.loads(r.read().decode("utf-8"))
+        name = data.get("username") or "(bot)"
+        return True, f"{name} (bot ID {data.get('id', '?')})"
+    except _ue.HTTPError as e:
+        if e.code == 401:
+            return False, "Discord says this token isn't valid."
+        return False, f"Discord answered {e.code}."
+    except Exception as e:
+        return False, f"Couldn't reach Discord: {e}"
+
+
 def channel_entries(dcfg):
     """The server channels a kin is in: {channel id: {"label", "policy",
     "exclude"}}, from the Discord tab's channel list. A list kept the older

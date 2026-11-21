@@ -29,14 +29,14 @@ class _DiscordChannelDialog(wx.Dialog):
         self._exclude = [str(x) for x in (exclude or []) if str(x).strip()]
         outer = wx.BoxSizer(wx.VERTICAL)
 
-        id_lbl = wx.StaticText(self, label="Channel &ID:")
+        id_lbl = wx.StaticText(self, label="&Channel ID:")
         self.id_field = wx.TextCtrl(self, value=str(channel_id or ""))
         outer.Add(id_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         outer.Add(self.id_field, flag=wx.EXPAND | wx.LEFT | wx.RIGHT,
                   border=8)
 
         name_lbl = wx.StaticText(
-            self, label="&Name (the kin sees this as the channel's name):")
+            self, label="&Display label (kin sees this as the channel's name):")
         self.name_field = wx.TextCtrl(self, value=str(name or ""))
         outer.Add(name_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         outer.Add(self.name_field, flag=wx.EXPAND | wx.LEFT | wx.RIGHT,
@@ -63,7 +63,7 @@ class _DiscordChannelDialog(wx.Dialog):
         outer.Add(self.muted_list, flag=wx.EXPAND | wx.LEFT | wx.RIGHT,
                   border=8)
         mute_row = wx.BoxSizer(wx.HORIZONTAL)
-        add_btn = wx.Button(self, label="Mute someone by I&D…")
+        add_btn = wx.Button(self, label="Add by &ID…")
         add_btn.Bind(wx.EVT_BUTTON, self._on_mute)
         unmute_btn = wx.Button(self, label="&Unmute")
         unmute_btn.Bind(wx.EVT_BUTTON, self._on_unmute)
@@ -73,7 +73,7 @@ class _DiscordChannelDialog(wx.Dialog):
 
         self.private_sees_check = wx.CheckBox(
             self,
-            label=("Your private chats with the kin in&clude this channel: "
+            label=("Your private chats with the kin inc&lude this channel: "
                    "the desktop, your shared direct messages and wake-ups "
                    "get what's said here, marked with this channel's name."))
         self.private_sees_check.SetValue(bool(private_sees))

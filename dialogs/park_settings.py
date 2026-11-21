@@ -204,7 +204,7 @@ class ParkSettingsDialog(wx.Dialog):
         outer.Add(self.shared_radio, 0, wx.LEFT | wx.RIGHT, 16)
         outer.Add(self.server_radio, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
 
-        self.path_label = wx.StaticText(panel, label="Shared park &file:")
+        self.path_label = wx.StaticText(panel, label="Shared park file &location:")
         outer.Add(self.path_label, 0, wx.LEFT, 8)
         row = wx.BoxSizer(wx.HORIZONTAL)
         self.path_field = wx.TextCtrl(panel, value=self.cfg.get("park_save", ""))
@@ -216,7 +216,7 @@ class ParkSettingsDialog(wx.Dialog):
 
         _host0, _port0 = _split_server_url(self.cfg.get("park_server", ""))
         self.server_label = wx.StaticText(
-            panel, label="Server &address (name or IP, e.g. 127.0.0.1):")
+            panel, label="Server a&ddress (name or IP, e.g. 127.0.0.1):")
         outer.Add(self.server_label, 0, wx.LEFT, 8)
         self.server_field = wx.TextCtrl(panel, value=_host0)
         self.server_field.SetName("Server address")
@@ -253,7 +253,7 @@ class ParkSettingsDialog(wx.Dialog):
         outer.Add(self.status, 0, wx.EXPAND | wx.ALL, 8)
 
         btns = wx.StdDialogButtonSizer()
-        ok = wx.Button(self, wx.ID_OK, "&OK")
+        ok = wx.Button(self, wx.ID_OK, "&Save")
         ok.SetDefault()
         btns.AddButton(ok)
         btns.AddButton(wx.Button(self, wx.ID_CANCEL, "&Cancel"))

@@ -169,7 +169,7 @@ class _TelegramGroupDialog(wx.Dialog):
         self.private_sees_check = wx.CheckBox(
             self,
             label=(
-                "Your private chats with the kin in&clude this group: "
+                "Your private chats with the kin inc&lude this group: "
                 "the desktop, your shared direct messages and wake-ups "
                 "get what's said here, marked with this group's name."
             ),
@@ -195,7 +195,7 @@ class _TelegramGroupDialog(wx.Dialog):
         # the exception. It does NOT affect who can DM the kin — that's the
         # separate "Users allowed to DM" list on the Telegram tab.
         muted_lbl = wx.StaticText(
-            self, label="&Muted in this group (kin ignores these people here):")
+            self, label="Mu&ted in this group (kin ignores these people here):")
         outer.Add(muted_lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         self.muted_list = wx.ListBox(self, style=wx.LB_SINGLE)
         # The SetName wins over the StaticText above it, so it has to carry the

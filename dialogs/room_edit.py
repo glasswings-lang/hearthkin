@@ -334,7 +334,7 @@ class RoomEditDialog(wx.Dialog):
         self._refresh_distill_help()
 
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
-        ok_btn = wx.Button(panel, wx.ID_OK, label="&OK")
+        ok_btn = wx.Button(panel, wx.ID_OK, label="&Save")
         cancel_btn = wx.Button(panel, wx.ID_CANCEL, label="Ca&ncel")
         ok_btn.SetDefault()
         btn_row.Add(ok_btn, flag=wx.RIGHT, border=6)

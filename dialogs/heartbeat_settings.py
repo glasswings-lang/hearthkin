@@ -143,7 +143,7 @@ class HeartbeatSettingsDialog(wx.Dialog):
         # The labels the kin will actually be shown and must say back.
         self._allow_labels = self._dest_labels[1:]
 
-        ok_btn = wx.Button(self, wx.ID_OK, label="&OK")
+        ok_btn = wx.Button(self, wx.ID_OK, label="Sa&ve")
         cancel_btn = wx.Button(self, wx.ID_CANCEL, label="&Cancel")
         ok_btn.SetDefault()
         ok_btn.Bind(wx.EVT_BUTTON, self._on_ok)

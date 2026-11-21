@@ -1230,7 +1230,7 @@ class EditKinDialog(wx.Dialog):
         font = tg_label.GetFont(); font.SetWeight(wx.FONTWEIGHT_BOLD)
         tg_label.SetFont(font)
 
-        token_lbl = wx.StaticText(host, label="Bot token:")
+        token_lbl = wx.StaticText(host, label="&Bot token:")
         # Commit on focus-loss / Enter rather than EVT_TEXT — the old
         # per-keystroke binding rewrote config.json once per typed
         # character (L-B43): pure disk churn that also widened the
@@ -1257,17 +1257,17 @@ class EditKinDialog(wx.Dialog):
 
         allow_lbl = wx.StaticText(
             host,
-            label=("Users allowed to DM this kin (private chats only; tool "
-                   "access set per user):")
+            label=("People who can message this kin directly (private "
+                   "chats only; tool access set per person):")
         )
         self.tg_users_list = wx.ListBox(host, style=wx.LB_SINGLE)
         self.tg_users_list.SetMinSize((-1, 160))
         tg_users_btn_row = wx.BoxSizer(wx.HORIZONTAL)
-        self.tg_add_user_btn = wx.Button(host, label="&Add user...")
+        self.tg_add_user_btn = wx.Button(host, label="&Add person...")
         self.tg_add_user_btn.Bind(wx.EVT_BUTTON, self._on_tg_add_user)
-        self.tg_edit_user_btn = wx.Button(host, label="Ed&it user...")
+        self.tg_edit_user_btn = wx.Button(host, label="Ed&it person...")
         self.tg_edit_user_btn.Bind(wx.EVT_BUTTON, self._on_tg_edit_user)
-        self.tg_remove_user_btn = wx.Button(host, label="Re&move user")
+        self.tg_remove_user_btn = wx.Button(host, label="Re&move person")
         self.tg_remove_user_btn.Bind(wx.EVT_BUTTON, self._on_tg_remove_user)
         tg_users_btn_row.Add(self.tg_add_user_btn, flag=wx.RIGHT, border=6)
         tg_users_btn_row.Add(self.tg_edit_user_btn, flag=wx.RIGHT, border=6)
@@ -1385,6 +1385,13 @@ class EditKinDialog(wx.Dialog):
             host, style=wx.TE_PASSWORD | wx.TE_PROCESS_ENTER)
         self.dc_token_field.Bind(wx.EVT_KILL_FOCUS, self._on_dc_token_changed)
         self.dc_token_field.Bind(wx.EVT_TEXT_ENTER, self._on_dc_token_changed)
+        # Telegram's "Test token", on the Discord tab (21 Nov 2026).
+        dc_test_btn = wx.Button(host, label="Test toke&n")
+        dc_test_btn.Bind(wx.EVT_BUTTON, self._on_dc_test_token)
+        self.dc_test_label = wx.TextCtrl(
+            host, style=wx.TE_READONLY | wx.BORDER_NONE)
+        self.dc_test_label.SetMinSize((420, -1))
+        self.dc_test_label.SetName("Discord bot token test result")
 
         dc_policy_lbl = wx.StaticText(
             host, label="When to &respond in servers, if no channels are "
@@ -1457,9 +1464,9 @@ class EditKinDialog(wx.Dialog):
         self.dc_users_list = wx.ListBox(host, style=wx.LB_SINGLE)
         self.dc_users_list.SetMinSize((-1, 140))
         dc_users_btn_row = wx.BoxSizer(wx.HORIZONTAL)
-        self.dc_add_user_btn = wx.Button(host, label="Add &person...")
+        self.dc_add_user_btn = wx.Button(host, label="&Add person...")
         self.dc_add_user_btn.Bind(wx.EVT_BUTTON, self._on_dc_add_user)
-        self.dc_edit_user_btn = wx.Button(host, label="&Edit person...")
+        self.dc_edit_user_btn = wx.Button(host, label="Ed&it person...")
         self.dc_edit_user_btn.Bind(wx.EVT_BUTTON, self._on_dc_edit_user)
         # "&m" belongs to "&Merge Discord history" further down this tab.
         self.dc_remove_user_btn = wx.Button(host, label="Remo&ve person")
@@ -1579,7 +1586,8 @@ class EditKinDialog(wx.Dialog):
         _wide = (self.dc_token_field, self.dc_users_list,
                  self.dc_guilds_field, dc_where_hint,
                  self.dc_sharing_list)
-        for _w in (dc_label, dc_token_lbl, self.dc_token_field, dc_policy_lbl,
+        for _w in (dc_label, dc_token_lbl, self.dc_token_field, dc_test_btn,
+                   self.dc_test_label, dc_policy_lbl,
                    self.dc_policy_choice,
                    dc_guilds_lbl, self.dc_guilds_field,
                    dc_where_hint,
@@ -3757,6 +3765,25 @@ class EditKinDialog(wx.Dialog):
             self.frame._stop_bot_for(self.kin)
 
     # --- Discord --- #
+
+    def _on_dc_test_token(self, event):
+        token = self.dc_token_field.GetValue().strip()
+        if not token:
+            self.dc_test_label.SetValue("Empty token.")
+            return
+        self.dc_test_label.SetValue("Testing...")
+
+        def worker():
+            from discord_bot import discord_test_token
+            ok, msg = discord_test_token(token)
+            wx.CallAfter(self._on_dc_test_token_done, ok, msg)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_dc_test_token_done(self, ok, msg):
+        if not self:
+            return
+        self.dc_test_label.SetValue(("✓ " + msg) if ok else ("✗ " + msg))
 
     def _on_dc_enabled_toggle(self, event):
         if self._loading:

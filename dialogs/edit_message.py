@@ -78,7 +78,7 @@ class EditMessageDialog(wx.Dialog):
         self._load_selected()
 
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
-        ok_btn = wx.Button(panel, wx.ID_OK, label="&OK")
+        ok_btn = wx.Button(panel, wx.ID_OK, label="&Save")
         cancel_btn = wx.Button(panel, wx.ID_CANCEL, label="Ca&ncel")
         ok_btn.SetDefault()
         btn_row.AddStretchSpacer(1)
