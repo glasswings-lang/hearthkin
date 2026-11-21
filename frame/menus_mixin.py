@@ -99,6 +99,10 @@ class MenusMixin:
 
         chat_menu = wx.Menu()
         self.mnu_regen = chat_menu.Append(wx.ID_ANY, "&Regenerate last reply\tCtrl+R")
+        # As Telegram's and Discord's /undo (20 Nov 2026): the desktop had
+        # no way to take an exchange back except editing it.
+        self.mnu_undo_exchange = chat_menu.Append(
+            wx.ID_ANY, "&Undo last exchange\tCtrl+Shift+U")
         self.mnu_stop = chat_menu.Append(wx.ID_ANY, "Sto&p generating\tEsc")
         # Stop only reaches the reply on THIS screen. A kin working on
         # Telegram or Discord could not be stopped from the desktop at all;
@@ -228,6 +232,7 @@ class MenusMixin:
         self.Bind(wx.EVT_MENU, self._on_edit_room, self.mnu_edit_room)
         self.Bind(wx.EVT_MENU, self._on_delete_room, self.mnu_delete_room)
         self.Bind(wx.EVT_MENU, self._on_regen, self.mnu_regen)
+        self.Bind(wx.EVT_MENU, self._on_undo_exchange, self.mnu_undo_exchange)
         self.Bind(wx.EVT_MENU, self._on_stop, self.mnu_stop)
         self.Bind(wx.EVT_MENU, self._on_stop_everywhere, self.mnu_stop_everywhere)
         self.Bind(wx.EVT_MENU, self._on_whats_busy, self.mnu_whats_busy)

@@ -769,6 +769,11 @@ DEFAULT_TELEGRAM_CONFIG = {
 DEFAULT_DISCORD_CONFIG = {
     "enabled": False,
     "bot_token": "",
+    # Post each tool call and a preview of its result in the chat, as
+    # Telegram's "Show tool calls in chat" does. Off by default, like
+    # Telegram's; a failed call is always shown. Discord used to post every
+    # call, with no setting, even in public channels (audit, 20 Nov 2026).
+    "show_tool_calls": False,
     # "mention_only": reply only when @-mentioned — the sane default for
     # busy servers. "always": reply to every message — only viable in a
     # quiet channel on local hardware (one generation at a time).

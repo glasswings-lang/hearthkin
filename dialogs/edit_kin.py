@@ -1474,6 +1474,15 @@ class EditKinDialog(wx.Dialog):
                         "conversation (older entries only; each person's "
                         "window now has its own Share box)")
         self.dc_share_check.Bind(wx.EVT_CHECKBOX, self._on_dc_share_toggle)
+        # As Telegram's "Show tool calls in chat"; off by default, and a
+        # failed call is always shown either way.
+        self.dc_tools_check = wx.CheckBox(
+            host, label="Show &tool calls in chat (each call and a preview of "
+                        "its result; failures are always shown)")
+        self.dc_tools_check.Bind(
+            wx.EVT_CHECKBOX,
+            lambda e: self._save_discord_param(
+                "show_tool_calls", bool(self.dc_tools_check.GetValue())))
 
         # "&r" belongs to "When to &respond" above — this checkbox had the
         # same letter, so Alt+R on this tab reached whichever wx happened to
@@ -1525,7 +1534,8 @@ class EditKinDialog(wx.Dialog):
                    dc_sharing_lbl, self.dc_sharing_list, dc_sharing_btn_row,
                    dc_allow_lbl, self.dc_users_list,
                    dc_users_btn_row,
-                   self.dc_share_check, self.dc_enabled_check,
+                   self.dc_share_check, self.dc_tools_check,
+                   self.dc_enabled_check,
                    self.dc_status_label, dc_help):
             _flag = wx.LEFT | wx.RIGHT | wx.TOP
             if any(_w is _x for _x in _wide):
@@ -1859,6 +1869,7 @@ class EditKinDialog(wx.Dialog):
             ", ".join(str(x) for x in (dc.get("guilds") or [])))
         self._refresh_dc_sharing_list()
         self.dc_share_check.SetValue(bool(dc.get("share_desktop", False)))
+        self.dc_tools_check.SetValue(bool(dc.get("show_tool_calls", False)))
         self.dc_enabled_check.SetValue(bool(dc.get("enabled", False)))
 
         existing_bot = self.frame.bots.get(self.kin)

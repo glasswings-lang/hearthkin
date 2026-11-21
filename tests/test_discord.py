@@ -114,7 +114,10 @@ def test_config_defaults_and_backfill():
     check("discord section present",
           set(d or {}) == {"enabled", "bot_token", "policy",
                            "share_desktop", "allow_from",
-                           "user_tools", "guilds", "channels"})
+                           "user_tools", "guilds", "channels",
+                           "show_tool_calls"})
+    check("tool lines default off, like Telegram's (20 Nov 2026)",
+          d.get("show_tool_calls") is False)
     check("policy default mention_only", d.get("policy") == "mention_only")
     check("share_desktop default off", d.get("share_desktop") is False)
     check("allow_from default deny-all", d.get("allow_from") == [])

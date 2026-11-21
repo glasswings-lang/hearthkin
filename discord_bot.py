@@ -389,18 +389,50 @@ class DiscordBot:
             entry = self._active_turns.get(channel_id)
             return bool(entry and entry.get("stop"))
 
-    def _request_turn_stop(self, channel_id):
+    def _may_explain_refusal(self, author_id):
+        """True at most once per person every ten minutes."""
+        import time as _t
+        times = getattr(self, "_unauth_reply_times", None)
+        if times is None:
+            times = self._unauth_reply_times = {}
+        now = _t.monotonic()
+        last = times.get(str(author_id))
+        if last is not None and now - last < 600.0:
+            return False
+        if len(times) > 256:
+            for k in [k for k, v in times.items() if now - v >= 600.0]:
+                times.pop(k, None)
+        times[str(author_id)] = now
+        return True
+
+    def _request_turn_stop(self, channel_id, author_id=None):
         """Ask the reply in this channel to stop. Returns True when there was
         one to stop, so the caller can say something true either way.
 
         Scoped to the CHANNEL, which is the unit a Discord reply belongs to —
-        one channel's stop must not reach into another's."""
+        one channel's stop must not reach into another's. And, as on
+        Telegram, only the person the reply is for, or the kin's own person,
+        can stop it: in a shared channel anyone could stop anyone's reply
+        (audit, 20 Nov 2026). `author_id` None (the desktop's stop) always
+        may."""
         with self._turn_lock:
             entry = self._active_turns.get(channel_id)
             if not entry:
                 return False
+            if author_id is not None and not self._may_stop(entry, author_id):
+                return False
             entry["stop"] = True
             return True
+
+    def _may_stop(self, entry, author_id):
+        if str(entry.get("author_id")) == str(author_id):
+            return True
+        try:
+            from tools._person_settings import person_value
+            dcfg = (self.get_config() or {}).get("discord") or {}
+            return bool(person_value(dcfg, "discord", author_id, "is_me"))
+        except Exception:
+            return False
 
     def _announce_long_reply(self, channel_id, count):
         """Tell the desktop, once, that a reply here is running long."""
@@ -526,6 +558,17 @@ class DiscordBot:
                     "ignored (deny-by-default for safety). Add Discord user "
                     "IDs, or \"*\" to allow anyone, in the kin's Discord "
                     "settings.")
+            # In a direct message, say why and how to be added, as Telegram
+            # does (a silent drop leaves the person no way to ask); at most
+            # once per person every ten minutes. Never in a channel.
+            if in_dm and self._may_explain_refusal(message.author.id):
+                await self._send_chunked(
+                    message.channel,
+                    f"Hi! You're not on {self.agent_name}'s list yet, so I "
+                    f"can't chat with you. Your Discord user ID is "
+                    f"{message.author.id}. Share that with the kin's operator "
+                    f"and ask to be added in Hearthkin's kin settings, on the "
+                    f"Discord tab.")
             return
 
         content = _MENTION_RE.sub("", message.content or "").strip()
@@ -563,10 +606,17 @@ class DiscordBot:
         # Gateway loop keeps running throughout: inference is handed to an
         # executor, so this handler is never blocked by the reply it stops.
         if content.strip().lower() in _STOP_WORDS:
-            if self._request_turn_stop(message.channel.id):
+            with self._turn_lock:
+                running = message.channel.id in self._active_turns
+            if self._request_turn_stop(message.channel.id, message.author.id):
                 await self._send_chunked(
                     message.channel,
                     "Stopped. Keeping what was written so far.")
+            elif running:
+                await self._send_chunked(
+                    message.channel,
+                    "That reply is for someone else, so only they can stop "
+                    "it.")
             else:
                 await self._send_chunked(
                     message.channel,
@@ -1901,10 +1951,16 @@ class DiscordBot:
                 if len(tool_names_called) == _notice_at:
                     self._announce_long_reply(channel_id, len(tool_names_called))
                 try:
-                    self._post_from_thread(
-                        channel, f"🔧 {name}({self._short_args(args)})")
-                    self._post_from_thread(
-                        channel, f"→ {str(result)[:400]}")
+                    if bool((cfg.get("discord") or {}).get(
+                            "show_tool_calls", False)):
+                        self._post_from_thread(
+                            channel, f"🔧 {name}({self._short_args(args)})")
+                        self._post_from_thread(
+                            channel, f"→ {str(result)[:400]}")
+                    elif is_error:
+                        # A failure is always shown, as on Telegram.
+                        self._post_from_thread(
+                            channel, f"⚠️ {str(result)[:400]}")
                 except Exception:
                     pass
 

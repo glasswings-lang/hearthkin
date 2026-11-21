@@ -1456,6 +1456,36 @@ class ChatStreamMixin:
         self._persist_current_conversation()
         self._send_message(last_user, regen_attachment_refs=regen_atts)
 
+    def _on_undo_exchange(self, event):
+        """Chat -> Undo last exchange (Ctrl+Shift+U): take back your last
+        message and the kin's reply to it, with its tool steps and any notes
+        Hearthkin left after it, as /undo does on Telegram and Discord. A
+        compaction note is never taken."""
+        if self.current_room is not None:
+            self._set_status("Undo works in a one-to-one conversation.")
+            return
+        if self._streaming:
+            self._set_status("Wait for the reply to finish, or stop it, "
+                             "then undo.")
+            return
+        convo = self.conversation
+        i = len(convo)
+        while (i > 0 and convo[i - 1].get("role") == "system"
+               and not convo[i - 1].get("compact")):
+            i -= 1
+        j = i
+        while j > 0 and convo[j - 1].get("role") in ("assistant", "tool"):
+            j -= 1
+        if j == i or j == 0 or convo[j - 1].get("role") != "user":
+            self._set_status("Nothing to undo.")
+            return
+        del convo[j - 1:]
+        self._render_conversation()
+        self._persist_current_conversation()
+        self._set_status("Undid your last message and "
+                         f"{getattr(self, 'current_agent', None) or 'the kin'}"
+                         "'s reply.")
+
     def _on_edit_message(self, event):
         """Chat -> Edit a message... (Ctrl+E). Open a dialog listing the
         past turns in the currently-active conversation (1-on-1 or room),
