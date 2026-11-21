@@ -341,10 +341,29 @@ def load_telegram_history(name):
         return {}
 
 
-def save_telegram_history(name, histories):
+def load_telegram_rows_added(name):
+    """How many rows have ever been added to each history in
+    telegram_history.json ({key: int}); see history_rows. Empty for an old
+    file or a missing one."""
+    from history_rows import clean_counts
+    path = _agent_dir(name) / "telegram_history.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return clean_counts(data.get("rows_added")
+                        if isinstance(data, dict) else None)
+
+
+def save_telegram_history(name, histories, rows_added=None):
+    """`rows_added`: the running bot's counts (see history_rows). Left
+    out, the counts already in the file are kept, so a save from outside
+    the bot never loses them."""
     from kin_persistence import atomic_write_text, now_iso
     d = _agent_dir(name)
     d.mkdir(parents=True, exist_ok=True)
+    if rows_added is None:
+        rows_added = load_telegram_rows_added(name)
     data = {
         "saved_at": now_iso(),
         # Stringify keys so an int key can never reach json.dumps —
@@ -352,6 +371,7 @@ def save_telegram_history(name, histories):
         # JSON keys and json.loads keeps only the last, destroying
         # the older slice (audit DH1).
         "histories": {str(k): v for k, v in (histories or {}).items()},
+        "rows_added": {str(k): int(v) for k, v in (rows_added or {}).items()},
     }
     # Compact separators, no indent: this file is rewritten in full on
     # every Telegram turn, so pretty-printing multiplies the per-turn
@@ -874,6 +894,27 @@ class TelegramBot:
             return 0  # 0 means "no trim"
         return max(10, val)
 
+    def _save_histories(self):
+        """Save every history with its row counts. Callers hold
+        _histories_lock."""
+        save_telegram_history(self.agent_name, self._histories,
+                              rows_added=getattr(self, "_rows_added", None))
+
+    def _count_added(self, key, existing_len, n):
+        from history_rows import note_added
+        if not hasattr(self, "_rows_added"):
+            self._rows_added = {}
+        note_added(self._rows_added, key, existing_len, n)
+
+    def history_with_front(self, key):
+        """(rows, front_dropped) for one history, read together under the
+        lock so the app's bookmark maths sees one consistent moment."""
+        from history_rows import front_dropped
+        with self._histories_lock:
+            rows = list(self._histories.get(key) or [])
+            added = (getattr(self, "_rows_added", None) or {}).get(str(key))
+            return rows, front_dropped(added, len(rows))
+
     def _trim_history(self, history, cap):
         """Cap the stored history — but in RARE, BIG steps, not one message
         per turn.
@@ -1029,6 +1070,10 @@ class TelegramBot:
         self._histories_lock = threading.RLock()
         with self._histories_lock:
             self._histories = load_telegram_history(agent_name)
+            # How many rows each history has ever had added, saved with
+            # it, so the app can tell how many came off the front and
+            # keep its distill bookmark true (history_rows).
+            self._rows_added = load_telegram_rows_added(agent_name)
         self._status = TelegramBot.STATUS_OFF
         self._last_error = None
         # Per-user pending exec approvals. Key: Telegram user_id (int).
@@ -1556,6 +1601,7 @@ class TelegramBot:
         except Exception as e:
             data, err = None, str(e)
         if data is None:
+            from kin_persistence import append_failure_log
             append_failure_log(
                 "telegram_failures.log", self.agent_name,
                 f"text attachment download failed name={name!r}", err or "?")
@@ -2747,6 +2793,7 @@ class TelegramBot:
                     saved = reading_bridge.save_sound_file(
                         self.agent_name, name, data)
                 else:
+                    from kin_persistence import append_failure_log
                     append_failure_log("telegram_failures.log",
                                        self.agent_name,
                                        f"sound file download name={name!r}",
@@ -3388,7 +3435,7 @@ class TelegramBot:
         with self._histories_lock:
             self._histories.pop(_hkey(user_id), None)
             try:
-                save_telegram_history(self.agent_name, self._histories)
+                self._save_histories()
             except Exception:
                 pass
         self._last_thinking.pop(user_id, None)
@@ -3496,7 +3543,7 @@ class TelegramBot:
         with self._histories_lock:
             self._histories.pop(_hkey(user_id), None)
             try:
-                save_telegram_history(self.agent_name, self._histories)
+                self._save_histories()
             except Exception:
                 pass
         self._last_thinking.pop(user_id, None)
@@ -3587,7 +3634,7 @@ class TelegramBot:
             with self._histories_lock:
                 self._histories.pop(_hkey(user_id), None)
                 try:
-                    save_telegram_history(self.agent_name, self._histories)
+                    self._save_histories()
                 except Exception:
                     pass
         self._last_thinking.pop(user_id, None)
@@ -3836,10 +3883,17 @@ class TelegramBot:
         with self._histories_lock:
             history = self._histories.get(_hkey(user_id)) or []
             truncated = history[:idx]
+            # Cut off the END, so it comes back off the row count rather
+            # than reading as rows lost off the front (history_rows).
+            from history_rows import note_end_cut
+            if not hasattr(self, "_rows_added"):
+                self._rows_added = {}
+            note_end_cut(self._rows_added, _hkey(user_id), len(history),
+                         len(history) - len(truncated))
             _drop_leading_orphan_tools(truncated)
             self._histories[_hkey(user_id)] = truncated
             try:
-                save_telegram_history(self.agent_name, self._histories)
+                self._save_histories()
             except Exception:
                 pass
 
@@ -4477,6 +4531,7 @@ class TelegramBot:
             # restart, and the duplicate int+str JSON keys destroyed
             # the older slice on the next save/load round-trip.
             history = self._histories.setdefault(_hkey(user_id), [])
+            self._count_added(_hkey(user_id), len(history), len(new_turns))
             history.extend(new_turns)
             history = self._trim_history(history, cap)
             # Sweep LEADING tool-pair fragments (a cap-cut mid-
@@ -4494,7 +4549,7 @@ class TelegramBot:
             _drop_leading_orphan_tools(history, sweep_trailing_assistant_tcs=False)
             self._histories[_hkey(user_id)] = history
             try:
-                save_telegram_history(self.agent_name, self._histories)
+                self._save_histories()
             except Exception as e:
                 append_failure_log(
                     "telegram_failures.log",
@@ -4926,13 +4981,11 @@ class TelegramBot:
             # values that wrote the brackets, and the two cannot drift apart.
             dm_bracketed = set()
             # Marked by account, like the group path (20 Nov 2026).
-            from chat_helpers import app_user_name as _aun
-            from tools._person_settings import mark_own_person as _mop
             _dm_section = self._tg_section()
-            _dm_extra = (_aun(),)
 
-            def _mark_dm(who, sender_id):
-                return _mop(who, sender_id, _dm_section, "telegram", _dm_extra)
+            from chat_helpers import person_row_text, row_speaker
+            _dm_kin_cfg = dict(self._kin_config() or {})
+            _dm_kin_cfg["telegram"] = _dm_section
             # Past reasoning goes back only when the kin is set to feed it
             # back, as on the desktop. Desktop rows always carry it, and a
             # shared DM passed them through regardless (audit, 20 Nov 2026).
@@ -4944,24 +4997,17 @@ class TelegramBot:
                 h_role = h.get("role")
                 h_content = h.get("content")
                 if h_role == "user" and isinstance(h_content, str):
-                    ts_prefix = format_ts_prefix(h.get("ts"))
-                    h_sender = (h.get("sender_attribution")
-                                or h.get("sender_name") or "").strip()
-                    if h.get("sender_id") is not None:
-                        h_sender = _mark_dm(h_sender, h.get("sender_id"))
-                    # Defense-in-depth: legacy stored values may pre-date
-                    # the sanitizer in `_sender_attribution` /
-                    # `_sender_display_name`. Sanitize again at the
-                    # embed boundary so old conversation.jsonl rows
-                    # with control chars in attribution can't break the
-                    # prompt frame.
-                    sender_prefix = speaker_attribution_prefix(h_sender)
+                    # "[time] [Name] words", labelled and marked by account,
+                    # through the one rule every surface uses
+                    # (chat_helpers.person_row_text). It sanitizes the name.
+                    _text, _name = person_row_text(h, _dm_kin_cfg, "telegram")
+                    sender_prefix = speaker_attribution_prefix(_name)
                     if sender_prefix:
                         dm_bracketed.add(
                             sender_prefix.strip().strip("[]").strip())
-                    if ts_prefix or sender_prefix:
+                    if _text != h_content:
                         new_h = dict(h)
-                        new_h["content"] = ts_prefix + sender_prefix + h_content
+                        new_h["content"] = _text
                         messages.append(new_h)
                         continue
                 messages.append(_without_thinking(h, _feed_think))
@@ -4969,8 +5015,10 @@ class TelegramBot:
             # by `_sender_attribution()`; re-applying here is a no-op
             # but keeps the embed-site call sites symmetric so future
             # readers can't accidentally pipe an unsanitized variable.
-            sender_prefix_current = speaker_attribution_prefix(
-                _mark_dm(sender_attribution, user_id))
+            sender_prefix_current = speaker_attribution_prefix(row_speaker(
+                {"sender_id": user_id,
+                 "sender_attribution": sender_attribution},
+                _dm_kin_cfg, "telegram")[0])
             if sender_prefix_current:
                 dm_bracketed.add(
                     sender_prefix_current.strip().strip("[]").strip())
@@ -5700,26 +5748,14 @@ class TelegramBot:
         # Resolved at build time only (current turn + replay loop below);
         # conversation.jsonl keeps the raw Telegram attribution as ground
         # truth. JSON stores the int user_id as a string key, try both.
-        labels_map = cfg.get("user_labels") or {}
-
-        def _label_for(sender_id):
-            if sender_id is None:
-                return ""
-            try:
-                return (labels_map.get(str(sender_id))
-                        or labels_map.get(sender_id) or "").strip()
-            except Exception:
-                return ""
-
-        _curr_label = _label_for(user_id)
         # The kin's own person is known by account, never by name: anyone
         # in a group can call themselves anything (20 Nov 2026).
-        from chat_helpers import app_user_name
-        from tools._person_settings import mark_own_person
-        _own_extra = (app_user_name(),)
 
-        def _mark(who, sender_id):
-            return mark_own_person(who, sender_id, cfg, "telegram", _own_extra)
+        # Names and marks come from chat_helpers.row_speaker, with this
+        # bot's section as the Telegram one.
+        from chat_helpers import row_speaker
+        _grp_kin_cfg = dict(self._kin_config() or {})
+        _grp_kin_cfg["telegram"] = cfg
         message_date = msg.get("date")
         token = (cfg.get("bot_token") or "").strip()
 
@@ -5890,26 +5926,14 @@ class TelegramBot:
                 h_role = h.get("role")
                 h_content = h.get("content")
                 if h_role == "user" and isinstance(h_content, str):
-                    # Operator label (resolved by the turn's stored
-                    # sender_id) wins so historical turns relabel too
-                    # without rewriting conversation.jsonl; then the
-                    # stored "Display Name (@username)" attribution; then
-                    # legacy sender_name; final fallback is parsing a
-                    # "[Name]: " prefix from the very oldest rows that
-                    # predate even sender_name capture.
-                    h_sender = (_label_for(h.get("sender_id"))
-                                or h.get("sender_attribution")
-                                or h.get("sender_name") or "")
-                    clean = h_content
-                    m = legacy_sender_re.match(clean)
-                    if m:
-                        legacy_name = m.group(1)
-                        if not h_sender:
-                            h_sender = legacy_name
-                        clean = clean[m.end():]
+                    # Who said it, through the one rule every surface uses
+                    # (chat_helpers.row_speaker): the label given to the
+                    # account wins, so old turns relabel too; then the
+                    # stored name; then a "[Name]: " the oldest rows baked
+                    # in. Marked by account.
+                    h_sender, clean = row_speaker(h, _grp_kin_cfg, "telegram")
                     h_atts = h.get("attachments") if isinstance(h.get("attachments"), list) else None
-                    _emit_user_with_sender(_mark(h_sender, h.get("sender_id")),
-                                           h.get("ts"), clean, h_atts)
+                    _emit_user_with_sender(h_sender, h.get("ts"), clean, h_atts)
                     continue
                 # Assistant / tool / system turns pass through unchanged.
                 messages.append(_without_thinking(h, _feed_think))
@@ -5919,8 +5943,10 @@ class TelegramBot:
             # sender. Inlined into content by _emit_user_with_sender.
             # Attachments (if any) go on the message; llm_backend.chat()
             # expands them based on the provider when it dispatches.
-            _emit_user_with_sender(_mark(_curr_label or sender_attribution,
-                                         user_id),
+            _emit_user_with_sender(row_speaker(
+                {"sender_id": user_id,
+                 "sender_attribution": sender_attribution},
+                _grp_kin_cfg, "telegram")[0],
                                    user_ts, cleaned_text, attachments)
 
             full_cfg = load_agent_config(self.agent_name) or {}
@@ -6394,6 +6420,7 @@ class TelegramBot:
             cap = self._history_cap()
             with self._histories_lock:
                 history = self._histories.setdefault(history_key, [])
+                self._count_added(history_key, len(history), len(new_turns))
                 history.extend(new_turns)
                 history = self._trim_history(history, cap)
                 # Sweep leading tool-pair fragments only. Trailing-
@@ -6404,7 +6431,7 @@ class TelegramBot:
                 # silently lose data on disk.
                 _drop_leading_orphan_tools(history, sweep_trailing_assistant_tcs=False)
                 self._histories[history_key] = history
-                save_telegram_history(self.agent_name, self._histories)
+                self._save_histories()
         if self.on_activity is not None:
             try:
                 self.on_activity("group", chat_id)
@@ -6441,7 +6468,7 @@ class TelegramBot:
                 if popped:
                     slice_msgs.extend(popped)
             try:
-                save_telegram_history(self.agent_name, self._histories)
+                self._save_histories()
             except Exception as e:
                 append_failure_log(
                     "telegram_failures.log",
@@ -6488,7 +6515,7 @@ class TelegramBot:
             for k in keys_to_try:
                 slice_msgs.extend(self._histories.pop(k, []) or [])
             try:
-                save_telegram_history(self.agent_name, self._histories)
+                self._save_histories()
             except Exception as e:
                 append_failure_log(
                     "telegram_failures.log",

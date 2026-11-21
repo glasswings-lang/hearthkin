@@ -116,7 +116,8 @@ class _Bot(DiscordBot):
     def _post_from_thread(self, channel, text):
         self.posted.append(text)
 
-    def _persist_turn(self, channel_id, role, content, share, said=None):
+    def _persist_turn(self, channel_id, role, content, share, said=None,
+                      **_kw):
         self.saved.append((role, content))
 
 

@@ -16,6 +16,7 @@ from frame_shared import (
     load_soul, nvda_speak, save_agent_config,
     save_memory, strip_model_annotation, think_effort_of, threading, time, wx,
 )
+from history_rows import scope_bookmark, set_scope_bookmark
 
 
 class MemoryMixin:
@@ -796,42 +797,31 @@ class MemoryMixin:
             except Exception:
                 return []
         # Telegram-side non-shared scopes
+        # Telegram's and Discord's own histories lose rows off the front
+        # (the cap, /clear); the rows come back knowing how many, so the
+        # bookmark can be kept true (history_rows.scope_bookmark).
+        from history_rows import scope_rows, front_dropped
         bot = (getattr(self, "bots", None) or {}).get(agent_name)
+        history_key = None
         if scope_key.startswith("tg:user:"):
-            uid_str = scope_key[len("tg:user:"):]
-            if bot is not None:
+            history_key = scope_key[len("tg:user:"):]
+        elif scope_key.startswith("tg:group:"):
+            history_key = f"group:{scope_key[len('tg:group:'):]}"
+        if history_key is not None:
+            if bot is not None and hasattr(bot, "history_with_front"):
                 try:
-                    with bot._histories_lock:
-                        msgs = []
-                        try:
-                            int_key = int(uid_str)
-                            msgs.extend(bot._histories.get(int_key, []) or [])
-                        except (ValueError, TypeError):
-                            pass
-                        msgs.extend(bot._histories.get(uid_str, []) or [])
-                        return msgs
+                    rows, front = bot.history_with_front(history_key)
+                    return scope_rows(rows, front)
                 except Exception:
                     pass
             # Fallback: read the file
             try:
-                from telegram_bot import load_telegram_history
+                from telegram_bot import (load_telegram_history,
+                                          load_telegram_rows_added)
                 h = load_telegram_history(agent_name) or {}
-                return list(h.get(uid_str) or [])
-            except Exception:
-                return []
-        if scope_key.startswith("tg:group:"):
-            cid_str = scope_key[len("tg:group:"):]
-            history_key = f"group:{cid_str}"
-            if bot is not None:
-                try:
-                    with bot._histories_lock:
-                        return list(bot._histories.get(history_key, []) or [])
-                except Exception:
-                    pass
-            try:
-                from telegram_bot import load_telegram_history
-                h = load_telegram_history(agent_name) or {}
-                return list(h.get(history_key) or [])
+                rows = list(h.get(history_key) or [])
+                added = load_telegram_rows_added(agent_name).get(history_key)
+                return scope_rows(rows, front_dropped(added, len(rows)))
             except Exception:
                 return []
         if scope_key.startswith("room:"):
@@ -850,10 +840,9 @@ class MemoryMixin:
             # since their turns live in conversation.jsonl.)
             cid = scope_key[len("discord:"):]
             try:
-                from kin_persistence import load_discord_history
-                return list(
-                    (load_discord_history(agent_name) or {}).get(str(cid))
-                    or [])
+                from kin_persistence import discord_history_with_front
+                rows, front = discord_history_with_front(agent_name, cid)
+                return scope_rows(rows, front)
             except Exception:
                 return []
         return []
@@ -917,7 +906,7 @@ class MemoryMixin:
             convo = self._convo_for_distill_scope(agent_name, sk)
             if not convo:
                 continue
-            bm = live_distill_bookmark(offsets.get(sk, 0), len(convo))
+            bm = scope_bookmark(cfg, sk, convo)
             if bm >= len(convo):
                 continue   # nothing new past the bookmark on this scope
             queue.append(sk)
@@ -1131,8 +1120,7 @@ class MemoryMixin:
             num_ctx = 8192
         if num_ctx <= 0:  # corrupt config — fall back, don't divide by zero
             num_ctx = 8192
-        offsets = cfg.get("distill_offsets") or {}
-        bookmark = live_distill_bookmark(offsets.get(scope_key, 0), len(convo))
+        bookmark = scope_bookmark(cfg, scope_key, convo)
         tail = convo[bookmark:]
         if not tail:
             return 0.0
@@ -1170,10 +1158,10 @@ class MemoryMixin:
         the walk should pause rather than auto-chain into the next
         one."""
         full_len = len(conversation)
-        _offsets = cfg.get("distill_offsets") or {}
         # Past-the-end bookmark (restarted conversation) re-reads from 0
-        # rather than clamping to the end and reporting "caught up".
-        _prev = live_distill_bookmark(_offsets.get(scope_key, 0), full_len)
+        # rather than clamping to the end and reporting "caught up"; rows
+        # cut off the front since it was written are taken off it.
+        _prev = scope_bookmark(cfg, scope_key, conversation)
         # Bookmark already at the conversation's end — nothing new to
         # distill. Return an empty slice so the caller's empty-bite
         # guard skips the run entirely. Without this, the re-read
@@ -1370,8 +1358,7 @@ class MemoryMixin:
         try:
             from kin_persistence import LOGS_DIR
             import datetime
-            offsets = cfg.get("distill_offsets") or {}
-            bm = int(offsets.get(scope_key, 0) or 0)
+            bm = scope_bookmark(cfg, scope_key, conversation or [])
             total = len(conversation or [])
             behind = max(0, total - bm)
             pct = ""
@@ -1442,6 +1429,9 @@ class MemoryMixin:
         # necessarily the full conversation length, so a legacy huge
         # tail catches up across multiple runs instead of choking on
         # one impossible swallow.
+        # How many rows had come off this history's front when it was
+        # read; written beside the new bookmark (history_rows).
+        front_at_read = getattr(conversation, "front_dropped", None)
         conversation, distilled_through, budget_ctx, hit_boundary = (
             self._distill_bite(conversation, cfg, scope_key, agent_name,
                                pacing=pacing))
@@ -1502,11 +1492,13 @@ class MemoryMixin:
                 wx.CallAfter(self._on_distill_done, agent_name, scope_key,
                              result.get("new_entries", ""), None, result,
                              distilled_through, source_label,
-                             hit_boundary=hit_boundary)
+                             hit_boundary=hit_boundary,
+                             front_at_read=front_at_read)
             except Exception as e:
                 wx.CallAfter(self._on_distill_done, agent_name, scope_key,
                              None, str(e), None, distilled_through, source_label,
-                             hit_boundary=hit_boundary)
+                             hit_boundary=hit_boundary,
+                             front_at_read=front_at_read)
 
         # Registered BEFORE start so the slot is never briefly held with
         # no thread against it — a check landing in that gap would fall
@@ -1615,9 +1607,7 @@ class MemoryMixin:
                     convo = self._convo_for_distill_scope(
                         agent_name, scope_key)
                     cfg = load_agent_config(agent_name) or {}
-                    offsets = cfg.get("distill_offsets") or {}
-                    bm = live_distill_bookmark(
-                        offsets.get(scope_key, 0), len(convo))
+                    bm = scope_bookmark(cfg, scope_key, convo)
                     if not convo or bm >= len(convo):
                         # Finished after all (or the surface is gone) —
                         # clear the stale record silently. Announcing
@@ -1666,14 +1656,13 @@ class MemoryMixin:
         if not queue:
             return
         cfg2 = load_agent_config(agent_name) or {}
-        offsets2 = cfg2.get("distill_offsets") or {}
         while queue:
             next_scope = queue.pop(0)
             next_convo = self._convo_for_distill_scope(
                 agent_name, next_scope)
             if not next_convo:
                 continue
-            nbm = live_distill_bookmark(offsets2.get(next_scope, 0), len(next_convo))
+            nbm = scope_bookmark(cfg2, next_scope, next_convo)
             if nbm >= len(next_convo):
                 continue
             self._distill_queue[agent_name] = queue
@@ -1684,7 +1673,7 @@ class MemoryMixin:
             return
         self._distill_queue.pop(agent_name, None)
 
-    def _on_distill_done(self, agent_name, scope_key, new_entries, error, usage_info=None, distilled_through=None, source_label=None, hit_boundary=False):
+    def _on_distill_done(self, agent_name, scope_key, new_entries, error, usage_info=None, distilled_through=None, source_label=None, hit_boundary=False, front_at_read=None):
         # Under the 2026-06-01 staging architecture (see
         # docs/design/memory-architecture-and-ritual-framing.md), the
         # summarizer's output goes to a per-scope staging file the kin
@@ -1807,8 +1796,8 @@ class MemoryMixin:
                         - int(offsets.get(scope_key, 0) or 0))
                 except (TypeError, ValueError):
                     digested_this_run = None
-                offsets[scope_key] = int(distilled_through)
-                bcfg["distill_offsets"] = offsets
+                set_scope_bookmark(bcfg, scope_key, distilled_through,
+                                   front_at_read)
                 # Stamp WHEN the bookmark moved. The Memory tab's counter
                 # is the only window an operator has onto whether
                 # distillation is alive — and a bare "N undistilled" looks
@@ -1841,10 +1830,9 @@ class MemoryMixin:
         messages_remaining = 0
         if distilled_through is not None:
             try:
-                current_len = len(self._convo_for_distill_scope(
-                    agent_name, scope_key))
-                messages_remaining = max(
-                    0, current_len - int(distilled_through))
+                _now = self._convo_for_distill_scope(agent_name, scope_key)
+                messages_remaining = max(0, len(_now) - scope_bookmark(
+                    load_agent_config(agent_name) or {}, scope_key, _now))
             except Exception:
                 pass
         # A run that ends still behind means the automatic triggers should
@@ -1943,8 +1931,8 @@ class MemoryMixin:
             try:
                 walk_convo = self._convo_for_distill_scope(
                     agent_name, scope_key)
-                bm = (int(distilled_through)
-                      if distilled_through is not None else 0)
+                bm = scope_bookmark(load_agent_config(agent_name) or {},
+                                    scope_key, walk_convo)
                 # One chunk done — sound it, pitched by how far through
                 # the redistill is. This is the progress report that
                 # actually arrives: the spoken cost line above is

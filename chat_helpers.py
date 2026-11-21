@@ -641,6 +641,85 @@ def speakers_shown(rows, also=()):
     return names
 
 
+# The very oldest stored rows carried their speaker baked into the words as
+# "[Name]: words". Read back as a name rather than words.
+LEGACY_SENDER_RE = re.compile(r'^\[([^\[\]\n]{1,40})\]:\s*')
+# The "(said in ...) " visible_rows puts in front of a row from elsewhere.
+_SAID_IN_RE = re.compile(r'^\(said in [^)\n]{1,160}\) ')
+
+
+def _row_surface(row, surface=None):
+    """Which bot a stored row came through: its source tag decides, and
+    `surface` is the answer for a bot's own history, whose rows carry none."""
+    src = str((row or {}).get("source") or "")
+    if src.startswith("telegram"):
+        return "telegram"
+    if src.startswith("discord:"):
+        return "discord"
+    if src:
+        return None
+    return surface
+
+
+def row_speaker(row, kin_cfg=None, surface=None):
+    """(name, words) for a stored message from a person: who said it, as the
+    kin is shown them, and their words without any name baked in.
+
+    The ONE place a stored row's speaker is worked out, for every surface.
+    Names are kept apart from the words when a message is stored (the
+    account ID and the name it had then); the name the person gave them in
+    Hearthkin wins, and the "your person" / "not your person" mark is added
+    by account (tools/_person_settings.mark_own_person). Done when read, so
+    a later label or a later "This is me" applies to old messages too. A row
+    stored by another bot uses that bot's labels and marks.
+
+    `surface`: "telegram" or "discord" for a bot's own history, whose rows
+    carry no source tag. Never raises."""
+    try:
+        row = row if isinstance(row, dict) else {}
+        words = row.get("content")
+        words = words if isinstance(words, str) else ""
+        surf = _row_surface(row, surface)
+        section = ((kin_cfg or {}).get(surf) if surf else None)
+        section = section if isinstance(section, dict) else None
+        sid = row.get("sender_id")
+        name = ""
+        if section is not None and sid is not None:
+            from tools._person_settings import _setting, store_key
+            labels = section.get(store_key(_setting("label"), surf)) or {}
+            if isinstance(labels, dict):
+                name = str(labels.get(str(sid)) or "").strip()
+        name = (name or str(row.get("sender_attribution") or "").strip()
+                or str(row.get("sender_name") or "").strip())
+        said_in = ""
+        m = _SAID_IN_RE.match(words)
+        if m:
+            said_in, words = m.group(0), words[m.end():]
+        m = LEGACY_SENDER_RE.match(words)
+        if m:
+            if not name:
+                name = m.group(1).strip()
+            words = words[m.end():]
+        if section is not None and sid is not None:
+            from tools._person_settings import mark_own_person
+            name = mark_own_person(name, sid, section, surf,
+                                   (app_user_name(),))
+        return name, said_in + words
+    except Exception:
+        c = (row or {}).get("content") if isinstance(row, dict) else ""
+        return "", c if isinstance(c, str) else ""
+
+
+def person_row_text(row, kin_cfg=None, surface=None):
+    """(text, name): a stored message from a person as a model reads it,
+    "[time] [Name] words", the same on every surface, and the name shown
+    ("" for none). See row_speaker."""
+    name, words = row_speaker(row, kin_cfg, surface)
+    ts = format_ts_prefix((row or {}).get("ts") if isinstance(row, dict)
+                          else None)
+    return ts + speaker_attribution_prefix(name) + words, name
+
+
 def clean_kin_reply(text, kin_name, known_speakers=None):
     """Run the full anti-impersonation chain in the only order that works.
 

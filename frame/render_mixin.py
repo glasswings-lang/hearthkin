@@ -212,12 +212,18 @@ class RenderMixin:
         # people in front of the model is what teaches a small model to
         # invent them. See the clean_kin_reply call in _on_stream_done —
         # that guard and this prefix are a package, don't ship one alone.
+        # The same "[time] [Name] words" every surface uses, labelled and
+        # marked by account (chat_helpers.person_row_text), so a person's
+        # message from Telegram or Discord reads the same here as there.
         if role == "user" and isinstance(entry.get("content"), str):
-            ts_prefix = format_ts_prefix(msg.get("ts"))
-            sender_prefix = speaker_attribution_prefix(
-                msg.get("sender_attribution") or msg.get("sender_name") or "")
-            if ts_prefix or sender_prefix:
-                entry["content"] = ts_prefix + sender_prefix + entry["content"]
+            from chat_helpers import person_row_text
+            try:
+                _kc = (kin_cfg if kin_cfg is not None
+                       else (self.agent_cfg or {}))
+            except Exception:
+                _kc = {}
+            entry["content"] = person_row_text(
+                dict(msg, content=entry["content"]), _kc)[0]
         # Pass image attachments through to the LLM dispatcher.
         # `attachments` is a list of relative paths under the kin
         # directory; llm_backend._expand_attachments_for_provider

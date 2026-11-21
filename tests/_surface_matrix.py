@@ -340,13 +340,16 @@ CAPABILITIES = [
         why="Anyone in a group or server can take any display name, so a "
             "stranger calling themselves by the person's name looked like "
             "them to the kin (operator's question, 20 Nov 2026)",
-        markers="mark_own_person",
+        # Every surface marks through the one shared rule now
+        # (chat_helpers.row_speaker / person_row_text, 21 Nov 2026).
+        markers=("mark_own_person", "row_speaker", "person_row_text"),
         surfaces={
-            "desktop": NotHere("Only the person types in the main window; "
-                               "there is no one else to tell apart."),
+            "desktop": Present(note="Messages from Telegram and Discord "
+                               "shown here keep their mark."),
             "telegram": Present(),
             "discord": Present(),
-            "cron": NotHere("A wake-up has no sender: nobody is typing."),
+            "cron": Present(note="Messages from other places a wake-up "
+                            "is shown keep their mark."),
         },
     ),
 
@@ -371,15 +374,14 @@ CAPABILITIES = [
         what="Builds the bracketed speaker prefix through the shared helper",
         why="The bracket shape is an impersonation attractor; one surface "
             "rolling its own is how the shape drifts apart again",
-        markers="speaker_attribution_prefix",
+        markers=("speaker_attribution_prefix", "person_row_text"),
         surfaces={
             "desktop": Present(),
             "telegram": Present(),
             "discord": Present(),
-            "cron": NotHere(
-                "A scheduled wake-up has one speaker — the prompt the person "
-                "wrote in advance. There is nobody else in the turn to "
-                "attribute."),
+            # A wake-up is shown people's messages from other places, which
+            # came with no name before 21 Nov 2026.
+            "cron": Present(),
         },
     ),
 

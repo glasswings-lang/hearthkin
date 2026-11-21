@@ -592,6 +592,11 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
     messages = []
     if sys_content:
         messages.append({"role": "system", "content": sys_content})
+    try:
+        from kin_persistence import load_agent_config as _lac_names
+        _kin_cfg = _lac_names(kin) or {}
+    except Exception:
+        _kin_cfg = {}
     for m in convo:
         if not isinstance(m, dict):
             continue
@@ -607,6 +612,12 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
             continue
         if role not in ("user", "assistant"):
             continue
+        if role == "user":
+            # "[time] [Name] words", as on every surface: a wake-up used to
+            # get people's words with no name and no time, so a group
+            # message read as the kin's own person's (audit, 20 Nov 2026).
+            from chat_helpers import person_row_text
+            content = person_row_text(m, _kin_cfg)[0]
         messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": user_turn_text})
     return messages

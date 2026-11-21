@@ -9,6 +9,7 @@ import threading
 import time
 
 import wx
+from history_rows import scope_bookmark, set_scope_bookmark
 import wx.lib.scrolledpanel as scrolled
 
 import cron_helpers
@@ -2306,7 +2307,7 @@ class EditKinDialog(wx.Dialog):
             # re-reads from 0 so the fresh conversation shows as pending
             # instead of a false "0 undistilled". See live_distill_bookmark.
             stored = offsets.get(scope_key, 0)
-            bookmark = live_distill_bookmark(stored, len(convo))
+            bookmark = scope_bookmark(fresh_cfg or {}, scope_key, convo)
             undistilled = len(convo) - bookmark
             # Feed the pct estimate the SAME fresh config the counts use.
             # It reads distill_offsets out of whatever cfg it's handed, so
@@ -2458,6 +2459,8 @@ class EditKinDialog(wx.Dialog):
             backing = agent_dir(self.kin) / "conversation.jsonl"
         elif scope_key.startswith("room:"):
             backing = room_dir(scope_key[len("room:"):]) / "conversation.json"
+        elif scope_key.startswith("discord:"):
+            backing = agent_dir(self.kin) / "discord_history.json"
         else:
             backing = agent_dir(self.kin) / "telegram_history.json"
         try:
@@ -2661,10 +2664,8 @@ class EditKinDialog(wx.Dialog):
                 f"(nothing on {scope_key} — no conversation)")
             return
         try:
-            _off = (load_agent_config(self.kin) or {}).get(
-                "distill_offsets") or {}
-            done = _off.get(scope_key)
-            done = done if isinstance(done, int) and done > 0 else 0
+            done = scope_bookmark(load_agent_config(self.kin) or {},
+                                  scope_key, convo)
         except Exception:
             done = 0
         remaining = max(0, len(convo) - done)
@@ -2883,9 +2884,8 @@ class EditKinDialog(wx.Dialog):
         # bookmark on disk that contradicts the walk we're about to
         # start.
         cfg = load_agent_config(self.kin) or {}
-        offsets = dict(cfg.get("distill_offsets") or {})
-        offsets[scope_key] = 0
-        cfg["distill_offsets"] = offsets
+        set_scope_bookmark(cfg, scope_key, 0,
+                           getattr(convo, "front_dropped", None))
         save_agent_config(self.kin, cfg)
         self.cfg = cfg
 
@@ -2930,9 +2930,8 @@ class EditKinDialog(wx.Dialog):
         started = []
         for scope_key in scopes:
             convo = self.frame._convo_for_distill_scope(self.kin, scope_key)
-            offsets = (load_agent_config(self.kin) or {}).get(
-                "distill_offsets") or {}
-            bm = live_distill_bookmark(offsets.get(scope_key, 0), len(convo))
+            bm = scope_bookmark(load_agent_config(self.kin) or {},
+                                scope_key, convo)
             if not convo or bm >= len(convo):
                 # Already finished — clear the stale record so the
                 # button stops offering work that isn't there.

@@ -6177,25 +6177,60 @@ def load_discord_history(name):
     surface is NOT merged into the main conversation (share_desktop=False).
     Shape: {"<channel_id>": [{"role","content","ts"}, ...]}. Missing or
     corrupt file returns {} (fail soft — never crash the bot over it)."""
+    from history_rows import ROWS_ADDED_KEY
     path = _discord_history_path(name)
     if not path.exists():
         return {}
     try:
         with _get_conversation_lock(name):
             data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
+        if not isinstance(data, dict):
+            return {}
+        data.pop(ROWS_ADDED_KEY, None)
+        return data
     except Exception:
         return {}
 
 
-def save_discord_history(name, data):
+def load_discord_rows_added(name):
+    """How many rows have ever been added to each channel's history in
+    discord_history.json ({channel_id: int}); see history_rows."""
+    from history_rows import ROWS_ADDED_KEY, clean_counts
+    path = _discord_history_path(name)
+    try:
+        with _get_conversation_lock(name):
+            data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return clean_counts(data.get(ROWS_ADDED_KEY)
+                        if isinstance(data, dict) else None)
+
+
+def discord_history_with_front(name, channel_id):
+    """(rows, front_dropped) for one channel, read together."""
+    from history_rows import front_dropped
+    with _get_conversation_lock(name):
+        rows = list((load_discord_history(name) or {}).get(str(channel_id))
+                    or [])
+        added = load_discord_rows_added(name).get(str(channel_id))
+    return rows, front_dropped(added, len(rows))
+
+
+def save_discord_history(name, data, rows_added=None):
     """Full rewrite of the segregated Discord history, for the commands that
     shorten it (undo, regenerate, clear). Atomic, under the same lock the
-    loader and append_discord_turn use."""
+    loader and append_discord_turn use. `rows_added`: new row counts
+    (history_rows); left out, the ones on disk are kept."""
+    from history_rows import ROWS_ADDED_KEY
     with _get_conversation_lock(name):
+        if rows_added is None:
+            rows_added = load_discord_rows_added(name)
+        out = {k: v for k, v in (data or {}).items() if k != ROWS_ADDED_KEY}
+        if rows_added:
+            out[ROWS_ADDED_KEY] = rows_added
         agent_dir(name).mkdir(parents=True, exist_ok=True)
         atomic_write_text(_discord_history_path(name),
-                          json.dumps(data, ensure_ascii=False))
+                          json.dumps(out, ensure_ascii=False))
 
 
 def append_discord_turn(name, channel_id, turn, cap=200):
@@ -6215,7 +6250,13 @@ def append_discord_turn(name, channel_id, turn, cap=200):
                     data = loaded
             except Exception:
                 data = {}
+        from history_rows import ROWS_ADDED_KEY, clean_counts, note_added
         lst = list(data.get(key) or [])
+        # Count every row added, so rows the cap takes off the front can
+        # be told apart and the distill bookmark kept true (history_rows).
+        counts = clean_counts(data.get(ROWS_ADDED_KEY))
+        note_added(counts, key, len(lst), 1)
+        data[ROWS_ADDED_KEY] = counts
         lst.append(turn)
         data[key] = lst[-cap:]
         try:
@@ -6314,8 +6355,11 @@ def _restash_telegram_group_remainder(name, chat_id, remainder, bot=None):
             with bot._histories_lock:
                 existing = list(bot._histories.get(history_key) or [])
                 bot._histories[history_key] = list(remainder) + existing
+                # Rows put back at the front count as added again
+                # (history_rows), so the bookmark doesn't shift past them.
+                bot._count_added(history_key, len(existing), len(remainder))
                 try:
-                    save_telegram_history(name, bot._histories)
+                    bot._save_histories()
                 except Exception as save_err:
                     append_failure_log(
                         "save_failures.log", name,
@@ -6323,10 +6367,14 @@ def _restash_telegram_group_remainder(name, chat_id, remainder, bot=None):
                         save_err,
                     )
         else:
+            from telegram_bot import load_telegram_rows_added
+            from history_rows import note_added
             histories = load_telegram_history(name) or {}
             existing = list(histories.get(history_key) or [])
             histories[history_key] = list(remainder) + existing
-            save_telegram_history(name, histories)
+            counts = load_telegram_rows_added(name)
+            note_added(counts, history_key, len(existing), len(remainder))
+            save_telegram_history(name, histories, rows_added=counts)
     except Exception as e:
         append_failure_log(
             "save_failures.log", name,
@@ -6461,10 +6509,12 @@ def _restash_telegram_user_remainder(name, user_id, remainder, bot=None):
     try:
         if bot is not None:
             with bot._histories_lock:
-                existing = list(bot._histories.get(user_id) or [])
-                bot._histories[user_id] = list(remainder) + existing
+                # The str key, like every other DM access (audit DH1).
+                existing = list(bot._histories.get(uid_str) or [])
+                bot._histories[uid_str] = list(remainder) + existing
+                bot._count_added(uid_str, len(existing), len(remainder))
                 try:
-                    save_telegram_history(name, bot._histories)
+                    bot._save_histories()
                 except Exception as save_err:
                     append_failure_log(
                         "save_failures.log", name,
@@ -6472,10 +6522,14 @@ def _restash_telegram_user_remainder(name, user_id, remainder, bot=None):
                         save_err,
                     )
         else:
+            from telegram_bot import load_telegram_rows_added
+            from history_rows import note_added
             histories = load_telegram_history(name) or {}
             existing = list(histories.get(uid_str) or [])
             histories[uid_str] = list(remainder) + existing
-            save_telegram_history(name, histories)
+            counts = load_telegram_rows_added(name)
+            note_added(counts, uid_str, len(existing), len(remainder))
+            save_telegram_history(name, histories, rows_added=counts)
     except Exception as e:
         append_failure_log(
             "save_failures.log", name,

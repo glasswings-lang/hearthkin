@@ -68,7 +68,10 @@ check("the run is in the job's own file",
 
 # Reading: own file only.
 msgs = hc._build_messages(KIN, "next run", history_path=p)
-contents = [m.get("content") for m in msgs if m.get("role") != "system"]
+# A person's turn reads "[time] words" now, as on every surface.
+import re as _re
+contents = [_re.sub(r"^\[\d{4}-\d\d-\d\d \d\d:\d\d\] ", "", m.get("content") or "")
+            for m in msgs if m.get("role") != "system"]
 check("the job sees its own history",
       "job prompt" in contents and "job entry" in contents)
 check("the job does not see the person's chat",
@@ -76,7 +79,8 @@ check("the job does not see the person's chat",
 
 # Positive control: the default still shares the conversation both ways.
 msgs = hc._build_messages(KIN, "next run")
-contents = [m.get("content") for m in msgs if m.get("role") != "system"]
+contents = [_re.sub(r"^\[\d{4}-\d\d-\d\d \d\d:\d\d\] ", "", m.get("content") or "")
+            for m in msgs if m.get("role") != "system"]
 check("control: a default job sees the chat", "real chat about kites" in contents)
 hc._append_to_conversation(KIN, "default prompt", "default reply")
 check("control: a default job's run is saved to the chat",

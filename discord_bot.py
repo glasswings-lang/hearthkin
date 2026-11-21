@@ -357,17 +357,23 @@ class DiscordBot:
             author_id = (entry or {}).get("author_id")
             if entry:
                 entry["held"] = []
-        from chat_helpers import app_user_name, speaker_attribution_prefix
-        from tools._person_settings import mark_own_person
+        # The kin is sent "[time] [Name] words" (the one shared rule); the
+        # row stored keeps the words and the account apart (_persist_turn).
+        import datetime
+        from chat_helpers import person_row_text
         try:
-            dcfg = (self.get_config() or {}).get("discord") or {}
+            kin_cfg = self.get_config() or {}
         except Exception:
-            dcfg = {}
-        who = mark_own_person(who, author_id, dcfg, "discord",
-                              (app_user_name(),))
-        prefix = speaker_attribution_prefix(who) if who else ""
-        return [{"role": "user", "content": prefix + t, "interjected": True}
-                for t in held]
+            kin_cfg = {}
+        out = []
+        for t in held:
+            row = {"role": "user", "content": t, "sender_name": who,
+                   "ts": datetime.datetime.now().isoformat(timespec="seconds")}
+            if author_id is not None:
+                row["sender_id"] = str(author_id)
+            out.append({**row, "content": person_row_text(
+                row, kin_cfg, "discord")[0], "said": t, "interjected": True})
+        return out
 
     def _take_leftovers(self, channel_id):
         """Messages held for a reply that ended before taking another step.
@@ -922,6 +928,11 @@ class DiscordBot:
         _was_compacted = any(isinstance(m, dict) and m.get("compact")
                              for m in rows)
         rows = view_after_compaction(rows)
+        from chat_helpers import person_row_text
+        try:
+            _kin_cfg = self.get_config() or {}
+        except Exception:
+            _kin_cfg = {}
         # Since 12 Nov 2026 the kin gets back its own tool steps and the
         # notes Hearthkin gave it ("you described it but didn't do it", "your
         # reply came back empty"), as on every other surface. Only plain
@@ -942,6 +953,12 @@ class DiscordBot:
                 if m.get("name"):
                     t["name"] = m["name"]
                 turns.append(t)
+            elif role == "user" and content and isinstance(content, str):
+                # "[time] [Name] words": names, marks and times kept for
+                # every person's message, Discord's own and other places'
+                # (it used to send their words bare). chat_helpers.
+                turns.append({"role": "user", "content": person_row_text(
+                    m, _kin_cfg, "discord")[0]})
             elif role in ("user", "assistant", "system") and content:
                 turns.append({"role": role, "content": content})
         # Keep the compaction note at the head however long it's been since:
@@ -963,14 +980,26 @@ class DiscordBot:
             pass
         return turns
 
-    def _persist_turn(self, channel_id, role, content, share, said=None):
+    def _persist_turn(self, channel_id, role, content, share, said=None,
+                      speaker=None, ts=None):
         """Store one turn in whichever store `share` selects (merged
-        conversation.jsonl vs segregated discord_history.json)."""
+        conversation.jsonl vs segregated discord_history.json).
+
+        `speaker`: {"sender_id", "sender_name"} for a person's message. The
+        name is stored apart from the words, as on Telegram, and put in
+        front of them when read (chat_helpers.person_row_text), so a later
+        label or "This is me" applies to it. Before 21 Nov 2026 the name and
+        its mark were baked into the stored words."""
         import datetime
         turn = {"role": role, "content": content,
-                "ts": datetime.datetime.now().isoformat(timespec="seconds")}
+                "ts": ts or datetime.datetime.now().isoformat(
+                    timespec="seconds")}
         if said is not None:
             turn["said"] = said
+        if speaker:
+            turn.update({k: v for k, v in speaker.items()
+                         if k in ("sender_id", "sender_name")
+                         and v not in (None, "")})
         if share:
             from kin_persistence import append_agent_conversation_turn
             append_agent_conversation_turn(
@@ -980,6 +1009,18 @@ class DiscordBot:
         else:
             from kin_persistence import append_discord_turn
             append_discord_turn(self.agent_name, channel_id, turn)
+
+    def _persist_person_row(self, channel_id, turn, share):
+        """Store a person's message the loop handed back (one said mid-
+        reply): the words and the speaker, never the name-prefixed text the
+        kin was sent."""
+        speaker = {"sender_id": turn.get("sender_id"),
+                   "sender_name": turn.get("sender_name")}
+        words = turn.get("said")
+        if not isinstance(words, str):
+            words = turn.get("content") or ""
+        self._persist_turn(channel_id, "user", words, share, said=words,
+                           speaker=speaker, ts=turn.get("ts"))
 
     def _shares_desktop(self, author_id, channel_id=None):
         """Whether this Discord talk is kept with the desktop's: the
@@ -1040,7 +1081,11 @@ class DiscordBot:
             if look_only:
                 return rows[cut]
             data[str(channel_id)] = rows[:cut]
-            save_discord_history(self.agent_name, data)
+            from kin_persistence import load_discord_rows_added
+            from history_rows import note_end_cut
+            counts = load_discord_rows_added(self.agent_name)
+            note_end_cut(counts, str(channel_id), len(rows), len(rows) - cut)
+            save_discord_history(self.agent_name, data, rows_added=counts)
             return rows[cut]
 
     def _clear_channel(self, channel_id, share):
@@ -1372,21 +1417,27 @@ class DiscordBot:
         # dangerous: the no-colon rule is an anti-impersonation defence, and a
         # copy is what keeps the old shape when the rule next changes. Every
         # surface that names a speaker to a model goes through one function.
-        from chat_helpers import speaker_attribution_prefix
         # The name you gave this person wins over the one Discord shows.
         who = sanitize_for_prompt_literal(
             person_value(dcfg, "discord", author_id, "label")
             or getattr(message.author, "display_name", None)
             or message.author.name)
-        # The kin's own person is known by account, never by name: anyone
-        # in a server can call themselves anything (20 Nov 2026).
-        from chat_helpers import app_user_name
-        from tools._person_settings import mark_own_person
-        # Only what the kin is sent carries the mark; `who` stays the plain
-        # name for the desktop's own status lines.
-        who_for_kin = mark_own_person(who, author_id, dcfg, "discord",
-                                      (app_user_name(),))
-        user_text = speaker_attribution_prefix(who_for_kin) + content
+        # Stored: the words, the account, and the name Discord showed, kept
+        # apart (21 Nov 2026; the name and mark used to be baked into the
+        # words). Sent: "[time] [Name] words", labelled and marked by
+        # account (the kin's own person is known by account, never by name:
+        # anyone in a server can call themselves anything), through the one
+        # rule every surface uses.
+        import datetime as _dt
+        from chat_helpers import person_row_text
+        _speaker = {"sender_id": str(author_id),
+                    "sender_name": sanitize_for_prompt_literal(
+                        getattr(message.author, "display_name", None)
+                        or message.author.name)}
+        _ts = _dt.datetime.now().isoformat(timespec="seconds")
+        user_text, who_for_kin = person_row_text(
+            {"role": "user", "content": content, "ts": _ts, **_speaker},
+            cfg, "discord")
 
         history = self._channel_history(channel_id, share)
         # The names this reply was shown, so one that opens as one of them is
@@ -1397,7 +1448,8 @@ class DiscordBot:
         # Persist the user turn NOW, before generating — if generation
         # fails the message is still on record, never orphaned. `said` keeps
         # the words without the name in front, so /regen can send them again.
-        self._persist_turn(channel_id, "user", user_text, share, said=content)
+        self._persist_turn(channel_id, "user", content, share, said=content,
+                           speaker=_speaker, ts=_ts)
 
         # Load the kin's tools, gated by THIS user's bucket — the same
         # (kin tools.json) ∩ (per-user bucket) intersection the Telegram
@@ -1679,8 +1731,7 @@ class DiscordBot:
                     elif (isinstance(_turn, dict)
                           and _turn.get("role") == "user"
                           and _turn.get("interjected")):
-                        self._persist_turn(channel_id, "user",
-                                           _turn.get("content") or "", share)
+                        self._persist_person_row(channel_id, _turn, share)
                 try:
                     from kin_persistence import load_app_prompt
                     self._persist_turn(
@@ -1740,8 +1791,7 @@ class DiscordBot:
             if _turn.get("role") in ("assistant", "tool"):
                 self._persist_tool_turn(channel_id, _turn, share)
             elif _turn.get("role") == "user" and _turn.get("interjected"):
-                self._persist_turn(channel_id, "user",
-                                   _turn.get("content") or "", share)
+                self._persist_person_row(channel_id, _turn, share)
 
         # The footer is for the reader, not the record — storing it would put
         # the harness's bookkeeping into the kin's own voice.
