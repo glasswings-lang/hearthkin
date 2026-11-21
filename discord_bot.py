@@ -1541,7 +1541,10 @@ class DiscordBot:
                     from kin_persistence import load_app_prompt
                     self._persist_turn(
                         channel_id, "system",
-                        load_app_prompt("empty_reply_note_group",
+                        # The placeholder WAS posted, so the note that says
+                        # so (the group one says nothing was posted at all;
+                        # audit, 20 Nov 2026).
+                        load_app_prompt("empty_reply_note",
                                         self.agent_name), share)
                 except Exception:
                     pass

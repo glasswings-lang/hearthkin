@@ -1522,6 +1522,8 @@ class TelegramBot:
         with nothing attached and the kin had no idea a file had been sent.
         Extension-first because Telegram reports .md as
         application/octet-stream."""
+        if not isinstance(msg, dict):
+            return None  # /regen re-runs a turn with no message (audit)
         doc = msg.get("document")
         if not isinstance(doc, dict):
             return None
@@ -2789,7 +2791,9 @@ class TelegramBot:
             if user_id in self._group_excluded_ids(gentry):
                 return False
             policy = (gentry.get("policy") or "mention_only").lower()
-            return policy == "always" or self._is_bot_addressed(msg, "")
+            # The caption is where a voice message's @mention lives.
+            return policy == "always" or self._is_bot_addressed(
+                msg, msg.get("caption") or "")
         except Exception:
             return False
 
@@ -4504,6 +4508,9 @@ class TelegramBot:
         v = ut.get(str(user_id), sentinel)
         if v is sentinel:
             v = ut.get(user_id, sentinel)
+        if v is sentinel:
+            # "*" means anyone, as the person window and Discord read it.
+            v = ut.get("*", sentinel)
         if v is sentinel:
             return "none"
         return v
@@ -6723,7 +6730,8 @@ class TelegramBot:
         def wrapped(args):
             cfg = self.get_config() or {}
             perm_map = cfg.get("user_webcam_permission") or {}
-            perm = perm_map.get(str(user_id)) or perm_map.get(user_id) or "ask"
+            perm = (perm_map.get(str(user_id)) or perm_map.get(user_id)
+                    or perm_map.get("*") or "ask")
             perm = (perm or "ask").strip().lower()
             if perm not in ("ask", "auto", "deny"):
                 perm = "ask"

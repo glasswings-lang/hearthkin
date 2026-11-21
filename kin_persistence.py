@@ -4792,7 +4792,7 @@ APP_PROMPT_REGISTRY = {
         "default": DEFAULT_EMPTY_REPLY_NOTE,
         "version": 2,
         "placeholders": [],
-        "title": "Empty-reply note (Telegram DM)",
+        "title": "Empty-reply note (Telegram DM, Discord)",
         "desc": "Shown when a reply came back empty after the cleanup chain "
                 "and the operator saw a placeholder. Deliberately grants the "
                 "kin intent — it may have meant to stay silent, which is a "

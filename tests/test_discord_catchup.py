@@ -391,7 +391,9 @@ check("tool steps are saved BEFORE the final reply",
       0 < gen.find("for _turn in added_turns:")
       < gen.find('self._persist_turn(channel_id, "assistant", text, share)'))
 check("an empty reply leaves the kin a note",
-      'load_app_prompt("empty_reply_note_group"' in gen)
+      # The placeholder-was-posted note since 20 Nov 2026 (the group one
+      # says nothing was posted, which isn't true here).
+      'load_app_prompt("empty_reply_note",' in gen)
 check("the tool loop is handed the mid-reply messages",
       "interject=lambda: self._take_interjections(channel_id)" in src)
 

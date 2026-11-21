@@ -45,8 +45,10 @@ PERSON_SETTINGS = [
      "store": "user_is_operator", "no_wildcard": True},
     {"key": "bucket", "kind": "bucket", "default": "none",
      "store": "user_tools"},
+    # Never from "*": "anyone" sharing would merge every stranger's messages
+    # into the person's private chats (audit, 20 Nov 2026).
     {"key": "share_desktop", "kind": "bool", "default": False,
-     "store": "user_share_desktop"},
+     "store": "user_share_desktop", "no_wildcard": True},
     {"key": "mirror", "kind": "bool", "default": False,
      "store": {"telegram": "user_mirror_to_telegram",
                "discord": "user_mirror_desktop"}},
