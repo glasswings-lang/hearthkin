@@ -1395,7 +1395,14 @@ class ChatStreamMixin:
             # kept on the turn's thinking field so the record stays
             # complete.
             cleaned_partial, extracted_think = extract_inline_thinking(partial, "")
-            cleaned_partial = strip_self_timestamp(cleaned_partial)
+            # The full cleanup, as the room's stop path and every finished
+            # reply get; only the timestamp was stripped, so a stopped reply
+            # that had opened as someone else was saved that way (audit,
+            # 20 Nov 2026).
+            from chat_helpers import clean_kin_reply
+            cleaned_partial, _imp = clean_kin_reply(
+                cleaned_partial, self.current_agent or "",
+                known_speakers=self._other_speakers_in_history())
             stopped_msg = {"role": "assistant", "content": cleaned_partial, "ts": ts}
             if extracted_think:
                 stopped_msg["thinking"] = extracted_think

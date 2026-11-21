@@ -341,6 +341,40 @@ def _pos_in_spans(pos, spans):
     return any(s <= pos < e for s, e in spans)
 
 
+_LIVE_TOOL_OPEN_RE = re.compile(r'<\s*tool_call\b', re.IGNORECASE)
+
+
+def live_visible(text):
+    """What of a reply still streaming should show: reasoning written inside
+    the reply (<thinking>/<think>) and tool-call markup taken out, and
+    everything from an unfinished opening tag onward held back until it
+    closes. So a live message only ever grows and never shows the markup the
+    finished reply won't have. Telegram's and Discord's live messages
+    showed both (audit, 20 Nov 2026). Never raises."""
+    try:
+        t, _ = extract_inline_thinking(text or "", "")
+        m = _INLINE_THINKING_OPEN_RE.search(t)
+        if m:
+            t = t[:m.start()]
+        try:
+            import llm_backend
+            t = llm_backend._strip_extracted_tool_calls(t)
+        except Exception:
+            pass
+        m = _LIVE_TOOL_OPEN_RE.search(t)
+        if m:
+            t = t[:m.start()]
+        # A tag still being typed ("<thi") would show, then vanish once it
+        # completed: hold back from a "<" that hasn't closed yet. The finished
+        # reply shows it if it turns out to be plain text.
+        lt = t.rfind("<")
+        if lt != -1 and ">" not in t[lt:]:
+            t = t[:lt]
+        return t
+    except Exception:
+        return text or ""
+
+
 def extract_inline_thinking(content, existing_thinking=""):
     """Pull `<thinking>...</thinking>` / `<think>...</think>` blocks out
     of `content` and merge them into `existing_thinking`. Returns

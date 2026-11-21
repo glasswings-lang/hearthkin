@@ -5868,8 +5868,10 @@ def _clean_chat_message(m):
     # source/sender_name might legitimately arrive as ints (Telegram
     # ids on older shapes) and silently dropping them lost attribution
     # (audit P25). Cast those to str so they survive a load round-trip.
+    # "said": a Discord person's words without the name in front, which
+    # /regen sends again (lost on every rewrite before 20 Nov 2026).
     for opt_field in ("ts", "thinking", "speaker", "model",
-                      "sender_attribution"):
+                      "sender_attribution", "said"):
         v = m.get(opt_field)
         if isinstance(v, str):
             entry[opt_field] = v
@@ -5900,6 +5902,12 @@ def _clean_chat_message(m):
     # a reload, every Discord DM would fall back out of the private side.
     if m.get("dm") is True:
         entry["dm"] = True
+    # A message that reached a reply mid-way, and a tool result's tool name:
+    # both dropped on every rewrite of the file (audit, 20 Nov 2026).
+    if m.get("interjected") is True:
+        entry["interjected"] = True
+    if entry.get("role") == "tool" and isinstance(m.get("name"), str)             and m.get("name"):
+        entry["name"] = m["name"]
 
     # A compaction marker (chat_helpers.compact_marker) must come back as
     # one. Until 20 Nov 2026 this function dropped both fields, so every

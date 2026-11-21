@@ -1577,7 +1577,8 @@ class DiscordBot:
             # opens with its own name tag shows the tag and then has it edited
             # away, and a tool call mid-reply would take back the sentence in
             # front of it — see _TelegramStreamEditor, which owns that rule.
-            return clean_kin_reply(t, self.agent_name,
+            from chat_helpers import live_visible
+            return clean_kin_reply(live_visible(t), self.agent_name,
                                    known_speakers=_shown)[0]
 
         ed = _TelegramStreamEditor(_send, _edit, throttle_secs=4.0,
@@ -1906,9 +1907,14 @@ class DiscordBot:
         if result is not None and getattr(result, "spent_allowance", False):
             try:
                 from kin_persistence import load_app_prompt
-                self._post_sync(channel, load_app_prompt(
+                _spent = load_app_prompt(
                     "park_moves_spent", self.agent_name).replace(
-                        "{moves}", str(result.moves)))
+                        "{moves}", str(result.moves))
+                self._post_sync(channel, _spent)
+                # Kept in the kin's history too: what the bot posts isn't
+                # saved, so the kin never learned its moves were spent
+                # (audit, 20 Nov 2026).
+                self._persist_turn(channel_id, "system", _spent, share)
             except Exception:
                 pass
 

@@ -40,7 +40,13 @@ _start = src.index("    def _route_park_emotes")
 _one = src.index("    def _route_one_park_move")
 seg = src[_start:src.index(chr(10) + "    def ", _one + 10)]
 check("every park note on the way goes through it",
-      "self._append_turns_for(" not in seg and seg.count("_append_park_note(chat_id") == 3)
+      "self._append_turns_for(" not in seg and seg.count("_append_park_note(chat_id") >= 3)
+check("the 'no moves left' notice reaches the kin's history, not just the chat",
+      seg.count("_append_park_note(chat_id") == 4
+      and "_spent = load_app_prompt" in seg)
+dsrc = (ROOT / "discord_bot.py").read_text(encoding="utf-8")
+check("...on Discord too",
+      'self._persist_turn(channel_id, "system", _spent, share)' in dsrc)
 
 print()
 if _fails:

@@ -3131,10 +3131,16 @@ class TelegramBot:
         # instead of carrying on. One message serves both.
         if spent_allowance:
             try:
-                from kin_persistence import load_app_prompt
-                self._send_chunked(chat_id, load_app_prompt(
+                from kin_persistence import load_app_prompt, now_iso
+                _spent = load_app_prompt(
                     "park_moves_spent", self.agent_name).replace(
-                        "{moves}", str(moves)))
+                        "{moves}", str(moves))
+                self._send_chunked(chat_id, _spent)
+                # Posting it doesn't put it in the kin's history (the bot's own
+                # messages aren't saved), so it's kept there too (audit, 20
+                # Nov 2026).
+                self._append_park_note(chat_id, user_id, [
+                    {"role": "system", "content": _spent, "ts": now_iso()}])
             except Exception:
                 pass
 
@@ -4132,8 +4138,8 @@ class TelegramBot:
             # end; running it here too means a model opening with its own name
             # tag never shows that tag rather than showing it and having it
             # edited away.
-            from chat_helpers import clean_kin_reply
-            return clean_kin_reply(text, self.agent_name)[0]
+            from chat_helpers import clean_kin_reply, live_visible
+            return clean_kin_reply(live_visible(text), self.agent_name)[0]
 
         return _TelegramStreamEditor(_stream_send, _stream_edit,
                                      clean=_stream_clean)
