@@ -183,6 +183,42 @@ check("Discord: 'run without asking' for one person: runs",
 s = discord_run(True, {FRIEND: "auto"}, FRIEND, command="rm -rf /")
 check("Discord: the never-run list still wins", not s["ran"])
 
+# "Remember" on Discord is per person, as on Telegram (21 Nov 2026). It
+# used to go on one list for the whole of Discord, so a command you'd
+# remembered for one member then ran unasked for every member everywhere.
+def discord_remember(who, command="dir"):
+    cfg = dict(DEFAULT_AGENT_CONFIG)
+    cfg["remote_unattended_exec"] = False
+    cfg["tool_trust"] = "full"
+    cfg["discord"] = {"user_exec_approval": {}}
+    save_agent_config(KIN, cfg)
+    seen = {"ran": False, "desktop": 0}
+
+    class FakeFrame:
+        def _request_exec_approval(self, kin, cmd, why):
+            seen["desktop"] += 1
+            return cem.ExecApprovalDialog.DECISION_REMEMBER
+
+    def inner(args):
+        seen["ran"] = True
+        return "ok"
+
+    ex = CronExecMixin._wrap_exec_for_remote(
+        FakeFrame(), {"exec": inner}, KIN, "discord", user_id=who)
+    ex["exec"]({"command": command})
+    return seen
+
+
+s = discord_remember(FRIEND, command="whoami")
+check("Discord: you approve and remember a command for one person",
+      s["ran"] and s["desktop"] == 1)
+s = discord_remember(FRIEND, command="whoami")
+check("...and it runs unasked for that person next time",
+      s["ran"] and s["desktop"] == 0)
+s = discord_remember(SHARER, command="whoami")
+check("...but someone else asking for it is still asked about",
+      s["desktop"] == 1)
+
 # The Discord bot has to say WHO asked, or the per-person setting can't apply.
 t = ast.parse((ROOT / "discord_bot.py").read_text(encoding="utf-8"))
 calls = [n for n in ast.walk(t) if isinstance(n, ast.Call)

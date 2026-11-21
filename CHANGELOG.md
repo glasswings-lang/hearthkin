@@ -33,6 +33,9 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Fixed
 
+- **An unknown command in a Discord direct message gets an answer.** It's told "Unknown command" and pointed to /help, as on Telegram, instead of going to the kin as words. In a server channel the kin leaves it alone unless it's @-mentioned in it, since commands there are often meant for another bot; it used to treat "!play" for a music bot as words to answer.
+- **On Discord, "remember" on a command approval now covers only the person who asked.** It used to go on one list for all of Discord, so a command you'd approved once for one member then ran without asking for anyone in any channel. Telegram already worked this way. Commands remembered before this will ask once more.
+- **Errors in rooms are explained and kept.** A room showed the raw error and kept no record of it. Now it says what went wrong in plain words, as the desktop does, and both the desktop and rooms write errors to a log like Telegram and Discord do.
 - **A failed file download on Telegram is logged instead of crashing.** When a text or sound file sent to a kin couldn't be downloaded, the error path itself broke, so the problem was never written to the log. A new check now looks over all the app's code for this kind of mistake.
 - **An empty reply is no longer saved as the kin's own words.** When a reply came back empty, the desktop, rooms and wake-ups saved "[no reply produced]" as if the kin had said it, so it read that back later and explained or apologised for it; in a room, the other kin saw it too. Now the placeholder is only shown, and the kin is left a short note saying its reply came back empty, as Telegram and Discord already did. Regenerate still works on an empty turn: it sends your message again. Also fixed: Telegram's /stop when nothing is running, commands from someone muted in a group, a group ID of just "-", and the Discord status box opening blank.
 

@@ -82,8 +82,12 @@ _MENTION_RE = re.compile(r"<@!?\d+>")
 _STOP_WORDS = frozenset({"stop", "/stop", "cancel", "/cancel", "!stop"})
 
 # Typed commands, with / or ! in front (Discord's own command menu can get in
-# the way of a leading /). Anything else that starts with / goes to the kin
-# as an ordinary message, so "/shrug" or "/me waves" still reach it.
+# the way of a leading /). Discord's own /shrug, /me and the like are turned
+# into ordinary text by the Discord app before they're sent, so a bot never
+# sees them. In a direct message an unknown command gets Telegram's answer
+# ("Unknown command ... /help"); in a server channel it's left alone unless
+# the kin is @-mentioned in it, since "!play" and the like there are often
+# meant for another bot (21 Nov 2026).
 _COMMANDS = frozenset({"help", "commands", "status", "regen", "regenerate",
                        "retry", "undo", "clear", "forget", "compact"})
 
@@ -121,6 +125,17 @@ def channel_entries(dcfg):
     except Exception:
         return {}
     return out
+
+
+def _unknown_command(content):
+    """The word after / or ! when the message looks like a command that
+    isn't one of ours, else None."""
+    s = (content or "").strip()
+    if len(s) < 2 or s[0] not in "/!" or not (s[1].isalpha()):
+        return None
+    if _parse_command(s) is not None or s.lower() in _STOP_WORDS:
+        return None
+    return s[1:].split(maxsplit=1)[0]
 
 
 def _parse_command(content):
@@ -660,6 +675,20 @@ class DiscordBot:
         command = _parse_command(content)
         if command is not None:
             await self._handle_command(message, *command)
+            return
+        _unknown = _unknown_command(content)
+        if _unknown is not None and getattr(message, "guild", None) is None:
+            await self._send_chunked(
+                message.channel,
+                f"Unknown command: /{_unknown}. Try /help to see what's "
+                "available.")
+            return
+        if (_unknown is not None
+                and client.user not in (getattr(message, "mentions", None)
+                                        or [])):
+            # A command for another bot ("!play ...") in a server channel:
+            # not the kin's business unless it's named in it. Left alone,
+            # neither answered nor sent to the kin (21 Nov 2026).
             return
 
         # A plain message from the person whose reply is running in this

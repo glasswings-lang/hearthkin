@@ -1238,6 +1238,10 @@ class ChatStreamMixin:
         if unpainted:
             self.chat_display.AppendText(unpainted)
         self.chat_display.AppendText(f"\n[error: {msg}]\n")
+        # Kept on disk like Telegram's and Discord's, so an error that was
+        # only spoken once can still be found later (audit, 21 Nov 2026).
+        append_failure_log("desktop_failures.log", self.current_agent or "?",
+                           "reply", msg)
         self.send_btn.Enable()
         self.stop_btn.Disable()
         from chat_helpers import humanize_error

@@ -1571,7 +1571,18 @@ class RoomsMixin:
         self._streaming = False
         if partial:
             self.chat_display.AppendText(partial)
-        self.chat_display.AppendText(f"\n[error from {self._current_room_speaker}: {msg}]\n")
+        speaker = self._current_room_speaker
+        self.chat_display.AppendText(f"\n[error from {speaker}: {msg}]\n")
+        # Same as the desktop and the apps: kept on disk, and said in plain
+        # words. Rooms used to show only the raw text and keep no record
+        # (audit, 21 Nov 2026).
+        append_failure_log("room_failures.log", self.current_room or "?",
+                           f"reply kin={speaker}", msg)
+        try:
+            from chat_helpers import humanize_error
+            self._set_status(humanize_error(msg, kin=speaker), speak=True)
+        except Exception:
+            pass
         self._room_round_index += 1
         wx.CallLater(150, self._run_next_kin_in_round)
 

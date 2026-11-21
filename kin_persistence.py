@@ -2514,6 +2514,8 @@ ALWAYS_ON_LOGS = (
     # Written from hearthkin.pyw, which the trim test's scan of *.py never
     # read — so this one grew unbounded while the test reported full coverage.
     "tray_failures.log",
+    # Model errors on the desktop and in rooms (21 Nov 2026).
+    "desktop_failures.log", "room_failures.log",
 )
 for _log_name in ALWAYS_ON_LOGS:
     trim_log_file(LOGS_DIR / _log_name)

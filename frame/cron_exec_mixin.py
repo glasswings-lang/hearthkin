@@ -117,10 +117,16 @@ class CronExecMixin:
              (Telegram/Discord) exec without asking" — and it takes effect
              only while the kin is also trusted or full.
 
-        surface_key scopes the remembered-approval list (e.g. "discord")."""
+        surface_key names the settings section (e.g. "discord"). The
+        remembered-approval list is per PERSON when user_id is known
+        ("discord:<id>"), as Telegram's is ("telegram:<id>"): a command the
+        operator remembered for one member must not auto-run for every
+        member of every channel (audit, 21 Nov 2026)."""
         if "exec" not in executors:
             return executors
         raw_exec = executors["exec"]
+        allow_key = (f"{surface_key}:{user_id}" if user_id not in (None, "")
+                     else surface_key)
 
         def _wrapped(args):
             command = args.get("command", "") if isinstance(args, dict) else ""
@@ -130,7 +136,7 @@ class CronExecMixin:
             denylist_match = match_denylist(command)
             if denylist_match:
                 return f"[denied by denylist: {denylist_match}]"
-            if is_in_allowlist(agent_name, command, surface=surface_key):
+            if is_in_allowlist(agent_name, command, surface=allow_key):
                 return raw_exec(args)
             try:
                 cfg = load_agent_config(agent_name)
@@ -155,7 +161,7 @@ class CronExecMixin:
             # answering. Explicit allow only.
             if decision == ExecApprovalDialog.DECISION_REMEMBER:
                 try:
-                    add_to_allowlist(agent_name, command, surface=surface_key)
+                    add_to_allowlist(agent_name, command, surface=allow_key)
                 except Exception:
                     pass
             elif decision != ExecApprovalDialog.DECISION_ALLOW:

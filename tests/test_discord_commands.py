@@ -129,8 +129,14 @@ check("/undo is a command", P("/undo") == ("undo", ""))
 check("!regen works too, for when Discord's own menu gets in the way",
       P("!regen") == ("regen", ""))
 check("/clear confirm keeps its word", P("/clear confirm") == ("clear", "confirm"))
-check("an unknown /word still goes to the kin as a message",
+check("an unknown /word isn't one of our commands",
       P("/shrug hi") is None and P("/me waves") is None)
+U = discord_bot._unknown_command
+check("...but is recognised as an unknown one",
+      U("/frobnicate") == "frobnicate" and U("!play song") == "play")
+check("our own commands, stop words and plain words aren't 'unknown'",
+      U("/undo") is None and U("/stop") is None and U("hello") is None
+      and U("/ looks like a slash") is None)
 check("plain words are never commands", P("undo") is None and P("help me") is None)
 
 
@@ -252,8 +258,14 @@ b = make_bot(share=True)
 said = say(b, "/status", _Channel(99))
 check("status names the model and says the talk is shared",
       "stub-model" in said and "shared with the Hearthkin desktop" in said)
-say(b, "/shrug hi", _Channel(99))
-check("an unknown /word reaches the kin as words", b.generated == ["/shrug hi"])
+said = say(b, "/frobnicate", _Channel(99))
+check("in a direct message an unknown command is answered as on Telegram",
+      said.startswith("Unknown command: /frobnicate") and "/help" in said
+      and b.generated == [])
+b = make_bot(share=True)
+said = say(b, "!play some song", _Channel(99), guild=object())
+check("in a server channel a command for another bot is left alone: "
+      "not answered, not sent to the kin", b.generated == [] and not said)
 
 
 print()
