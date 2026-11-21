@@ -61,6 +61,9 @@ class _Bot(TelegramBot):
         self._turn_lock = threading.Lock()
         self._queued_notice_sent = set()
         self.sent = []
+        # The sender is allowed: since 20 Nov 2026 the notice only goes to
+        # someone whose message will be answered (test_audit_fixes_20nov).
+        self.get_config = lambda: {"allow_from": ["99"]}
 
         def _label(skip_bot=None):
             self.asked_skip.append(skip_bot)

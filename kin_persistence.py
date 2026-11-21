@@ -6939,6 +6939,19 @@ def clone_agent(src, dst):
             **DEFAULT_TELEGRAM_CONFIG,
             # Carry over nothing — explicit empty defaults.
         }
+        # Discord block — the same, for the same reasons: a copied token runs
+        # two bots on one account, and a copied people list hands the clone
+        # someone else's trust and tool access. It used to be copied whole
+        # (audit, 20 Nov 2026).
+        dc = cfg.get("discord")
+        if isinstance(dc, dict) and dc.get("bot_token"):
+            reset_items.append("Discord bot token")
+        if isinstance(dc, dict) and dc.get("allow_from"):
+            reset_items.append(
+                f"Discord people list ({len(dc.get('allow_from') or [])} "
+                f"person/people)")
+        if "discord" in cfg:
+            cfg["discord"] = {**DEFAULT_DISCORD_CONFIG}
         # Cron entries
         if cfg.get("cron_entries"):
             reset_items.append(f"Cron entries ({len(cfg.get('cron_entries') or [])} entry/entries)")

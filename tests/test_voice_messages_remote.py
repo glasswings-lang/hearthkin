@@ -132,6 +132,57 @@ check("...unless the sender is muted in that group",
       heard_calls == [] and b.normal == [])
 
 
+# --- Other files (20 Nov 2026) ---------------------------------------------
+# A music file sent with a caption got no reply at all: the message was thrown
+# away whole. Now the caption gets through, the kin is told what came, and a
+# sound file is saved where the listen tool can open it.
+import reading_bridge  # noqa: E402
+
+
+def file_update(key, payload, caption=None, chat_type="private"):
+    msg = {"message_id": 2, "date": 0, "from": {"id": 7},
+           "chat": {"id": 7 if chat_type == "private" else -5,
+                    "type": chat_type},
+           key: payload}
+    if caption:
+        msg["caption"] = caption
+    return {"update_id": 2, "message": msg}
+
+
+b = tg_bot()
+b.token = "T"
+b._handle_update(file_update(
+    "audio", {"file_id": "S1", "file_name": "my song.mp3",
+              "mime_type": "audio/mpeg", "file_size": 3},
+    caption="listen to this one"))
+got = b.normal[0] if b.normal else ""
+check("a music file with a caption reaches the kin, caption and all",
+      got.startswith("listen to this one"))
+check("...the kin is told a sound file came and where it's saved",
+      "a sound file, my song.mp3" in got
+      and "attachments/my song.mp3" in got)
+from hearthkin_paths import kin_dir  # noqa: E402
+check("...and the file really is saved there",
+      (kin_dir("Tensor") / "attachments" / "my song.mp3").exists())
+
+b = tg_bot()
+b.token = "T"
+b._handle_update(file_update(
+    "document", {"file_id": "P1", "file_name": "report.pdf",
+                 "mime_type": "application/pdf"}))
+got = b.normal[0] if b.normal else ""
+check("a PDF with no caption still reaches the kin, said to be unreadable",
+      "a PDF, report.pdf" in got and "can't open" in got)
+
+b = tg_bot()
+heard_calls.clear()
+b._handle_update(file_update(
+    "audio", {"file_id": "S2", "file_name": "x.mp3"}, caption="hi",
+    chat_type="group"))
+check("in a group the kin isn't in, nothing is fetched or answered",
+      b.normal == [])
+
+
 # --- Discord --------------------------------------------------------------
 class _Att:
     def __init__(self, data):
@@ -249,6 +300,29 @@ m.mentions = [_Client.user]
 run(d, m)
 check("...but spoken to in a server channel, it reaches the kin as words",
       d.generated == ["[voice message, transcribed] hello Tensor, it's me"])
+
+
+class _Song:
+    filename = "tune.mp3"
+    content_type = "audio/mpeg"
+    size = 3
+
+    def is_voice_message(self):
+        return False
+
+    async def read(self):
+        return b"ID3"
+
+
+d, ch = dc_bot(), _Chan()
+m = _Msg(ch, content="hear this")
+m.attachments = [_Song()]
+run(d, m)
+got = d.generated[0] if d.generated else ""
+check("Discord: a music file reaches the kin with its words, told what came "
+      "and where it's saved",
+      got.startswith("hear this") and "a sound file, tune.mp3" in got
+      and "attachments/tune.mp3" in got)
 
 print()
 if _fails:

@@ -73,11 +73,13 @@ check("either switch on keeps the group with the desktop",
 d.Destroy()
 
 d = _DiscordChannelDialog(frame)
-check("a new Discord channel starts with 'your private chats include it' on",
-      d.private_sees_check.GetValue() is True
+check("a new Discord channel starts with both switches off, as a new "
+      "Telegram group does",
+      d.private_sees_check.GetValue() is False
       and d.sees_private_check.GetValue() is False)
 d.id_field.SetValue(" 12 34x5 ")
 d.name_field.SetValue(" general ")
+d.private_sees_check.SetValue(True)
 d.sees_private_check.SetValue(True)
 check("the Discord channel window gives back digits, name and both switches",
       d.get_values() == ("12345", "general", True, True))

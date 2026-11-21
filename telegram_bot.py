@@ -411,6 +411,15 @@ def seen_group_members(agent_name, chat_id):
     )
 
 
+def _without_thinking(row, feed):
+    """`row` as the model gets it: its saved reasoning dropped unless the
+    kin feeds reasoning back. Returns the row itself when nothing changes."""
+    if (not feed and isinstance(row, dict)
+            and row.get("thinking") is not None):
+        return {k: v for k, v in row.items() if k != "thinking"}
+    return row
+
+
 def _hkey(user_id):
     """Canonical _histories key for a DM user: always the str form.
     Disk load normalizes to str; runtime appends used to key by the
@@ -2106,6 +2115,27 @@ class TelegramBot:
             pass
         return True
 
+    def _would_answer(self, msg):
+        """Whether this message gets past the same gates a reply would: an
+        allowed person in a private chat; in a group, a listed group, a
+        sender not muted there, and the group answers everything or the kin
+        was spoken to. Never raises (False on doubt)."""
+        try:
+            chat = msg.get("chat") or {}
+            uid = (msg.get("from") or {}).get("id")
+            if chat.get("type") == "private":
+                allowed = self._allowed_users()  # None means anyone
+                return allowed is None or uid in allowed
+            cfg = self.get_config() or {}
+            gentry = (cfg.get("groups") or {}).get(str(chat.get("id")))
+            if gentry is None or uid in self._group_excluded_ids(gentry):
+                return False
+            policy = (gentry.get("policy") or "mention_only").lower()
+            return policy == "always" or self._is_bot_addressed(
+                msg, msg.get("text") or msg.get("caption") or "")
+        except Exception:
+            return False
+
     def _maybe_say_queued_from_poll(self, upd):
         """Tell the sender, immediately, when Hearthkin's own background work
         has the model and their message is therefore going to wait.
@@ -2152,6 +2182,12 @@ class TelegramBot:
             return
         text = (msg.get("text") or "")
         if text.strip().startswith("/"):
+            return
+        # Only to someone whose message will actually be answered. This ran
+        # before every gate, so strangers, unlisted groups, muted people and
+        # unaddressed group chatter were told "nothing is lost" about a
+        # message that would never be answered (audit, 20 Nov 2026).
+        if not self._would_answer(msg):
             return
         # A reply of OUR OWN, to this same chat, is the one thing not worth
         # mentioning — they just sent the message it is answering. Any other
@@ -2435,9 +2471,15 @@ class TelegramBot:
         # word. Presence only here; it's downloaded and transcribed after the
         # gates below, like an image.
         has_voice = isinstance(msg.get("voice"), dict)
-        if not text and (has_image or has_text_doc or has_voice):
+        # Any other file (a song, a recording, a video, a PDF): its caption
+        # used to be thrown away with it, because the message carried none
+        # of the three kinds above (operator's report, 20 Nov 2026: a music
+        # file with a caption, no reply at all).
+        other_file = self._other_file_of(msg)
+        if not text and (has_image or has_text_doc or has_voice or other_file):
             text = (msg.get("caption") or "").strip()
-        if not text and not has_image and not has_text_doc and not has_voice:
+        if (not text and not has_image and not has_text_doc and not has_voice
+                and not other_file):
             return
         # In non-private chats (groups, supergroups, channels) we only
         # respond to a whitelist of safe slash commands — primarily
@@ -2541,6 +2583,14 @@ class TelegramBot:
             # The group handler reads the words from the message itself.
             msg = dict(msg, text=text)
 
+        # Tell the kin what other file came, and keep a sound where it can
+        # listen to it. Only for a message it will answer: nothing is
+        # downloaded for anyone else.
+        if other_file and (is_private or self._would_answer(msg)):
+            note = self._take_other_file(other_file)
+            text = (text + "\n\n" + note) if text else note
+            msg = dict(msg, text=text)
+
         # --- Approval response check (fallback) ---
         # The poll thread is the NORMAL resolver for these (audit C1 —
         # this thread is usually the one BLOCKED on the approval, so
@@ -2638,6 +2688,91 @@ class TelegramBot:
             attachments=attachments,
             msg=msg,
         )
+
+    def _other_file_of(self, msg):
+        """(kind, file dict, filename) for a file in `msg` that isn't a
+        picture, a text file or a voice note; None otherwise."""
+        try:
+            import reading_bridge
+            for key, kind in (("audio", "sound file"), ("video", "video"),
+                              ("video_note", "video"),
+                              ("animation", "animation")):
+                f = msg.get(key)
+                if isinstance(f, dict):
+                    if key == "audio":
+                        kind = "sound file"
+                    return (kind, f, f.get("file_name") or "")
+            doc = msg.get("document")
+            if isinstance(doc, dict):
+                mime = (doc.get("mime_type") or "").lower()
+                name = doc.get("file_name") or ""
+                if mime.startswith("image/") or self._text_document_of(msg):
+                    return None
+                if reading_bridge.is_sound_file(name, mime):
+                    return ("sound file", doc, name)
+                if mime == "application/pdf" or name.lower().endswith(".pdf"):
+                    return ("PDF", doc, name)
+                return ("file", doc, name)
+        except Exception:
+            return None
+        return None
+
+    def _take_other_file(self, other):
+        """The note for the kin about `other` (from _other_file_of). A sound
+        file is downloaded into the kin's folder first. Never raises."""
+        import reading_bridge
+        kind, f, name = other
+        saved = None
+        if kind == "sound file":
+            try:
+                size = int(f.get("file_size") or 0)
+            except (TypeError, ValueError):
+                size = 0
+            if size <= reading_bridge.MAX_SOUND_BYTES:
+                data, err = _download_telegram_file(
+                    self.token, f.get("file_id"),
+                    max_bytes=reading_bridge.MAX_SOUND_BYTES)
+                if data:
+                    if not name:
+                        ext = (f.get("mime_type") or "audio/mpeg").split("/")[-1]
+                        name = f"sound.{ 'mp3' if ext == 'mpeg' else ext }"
+                    saved = reading_bridge.save_sound_file(
+                        self.agent_name, name, data)
+                else:
+                    append_failure_log("telegram_failures.log",
+                                       self.agent_name,
+                                       f"sound file download name={name!r}",
+                                       err or "no data")
+        return reading_bridge.file_arrival_note(kind, name, saved)
+
+    def _named_paths_they_may_read(self, paths, user_id, effective_tools):
+        """The paths named in a message that may be read in front of the
+        kin for this person: none unless their tools include read_file, and
+        when their file tools are kept inside the kin's folder, only paths
+        inside it. One rule for DMs and groups."""
+        if not paths or "read_file" not in set(effective_tools or []):
+            return []
+        try:
+            from tools._person_settings import resolve_file_reach
+            confined = resolve_file_reach(
+                self._tg_section(), "telegram", user_id, self._kin_config())
+        except Exception:
+            confined = True
+        if not confined:
+            return list(paths)
+        try:
+            from pathlib import Path
+            root = _agent_dir(self.agent_name).resolve()
+        except Exception:
+            return []
+        kept = []
+        for p in paths:
+            try:
+                if Path(p).resolve().is_relative_to(root):
+                    kept.append(p)
+            except Exception:
+                continue
+        return kept
 
     def _group_hears_voice(self, msg, user_id, chat_id):
         """Whether a voice message in a group should be heard at all: the
@@ -4767,9 +4902,13 @@ class TelegramBot:
 
             def _mark_dm(who, sender_id):
                 return _mop(who, sender_id, _dm_section, "telegram", _dm_extra)
+            # Past reasoning goes back only when the kin is set to feed it
+            # back, as on the desktop. Desktop rows always carry it, and a
+            # shared DM passed them through regardless (audit, 20 Nov 2026).
+            _feed_think = bool(self._kin_config().get("feed_thinking", False))
             for h in history:
                 if not isinstance(h, dict):
-                    messages.append(h)
+                    messages.append(_without_thinking(h, _feed_think))
                     continue
                 h_role = h.get("role")
                 h_content = h.get("content")
@@ -4794,7 +4933,7 @@ class TelegramBot:
                         new_h["content"] = ts_prefix + sender_prefix + h_content
                         messages.append(new_h)
                         continue
-                messages.append(h)
+                messages.append(_without_thinking(h, _feed_think))
             # Current turn's sender_attribution was already sanitized
             # by `_sender_attribution()`; re-applying here is a no-op
             # but keeps the embed-site call sites symmetric so future
@@ -4871,7 +5010,13 @@ class TelegramBot:
                     _block = reading_bridge.build_attachment_context_block(
                         _uploaded, self.agent_name)
                 else:
-                    _shared = reading_bridge.extract_shared_paths(text)
+                    # A path named in the text is read only for someone whose
+                    # own tools could read it anyway, inside the same fence.
+                    # It used to be read for ANY allowed person, whatever their
+                    # tool access (audit, 20 Nov 2026); groups already checked.
+                    _shared = self._named_paths_they_may_read(
+                        reading_bridge.extract_shared_paths(text),
+                        user_id, effective_tools)
                     if _shared:
                         _block = reading_bridge.build_shared_context_block(
                             reading_bridge.read_shared_files(_shared),
@@ -4958,6 +5103,14 @@ class TelegramBot:
             # duplication AND keeps the kin reinforcing the pattern
             # next turn.
             content = strip_self_timestamp(content)
+            # The full anti-impersonation chain, as every other surface runs
+            # on its final reply. The DM path only stripped timestamps, so a
+            # reply opening "[Kin]:" or as one of the speakers it was shown
+            # was saved and sent that way (audit, 20 Nov 2026). The names
+            # are the ones this turn bracketed onto messages it showed.
+            from chat_helpers import clean_kin_reply
+            content, _imp = clean_kin_reply(
+                content, self.agent_name, known_speakers=dm_bracketed)
             # Defensive: strip any trailing "_used: ..._" footer the
             # model may have spontaneously generated. See
             # chat_helpers.strip_tool_summary_footer for rationale.
@@ -5663,6 +5816,8 @@ class TelegramBot:
             # to avoid recompiling on every group message, audit T18.)
             legacy_sender_re = _LEGACY_SENDER_RE
             emitted_senders = set()
+            # Past reasoning only if the kin feeds it back (see the DM path).
+            _feed_think = bool(self._kin_config().get("feed_thinking", False))
 
             def _emit_user_with_sender(turn_sender, turn_ts, turn_content,
                                       turn_attachments=None):
@@ -5699,7 +5854,7 @@ class TelegramBot:
 
             for h in history:
                 if not isinstance(h, dict):
-                    messages.append(h)
+                    messages.append(_without_thinking(h, _feed_think))
                     continue
                 h_role = h.get("role")
                 h_content = h.get("content")
@@ -5726,7 +5881,7 @@ class TelegramBot:
                                            h.get("ts"), clean, h_atts)
                     continue
                 # Assistant / tool / system turns pass through unchanged.
-                messages.append(h)
+                messages.append(_without_thinking(h, _feed_think))
 
             # Current user turn: sender_attribution carries the
             # "Display Name (@username)" form for this message's
@@ -5799,11 +5954,13 @@ class TelegramBot:
                 append_failure_log(
                     "telegram_failures.log", self.agent_name,
                     "group text document injection failed", e)
-            if not shared_this_turn and "read_file" in set(effective_tools or []):
+            if not shared_this_turn:
                 try:
                     import reading_bridge
-                    _shared = reading_bridge.extract_shared_paths(
-                        cleaned_text or text)
+                    _shared = self._named_paths_they_may_read(
+                        reading_bridge.extract_shared_paths(
+                            cleaned_text or text),
+                        user_id, effective_tools)
                     if _shared:
                         _block = reading_bridge.build_shared_context_block(
                             reading_bridge.read_shared_files(_shared))

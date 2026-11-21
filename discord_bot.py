@@ -488,8 +488,15 @@ class DiscordBot:
                 return
             import voice_notes
             content = voice_notes.as_message(heard, content)
-        if not content:
+        # A picture or file sent with no words is still a message: it used
+        # to be dropped here, before the downloads below (audit, 20 Nov 2026).
+        if not content and not getattr(message, "attachments", None):
             return
+        # Any other file (a song, a recording, a video, a PDF): tell the kin
+        # what came, and keep a sound where it can listen to it, as Telegram
+        # does (reading_bridge.file_arrival_note). It used to be invisible.
+        for note in await self._other_file_notes(message, voice):
+            content = (content + "\n\n" + note) if content else note
 
         # A stop, handled BEFORE the per-channel lock and before the cooldown.
         # Both would otherwise swallow it: the lock is held by the very reply
@@ -710,7 +717,20 @@ class DiscordBot:
             except Exception as e:
                 append_failure_log("discord_failures.log", self.agent_name,
                                    f"channel={message.channel.id}", e)
-                await self._send_chunked(message.channel, f"[error: {e}]")
+                # In plain words, as on Telegram; the raw text can carry file
+                # paths and provider bodies, so only the kin's own person in
+                # a direct message sees the details. It used to post the raw
+                # error in any channel, public ones included (audit, 20 Nov
+                # 2026).
+                from chat_helpers import humanize_error
+                from tools._person_settings import person_value
+                dcfg = (self.get_config() or {}).get("discord") or {}
+                mine = (getattr(message, "guild", None) is None
+                        and person_value(dcfg, "discord",
+                                         getattr(message.author, "id", ""),
+                                         "is_me"))
+                await self._send_chunked(message.channel, "⚠️ " + humanize_error(
+                    e, kin=self.agent_name, redact=not mine))
             finally:
                 for p in image_paths:
                     try:
@@ -1985,6 +2005,40 @@ class DiscordBot:
             except Exception:
                 continue
         return paths
+
+    async def _other_file_notes(self, message, voice=None):
+        """A note per attachment that isn't a picture, a text file or the
+        voice message: what it is, and for a sound file where it's saved.
+        Never raises."""
+        import reading_bridge
+        notes = []
+        for att in list(getattr(message, "attachments", []) or []):
+            try:
+                if att is voice:
+                    continue
+                name = getattr(att, "filename", "") or ""
+                mime = (getattr(att, "content_type", "") or "").lower()
+                if mime.startswith("image/") or reading_bridge.is_text_attachment(
+                        name, mime):
+                    continue
+                saved = None
+                if reading_bridge.is_sound_file(name, mime):
+                    kind = "sound file"
+                    if int(getattr(att, "size", 0) or 0) <= \
+                            reading_bridge.MAX_SOUND_BYTES:
+                        data = await att.read()
+                        saved = reading_bridge.save_sound_file(
+                            self.agent_name, name, data)
+                elif mime.startswith("video/"):
+                    kind = "video"
+                elif mime == "application/pdf" or name.lower().endswith(".pdf"):
+                    kind = "PDF"
+                else:
+                    kind = "file"
+                notes.append(reading_bridge.file_arrival_note(kind, name, saved))
+            except Exception:
+                continue
+        return notes
 
     @staticmethod
     def _voice_attachment(message):

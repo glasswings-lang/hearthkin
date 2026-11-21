@@ -137,6 +137,8 @@ def read_shared_files(paths, *, max_bytes=256 * 1024):
 
 
 # ─── Text attachments from remote surfaces ────────────────────────────────────
+import os
+
 # Telegram and Discord only ever downloaded IMAGE attachments; a .txt/.md/.py
 # upload was silently dropped — the kin got the caption ("check this out!") with
 # no idea what "this" was. Silent, so neither party could tell it had happened.
@@ -348,3 +350,59 @@ def looks_like_read_gesture(reply_text):
             continue  # a reach toward the operator, not a file — leave it
         return inner
     return None
+
+
+# ── Files the kin can't read as text (20 Nov 2026) ────────────────────────
+#
+# A music file sent to a kin on Telegram with a caption got no reply at all:
+# the message was thrown away whole because it carried no text, picture, text
+# file or voice note. Anything else a person sends (a song, a recording, a
+# video, a PDF) now keeps its words and tells the kin what arrived, instead
+# of vanishing. Shared by Telegram and Discord so the two say the same thing.
+
+SOUND_EXTS = frozenset((".mp3", ".wav", ".flac", ".ogg", ".oga", ".opus",
+                        ".m4a", ".aac", ".wma", ".aif", ".aiff", ".mid",
+                        ".midi"))
+MAX_SOUND_BYTES = 20 * 1024 * 1024  # Telegram's own limit for a bot download
+
+
+def is_sound_file(filename, mime=""):
+    ext = os.path.splitext(str(filename or ""))[1].lower()
+    return ext in SOUND_EXTS or str(mime or "").lower().startswith("audio/")
+
+
+def save_sound_file(agent_name, filename, data):
+    """Save a sound someone sent into the kin's folder, under attachments/,
+    never overwriting. Returns the path relative to the kin's folder (what
+    the listen tool takes), or None."""
+    try:
+        from hearthkin_paths import kin_dir
+        base = os.path.basename(str(filename or "sound")) or "sound"
+        stem, ext = os.path.splitext(base)
+        stem = "".join(c for c in stem if c.isalnum() or c in " -_.()")[:80]
+        stem = stem.strip() or "sound"
+        folder = kin_dir(agent_name) / "attachments"
+        folder.mkdir(parents=True, exist_ok=True)
+        name = stem + ext.lower()
+        n = 2
+        while (folder / name).exists():
+            name = f"{stem} ({n}){ext.lower()}"
+            n += 1
+        (folder / name).write_bytes(data)
+        return f"attachments/{name}"
+    except Exception:
+        return None
+
+
+def file_arrival_note(kind, filename, saved=None):
+    """The line a kin gets about a file it can't read as text. `kind` is a
+    plain word ("sound file", "video", "PDF", "file"); `saved` the path in
+    its folder when the file was kept."""
+    name = os.path.basename(str(filename or "")).strip()
+    what = f"a {kind}" + (f", {name}" if name else "")
+    if saved:
+        return (f"[hearthkin: this message came with {what}. It's saved in "
+                f"your folder as {saved}, so a tool that hears sound "
+                f"(listen) can open it.]")
+    return (f"[hearthkin: this message came with {what}, which you can't "
+            f"open from here. You only have their words about it.]")

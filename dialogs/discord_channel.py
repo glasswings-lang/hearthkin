@@ -20,7 +20,7 @@ class _DiscordChannelDialog(wx.Dialog):
 
     Tab order: ID, name, the two switches, Save, Cancel."""
 
-    def __init__(self, parent, channel_id="", name="", private_sees=True,
+    def __init__(self, parent, channel_id="", name="", private_sees=False,
                  sees_private=False):
         super().__init__(parent, title="Discord channel",
                          style=wx.DEFAULT_DIALOG_STYLE)
