@@ -2524,17 +2524,22 @@ class TelegramBot:
         # --- A voice message becomes words (12 Nov 2026) ---
         # After the allow check, so nobody unlisted costs a download or a
         # transcription; before everything else, so the rest treats it as
-        # what it is, a message. Private chats only: in a group a voice
-        # message can't mention the kin, so it's left like any message not
-        # addressed to it.
+        # what it is, a message.
         if has_voice:
-            if not is_private:
+            # A group too, when it would answer anyway: listed, sender not
+            # muted, and it answers everything or this is a reply to the kin
+            # (a voice message can't @-mention anyone). Private chats only,
+            # until the operator's report of 20 Nov 2026.
+            if not is_private and not self._group_hears_voice(
+                    msg, user_id, chat_id):
                 return
             heard = self._hear_voice(msg, chat_id)
             if heard is None:
                 return
             import voice_notes
             text = voice_notes.as_message(heard, text)
+            # The group handler reads the words from the message itself.
+            msg = dict(msg, text=text)
 
         # --- Approval response check (fallback) ---
         # The poll thread is the NORMAL resolver for these (audit C1 —
@@ -2633,6 +2638,24 @@ class TelegramBot:
             attachments=attachments,
             msg=msg,
         )
+
+    def _group_hears_voice(self, msg, user_id, chat_id):
+        """Whether a voice message in a group should be heard at all: the
+        same gates a typed message meets (a listed group, a sender not muted
+        there), and the group answers everything or this is a reply to the
+        kin. Checked BEFORE downloading, so nothing is fetched or
+        transcribed for a message the kin would never answer."""
+        try:
+            cfg = self.get_config() or {}
+            gentry = (cfg.get("groups") or {}).get(str(chat_id))
+            if gentry is None:
+                return False
+            if user_id in self._group_excluded_ids(gentry):
+                return False
+            policy = (gentry.get("policy") or "mention_only").lower()
+            return policy == "always" or self._is_bot_addressed(msg, "")
+        except Exception:
+            return False
 
     def _hear_voice(self, msg, chat_id):
         """Download a voice message and transcribe it. Returns the words, or
@@ -3982,6 +4005,17 @@ class TelegramBot:
         except Exception:
             return {}
 
+    def _kin_config(self):
+        """The kin's whole config (not just its Telegram section), or {}:
+        which groups and channels reach which places lives across
+        sections."""
+        try:
+            from kin_persistence import load_agent_config
+            got = load_agent_config(self.agent_name)
+            return got if isinstance(got, dict) else {}
+        except Exception:
+            return {}
+
     def _user_shares_desktop(self, user_id):
         """Per-user opt-in for sharing the conversation with the
         desktop. False by default — sharing only makes sense when the
@@ -4050,11 +4084,12 @@ class TelegramBot:
         if self._user_shares_desktop(user_id):
             try:
                 all_msgs = self._load_shared_conversation_cached()
-                filtered = [
-                    m for m in all_msgs
-                    if not (isinstance(m, dict)
-                            and (m.get("source") or "").startswith("telegram:group:"))
-                ]
+                # The private side: the desktop's rows, shared DMs', and any
+                # group or channel switched on for it, marked with where
+                # they were said (chat_helpers.visible_rows, 20 Nov 2026).
+                from chat_helpers import PRIVATE, visible_rows
+                filtered = visible_rows(all_msgs, PRIVATE,
+                                        self._kin_config())
                 # The shared conversation is the desktop's: once it's been
                 # compacted there, the kin here goes on from its note too.
                 from chat_helpers import view_after_compaction
@@ -4724,6 +4759,14 @@ class TelegramBot:
             # new person needs no list updating — the strip reads from the same
             # values that wrote the brackets, and the two cannot drift apart.
             dm_bracketed = set()
+            # Marked by account, like the group path (20 Nov 2026).
+            from chat_helpers import app_user_name as _aun
+            from tools._person_settings import mark_own_person as _mop
+            _dm_section = self._tg_section()
+            _dm_extra = (_aun(),)
+
+            def _mark_dm(who, sender_id):
+                return _mop(who, sender_id, _dm_section, "telegram", _dm_extra)
             for h in history:
                 if not isinstance(h, dict):
                     messages.append(h)
@@ -4734,6 +4777,8 @@ class TelegramBot:
                     ts_prefix = format_ts_prefix(h.get("ts"))
                     h_sender = (h.get("sender_attribution")
                                 or h.get("sender_name") or "").strip()
+                    if h.get("sender_id") is not None:
+                        h_sender = _mark_dm(h_sender, h.get("sender_id"))
                     # Defense-in-depth: legacy stored values may pre-date
                     # the sanitizer in `_sender_attribution` /
                     # `_sender_display_name`. Sanitize again at the
@@ -4755,7 +4800,7 @@ class TelegramBot:
             # but keeps the embed-site call sites symmetric so future
             # readers can't accidentally pipe an unsanitized variable.
             sender_prefix_current = speaker_attribution_prefix(
-                sender_attribution)
+                _mark_dm(sender_attribution, user_id))
             if sender_prefix_current:
                 dm_bracketed.add(
                     sender_prefix_current.strip().strip("[]").strip())
@@ -5483,6 +5528,14 @@ class TelegramBot:
                 return ""
 
         _curr_label = _label_for(user_id)
+        # The kin's own person is known by account, never by name: anyone
+        # in a group can call themselves anything (20 Nov 2026).
+        from chat_helpers import app_user_name
+        from tools._person_settings import mark_own_person
+        _own_extra = (app_user_name(),)
+
+        def _mark(who, sender_id):
+            return mark_own_person(who, sender_id, cfg, "telegram", _own_extra)
         message_date = msg.get("date")
         token = (cfg.get("bot_token") or "").strip()
 
@@ -5669,7 +5722,8 @@ class TelegramBot:
                             h_sender = legacy_name
                         clean = clean[m.end():]
                     h_atts = h.get("attachments") if isinstance(h.get("attachments"), list) else None
-                    _emit_user_with_sender(h_sender, h.get("ts"), clean, h_atts)
+                    _emit_user_with_sender(_mark(h_sender, h.get("sender_id")),
+                                           h.get("ts"), clean, h_atts)
                     continue
                 # Assistant / tool / system turns pass through unchanged.
                 messages.append(h)
@@ -5679,7 +5733,8 @@ class TelegramBot:
             # sender. Inlined into content by _emit_user_with_sender.
             # Attachments (if any) go on the message; llm_backend.chat()
             # expands them based on the provider when it dispatches.
-            _emit_user_with_sender(_curr_label or sender_attribution,
+            _emit_user_with_sender(_mark(_curr_label or sender_attribution,
+                                         user_id),
                                    user_ts, cleaned_text, attachments)
 
             full_cfg = load_agent_config(self.agent_name) or {}
@@ -6102,11 +6157,13 @@ class TelegramBot:
             source_tag = f"telegram:group:{chat_id}"
             try:
                 all_msgs = self._load_shared_conversation_cached()
-                filtered = [
-                    m for m in all_msgs
-                    if isinstance(m, dict) and m.get("source") == source_tag
-                ]
-                return _drop_leading_orphan_tools(filtered)
+                # Its own rows, plus the private side only if this group is
+                # switched on to include it (chat_helpers.visible_rows).
+                from chat_helpers import view_after_compaction, visible_rows
+                filtered = visible_rows(all_msgs, source_tag,
+                                        self._kin_config())
+                return _drop_leading_orphan_tools(
+                    view_after_compaction(filtered))
             except Exception:
                 return []
         history_key = f"group:{chat_id}"

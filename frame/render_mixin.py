@@ -107,6 +107,20 @@ class RenderMixin:
         from chat_helpers import compact_tool_history
         return compact_tool_history(conversation, keep_window)
 
+    def _private_view(self, conversation, kin_cfg=None):
+        """The rows the desktop (the private side) sees: its own, shared
+        DMs', wake-ups', and any group or channel switched on for it,
+        marked with where they were said. See chat_helpers.visible_rows."""
+        from chat_helpers import PRIVATE, visible_rows
+        cfg = kin_cfg if kin_cfg is not None else (
+            getattr(self, "agent_cfg", None) or {})
+        try:
+            return visible_rows(conversation, PRIVATE, cfg)
+        except Exception:
+            return [m for m in (conversation or [])
+                    if not str((m or {}).get("source") or "").startswith(
+                        ("telegram:group:", "discord:"))]
+
     def _history_entry_for_model(self, msg):
         """Translate one stored conversation message into the dict shape the
         chat backend expects. Preserves the fields the model needs to see:
@@ -141,8 +155,10 @@ class RenderMixin:
         # context so the operator's 1-on-1 chat doesn't interleave with a
         # server channel. Each Discord channel reads its own slice on the
         # Discord side (DiscordBot._channel_history).
-        if source.startswith("telegram:group:") or source.startswith("discord:"):
-            return None
+        # Which groups and channels reach here is decided BEFORE this, by
+        # _private_view (chat_helpers.visible_rows): since 20 Nov 2026 a
+        # group can be switched on for the private side, and its rows arrive
+        # marked with where they were said.
         role = msg.get("role")
         if role not in ("user", "assistant", "system", "tool"):
             return None

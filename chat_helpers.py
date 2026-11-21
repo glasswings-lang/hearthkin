@@ -106,6 +106,18 @@ def format_ts_prefix(ts):
 _WRAPPED_ATTRIBUTION_RE = re.compile(r'^\s*\[\s*(.*?)\s*\]\s*$', re.DOTALL)
 
 
+def app_user_name():
+    """The person's own name from Preferences, or "". Read fresh each time
+    (the bots run beside the window that edits it); never raises."""
+    try:
+        import json
+        from kin_persistence import CONFIG_FILE
+        with open(CONFIG_FILE, encoding="utf-8") as fh:
+            return str((json.load(fh) or {}).get("user_name") or "").strip()
+    except Exception:
+        return ""
+
+
 def speaker_attribution_prefix(attribution):
     """Format a stored sender attribution as the "[Name] " prefix that goes
     in front of a user turn's content. Returns "" when there's no
@@ -1116,6 +1128,132 @@ def compact_marker(note, keep, ts=None, preface=""):
     if ts:
         row["ts"] = ts
     return row
+
+
+# ── Which places see which rows (20 Nov 2026) ─────────────────────────
+#
+# A kin's conversation.jsonl holds more than one place: the desktop, DMs
+# shared with it, wake-ups, and any group or Discord channel whose history is
+# kept there. Until 20 Nov 2026 keeping a group there only STORED it: the
+# desktop and DMs walled its rows off, and the group saw only itself, while
+# its checkbox promised to "unify" them. The operator talked code with a kin
+# in a group, moved to their DM, and the kin had none of it.
+#
+# Now two switches per group or channel, kept apart because they are two
+# different decisions (the operator's words: "it's now serving two
+# functions, and those two functions should be separated"):
+#   private_sees  — the private side (desktop, shared DMs, wake-ups) includes
+#                   this place's rows, each marked with where it was said.
+#   sees_private  — this place includes the private side. Off unless chosen:
+#                   everyone there is then in a conversation where the kin
+#                   has the person's private talk in front of it.
+# Every surface asks visible_rows(); none filters by hand.
+
+PRIVATE = "private"
+
+
+def place_of(row):
+    """The place a stored row belongs to: PRIVATE, or the row's own source
+    tag for a group or channel ("telegram:group:<id>", "discord:<id>").
+    A Discord direct message is private only when it was stored marked as
+    one (rows before 20 Nov 2026 can't be told from a server channel's)."""
+    if not isinstance(row, dict):
+        return PRIVATE
+    src = str(row.get("source") or "")
+    if src.startswith("telegram:group:"):
+        return src
+    if src.startswith("discord:"):
+        return PRIVATE if row.get("dm") is True else src
+    return PRIVATE
+
+
+def sharing_settings(kin_cfg):
+    """(private_sees, sees_private): the sets of place tags each switch is on
+    for, from a kin's whole config. A Telegram group kept with the desktop
+    before the switches existed counts as private_sees, which is what its
+    checkbox promised."""
+    cfg = kin_cfg if isinstance(kin_cfg, dict) else {}
+    private_sees, sees_private = set(), set()
+    tg = cfg.get("telegram") or {}
+    stored = tg.get("group_share_desktop") or {}
+    ps = tg.get("group_private_sees") or {}
+    sp = tg.get("group_sees_private") or {}
+    for cid in set(map(str, stored)) | set(map(str, ps)) | set(map(str, sp)):
+        tag = f"telegram:group:{cid}"
+        if bool(ps.get(cid, stored.get(cid, False))):
+            private_sees.add(tag)
+        if bool(sp.get(cid, False)):
+            sees_private.add(tag)
+    dc = cfg.get("discord") or {}
+    for cid, on in (dc.get("channel_private_sees") or {}).items():
+        if on:
+            private_sees.add(f"discord:{cid}")
+    for cid, on in (dc.get("channel_sees_private") or {}).items():
+        if on:
+            sees_private.add(f"discord:{cid}")
+    return private_sees, sees_private
+
+
+def _where_label(place, kin_cfg):
+    cfg = kin_cfg if isinstance(kin_cfg, dict) else {}
+    if place.startswith("telegram:group:"):
+        cid = place[len("telegram:group:"):]
+        g = ((cfg.get("telegram") or {}).get("groups") or {}).get(cid) or {}
+        name = str(g.get("label") or "").strip()
+        return f'the Telegram group "{name}"' if name else "a Telegram group"
+    if place.startswith("discord:"):
+        cid = place[len("discord:"):]
+        names = (cfg.get("discord") or {}).get("channel_labels") or {}
+        name = str(names.get(cid) or "").strip()
+        return f'the Discord channel "{name}"' if name else "a Discord channel"
+    return "your private chats"
+
+
+def visible_rows(conversation, viewer, kin_cfg, own_place=None):
+    """The rows of `conversation` that `viewer` sees: PRIVATE, or a place's
+    own tag. A row from another place comes back as a copy whose words say
+    where they were said, so the kin can tell a group from its person's DM;
+    a person's message there also keeps its own speaker mark. Returns a new
+    list; never raises on odd rows.
+
+    `own_place`: a source tag whose rows are always this viewer's own, as
+    they are, whatever place_of says. A Discord direct message passes its
+    channel's tag, so its rows from before DMs were marked stay its own."""
+    private_sees, sees_private = sharing_settings(kin_cfg)
+    out = []
+    for row in conversation or []:
+        if own_place and isinstance(row, dict) and str(
+                row.get("source") or "") == own_place:
+            out.append(row)
+            continue
+        place = place_of(row)
+        if viewer == PRIVATE:
+            if place == PRIVATE:
+                out.append(row)
+                continue
+            if place not in private_sees:
+                continue
+        else:
+            if place == viewer:
+                out.append(row)
+                continue
+            if not (place == PRIVATE and viewer in sees_private):
+                continue
+        out.append(_marked_where(row, place, kin_cfg))
+    return out
+
+
+def _marked_where(row, place, kin_cfg):
+    """A copy of a user row from another place, its words opened with where
+    it was said. Assistant and tool rows are left as they are: a kin that saw
+    its own replies prefixed would start writing the prefix itself."""
+    if not (isinstance(row, dict) and row.get("role") == "user"
+            and isinstance(row.get("content"), str)):
+        return row
+    if row.get("compact"):
+        return row
+    where = _where_label(place, kin_cfg)
+    return dict(row, content=f"(said in {where}) " + row["content"])
 
 
 def view_after_compaction(conversation):

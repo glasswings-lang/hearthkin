@@ -316,6 +316,41 @@ CAPABILITIES = [
     ),
 
     Capability(
+        key="sharing_switches",
+        what="Builds its history through the one rule for which places see "
+             "which: a group or channel switched on for the private side "
+             "arrives there marked with where it was said, and a group sees "
+             "the private side only if switched on for that",
+        why="Until 20 Nov 2026 sharing a group or channel only stored it with "
+            "the desktop: each surface walled it off again by hand, so the "
+            "person talked with a kin in a shared group, moved to their DM, "
+            "and the kin had none of it",
+        markers="visible_rows",
+        surfaces={
+            "desktop": Present(),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": Present(),
+        },
+    ),
+
+    Capability(
+        key="own_person_marked",
+        what="Marks the kin's own person by account, never by name",
+        why="Anyone in a group or server can take any display name, so a "
+            "stranger calling themselves by the person's name looked like "
+            "them to the kin (operator's question, 20 Nov 2026)",
+        markers="mark_own_person",
+        surfaces={
+            "desktop": NotHere("Only the person types in the main window; "
+                               "there is no one else to tell apart."),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": NotHere("A wake-up has no sender: nobody is typing."),
+        },
+    ),
+
+    Capability(
         key="memory_index_repair",
         what="Rebuilds the pointer list of depth logs before the kin reads it",
         why="A kin whose index is stale cannot see files it wrote itself, and "
@@ -993,10 +1028,19 @@ CAPABILITIES = [
 # live text would already have been read aloud).
 
 ROOMS = {
-    "compaction_respected": NotHere(
-        "A room keeps its own history, which is never compacted: compacting "
-        "is a one-to-one conversation's Chat menu and /compact command, and "
-        "neither exists in a room."),
+    "sharing_switches": Absent(
+        "A room can't yet be shared into each kin's conversation at all (its "
+        "only switch feeds memory, not the conversation). Agreed 20 Nov 2026: "
+        "rooms get the same two switches when room sharing is built."),
+    "own_person_marked": NotHere(
+        "A room's only human is the person, at the desktop; every other "
+        "speaker is a kin, named by Hearthkin itself."),
+    "compaction_respected": Absent(
+        "A room keeps its own history and nothing can compact it yet, so a "
+        "long room sends every kin the whole transcript. Agreed 20 Nov 2026: "
+        "a room shared into each kin's own conversation uses that kin's own "
+        "compaction; a room kept apart gets a compaction point per kin, each "
+        "sized by that kin's own context window and settings, a note per kin."),
     "per_turn_recall": Present(),
     "memory_index_repair": Present(),
     "speaker_attribution": Present(

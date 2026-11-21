@@ -32,11 +32,19 @@ class _TelegramGroupDialog(wx.Dialog):
     """
 
     def __init__(self, parent, chat_id="", label="", policy="mention_only",
-                 share_desktop=False, exclude=None, seen_members=None):
+                 share_desktop=False, exclude=None, seen_members=None,
+                 private_sees=None, sees_private=False):
         super().__init__(parent, title="Telegram group",
                          style=wx.DEFAULT_DIALOG_STYLE)
         self._policy = policy or "mention_only"
         self._share_desktop_initial = bool(share_desktop)
+        # The two sharing switches (20 Nov 2026). A group kept with the
+        # desktop before they existed starts with the first one on, which
+        # is what its old "Share with desktop" box promised.
+        self._private_sees_initial = (bool(share_desktop)
+                                      if private_sees is None
+                                      else bool(private_sees))
+        self._sees_private_initial = bool(sees_private)
         # Muted members: user_ids the kin will NOT respond to in this group,
         # even though it talks to everyone else here. Independent of DM access.
         self._exclude_ids = []
@@ -151,26 +159,35 @@ class _TelegramGroupDialog(wx.Dialog):
         self._policy_radios["always"] = always_rb
         outer.Add(always_rb, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
 
-        # Share-with-desktop toggle: merges this group's history into
-        # the kin's main conversation.jsonl, parallel to the per-user
-        # toggle. When on, wiping conversation.jsonl on the desktop
-        # also wipes this group's history. When off (default), the
-        # group keeps its segregated slice in telegram_history.json.
-        self.share_desktop_check = wx.CheckBox(
+        # Two switches, one per direction (20 Nov 2026). There used to be
+        # one "Share with desktop" box that promised to unify the two but
+        # only stored them together: the private side never saw the group,
+        # and the group never saw the private side. The operator: "it's now
+        # serving two functions, and those two functions should be
+        # separated." Either one on keeps the group's history with the
+        # desktop's, so clearing the desktop chat clears it too.
+        self.private_sees_check = wx.CheckBox(
             self,
             label=(
-                "&Share with desktop — unify this group's history "
-                "with the kin's main conversation. When on, group "
-                "messages live in conversation.jsonl (so the desktop "
-                "sees them and clear-chat / regen on the desktop "
-                "affects this group too). Default off keeps groups "
-                "isolated, which is right for multi-participant "
-                "groups where the operator's desktop content "
-                "shouldn't leak in."
+                "Your private chats with the kin in&clude this group: "
+                "the desktop, your shared direct messages and wake-ups "
+                "get what's said here, marked with this group's name."
             ),
         )
-        self.share_desktop_check.SetValue(self._share_desktop_initial)
-        outer.Add(self.share_desktop_check,
+        self.private_sees_check.SetValue(self._private_sees_initial)
+        outer.Add(self.private_sees_check,
+                  flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
+        self.sees_private_check = wx.CheckBox(
+            self,
+            label=(
+                "This group &gets your private chats with the kin. "
+                "Everyone here is then in a conversation where the kin "
+                "has your private talk in front of it. Off unless you "
+                "choose it."
+            ),
+        )
+        self.sees_private_check.SetValue(self._sees_private_initial)
+        outer.Add(self.sees_private_check,
                   flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
 
         # ─── Muted members (per-group exclude list) ──────────────
@@ -310,7 +327,16 @@ class _TelegramGroupDialog(wx.Dialog):
             if rb.GetValue():
                 policy = name
                 break
-        share_desktop = bool(self.share_desktop_check.GetValue())
+        private_sees, sees_private = self.get_sharing()
+        # Kept with the desktop when either switch is on. Never switched
+        # back off here: history already stored there would be stranded.
+        share_desktop = (private_sees or sees_private
+                         or self._share_desktop_initial)
         return cid, label, policy, share_desktop, list(self._exclude_ids)
+
+    def get_sharing(self):
+        """(private_sees, sees_private): the two sharing switches."""
+        return (bool(self.private_sees_check.GetValue()),
+                bool(self.sees_private_check.GetValue()))
 
 

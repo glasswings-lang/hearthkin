@@ -157,7 +157,8 @@ class ChatSendMixin:
         # (Chat -> Compact this conversation); the full history stays put.
         from chat_helpers import view_after_compaction
         compacted = self._compact_tool_history(
-            view_after_compaction(self.conversation), keep_window)
+            view_after_compaction(self._private_view(self.conversation)),
+            keep_window)
         history = []
         for _m in compacted:
             _entry = self._history_entry_for_model(_m)

@@ -150,6 +150,7 @@ class Win:
     _apply_compaction = Frame._apply_compaction
     _maybe_hint_compact = Frame._maybe_hint_compact
     _history_entry_for_model = Frame._history_entry_for_model
+    _private_view = Frame._private_view
     _compact_tool_history = Frame._compact_tool_history
     _compact_keep = Frame._compact_keep
 

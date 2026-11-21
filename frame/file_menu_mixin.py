@@ -64,7 +64,8 @@ class FileMenuMixin:
                           or 0)
         history = []
         for m in self._compact_tool_history(
-                view_after_compaction(self.conversation), keep_window):
+                view_after_compaction(self._private_view(self.conversation)),
+                keep_window):
             e = self._history_entry_for_model(m)
             if e is not None:
                 history.append(e)

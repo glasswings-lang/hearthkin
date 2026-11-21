@@ -201,6 +201,46 @@ def operator_ids(section, surface):
             if k != "*" and v}
 
 
+def own_person_names(section, surface, extra=()):
+    """The names the kin's own person goes by here: the labels given to the
+    accounts marked "This is me", plus any `extra` (the name set in
+    Preferences). Used only to notice someone ELSE using one of them."""
+    labels = (section if isinstance(section, dict) else {}).get(
+        store_key(_setting("label"), surface)) or {}
+    names = []
+    for uid in operator_ids(section, surface):
+        n = str((labels.get(uid) if isinstance(labels, dict) else "") or "").strip()
+        if n:
+            names.append(n)
+    names.extend(str(n).strip() for n in (extra or ()) if str(n or "").strip())
+    return names
+
+
+def mark_own_person(who, uid, section, surface, extra_names=()):
+    """The speaker label a kin sees, marked by ACCOUNT, never by name.
+
+    A name is whatever someone calls themselves, so anyone in a group can
+    take the kin's person's name. An account ID can't be changed or copied.
+    So: a message from an account marked "This is me" reads "<name>, your
+    person"; a message from any other account whose name contains one of
+    the person's names reads "<name>, not your person". Everyone else is
+    left as they are. Nothing is marked until some account is marked
+    "This is me" on this surface. (Operator's question, 20 Nov 2026: how
+    do we stop someone renaming themselves to impersonate the kin's person.)"""
+    who = str(who or "").strip()
+    ops = operator_ids(section, surface)
+    if not ops:
+        return who
+    if uid is not None and str(uid) in ops:
+        return f"{who}, your person" if who else "your person"
+    if who:
+        folded = who.casefold()
+        for n in own_person_names(section, surface, extra_names):
+            if len(n) >= 2 and n.casefold() in folded:
+                return f"{who}, not your person"
+    return who
+
+
 def resolve_said_scope(section, surface, uid, place):
     """What memory search may reach while the kin talks with `uid` in the
     conversation tagged `place` ("telegram:<id>", "telegram:group:<id>",

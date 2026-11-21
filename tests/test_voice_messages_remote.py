@@ -6,7 +6,8 @@ Drives the real message handlers (Telegram's _handle_update, Discord's
 _on_message) with a voice message in a private chat, the download and the
 speech model stubbed, and checks: the person is told what was heard, the kin
 receives the words marked as a voice message, a failure is explained rather
-than dropped, and in a group or server channel nothing is transcribed.
+than dropped. In a group or server channel a voice message is heard only
+when a typed one would be answered there (20 Nov 2026: it used to be never).
 
 Run: python tests/test_voice_messages_remote.py
 """
@@ -48,11 +49,14 @@ telegram_bot._download_telegram_file = (
                                           None))
 
 
-def tg_bot(transcribe=hear):
+def tg_bot(transcribe=hear, groups=None):
     b = telegram_bot.TelegramBot.__new__(telegram_bot.TelegramBot)
     b.agent_name = "Tensor"
     b.transcribe_voice = transcribe
-    b.get_config = lambda: {"bot_token": "T", "allow_from": ["7"]}
+    b._bot_user_id = 99
+    b._bot_username = "tensorbot"
+    b.get_config = lambda: {"bot_token": "T", "allow_from": ["7"],
+                            "groups": groups or {}}
     b._pending_lock = threading.Lock()
     b._pending_approvals = {}
     b.sent = []
@@ -60,17 +64,20 @@ def tg_bot(transcribe=hear):
     b._send_chunked = lambda chat_id, text: b.sent.append(text)
     b._handle_normal_message = (
         lambda text, uid, cid, **k: b.normal.append(text))
-    b._handle_group_message = lambda *a, **k: b.normal.append("GROUP")
+    b._handle_group_message = (
+        lambda msg, *a, **k: b.normal.append(("GROUP", msg.get("text"))))
     return b
 
 
-def voice_update(fid="F1", chat_type="private", caption=None):
+def voice_update(fid="F1", chat_type="private", caption=None, reply_to=None):
     msg = {"message_id": 1, "date": 0, "from": {"id": 7},
            "chat": {"id": 7 if chat_type == "private" else -5,
                     "type": chat_type},
            "voice": {"file_id": fid, "duration": 3, "mime_type": "audio/ogg"}}
     if caption:
         msg["caption"] = caption
+    if reply_to is not None:
+        msg["reply_to_message"] = {"message_id": 0, "from": {"id": reply_to}}
     return {"update_id": 1, "message": msg}
 
 
@@ -94,8 +101,35 @@ check("...with dictation unavailable, you're told to type it",
 b = tg_bot()
 heard_calls.clear()
 b._handle_update(voice_update(chat_type="group"))
-check("...in a group, nothing is transcribed", heard_calls == []
-      and b.normal == [])
+check("...in a group the kin isn't in, nothing is transcribed",
+      heard_calls == [] and b.normal == [])
+
+MENTION = {"-5": {"label": "G", "policy": "mention_only"}}
+ALWAYS = {"-5": {"label": "G", "policy": "always"}}
+WORDS = "[voice message, transcribed] hello Tensor, it's me"
+
+b = tg_bot(groups=MENTION)
+heard_calls.clear()
+b._handle_update(voice_update(chat_type="group"))
+check("...in a mentions-only group, a voice message not replying to the kin "
+      "isn't transcribed", heard_calls == [] and b.normal == [])
+
+b = tg_bot(groups=MENTION)
+b._handle_update(voice_update(chat_type="group", reply_to=99))
+check("...but one sent as a reply to the kin reaches it as words",
+      b.normal == [("GROUP", WORDS)])
+
+b = tg_bot(groups=ALWAYS)
+b._handle_update(voice_update(chat_type="group"))
+check("...and in a group where the kin answers everything, it reaches it "
+      "as words", b.normal == [("GROUP", WORDS)])
+
+b = tg_bot(groups={"-5": {"label": "G", "policy": "always",
+                          "exclude": [7]}})
+heard_calls.clear()
+b._handle_update(voice_update(chat_type="group"))
+check("...unless the sender is muted in that group",
+      heard_calls == [] and b.normal == [])
 
 
 # --- Discord --------------------------------------------------------------
@@ -205,10 +239,16 @@ check("...one that can't be made out is explained, not dropped",
 d, ch = dc_bot(), _Chan()
 heard_calls.clear()
 m = _Msg(ch, guild=object())
+run(d, m)
+check("...in a server channel where it wasn't spoken to, nothing is "
+      "transcribed", heard_calls == [] and d.generated == [])
+
+d, ch = dc_bot(), _Chan()
+m = _Msg(ch, guild=object())
 m.mentions = [_Client.user]
 run(d, m)
-check("...in a server channel, nothing is transcribed",
-      heard_calls == [] and d.generated == [])
+check("...but spoken to in a server channel, it reaches the kin as words",
+      d.generated == ["[voice message, transcribed] hello Tensor, it's me"])
 
 print()
 if _fails:

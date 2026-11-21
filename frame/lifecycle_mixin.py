@@ -982,7 +982,8 @@ class LifecycleMixin:
             # From the latest compaction note onward, as the main chat sends.
             from chat_helpers import view_after_compaction
             compacted = self._compact_tool_history(
-                view_after_compaction(convo_snapshot), keep_window)
+                view_after_compaction(
+                    self._private_view(convo_snapshot, cfg)), keep_window)
             history = []
             for _m in compacted:
                 _entry = self._history_entry_for_model(_m)

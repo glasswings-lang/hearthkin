@@ -191,6 +191,10 @@ class DiscordBot:
         # serialize instead of racing two generations at once. Created
         # lazily on the event loop (asyncio primitives are loop-bound).
         self._channel_locks = {}
+        # Direct-message channels seen this run. A DM kept with the desktop
+        # is part of the private side, like a shared Telegram DM; its rows
+        # are stored marked so (chat_helpers.place_of, 20 Nov 2026).
+        self._dm_channels = set()
         # Abuse throttles: per-user cooldown timestamps + a global bounded
         # concurrency semaphore (created lazily on the loop). See the
         # DISCORD_USER_COOLDOWN_SECS / DISCORD_MAX_CONCURRENT_GENERATIONS
@@ -315,9 +319,17 @@ class DiscordBot:
             entry = self._active_turns.get(channel_id)
             held = list(entry.get("held") or []) if entry else []
             who = (entry or {}).get("who") or ""
+            author_id = (entry or {}).get("author_id")
             if entry:
                 entry["held"] = []
-        from chat_helpers import speaker_attribution_prefix
+        from chat_helpers import app_user_name, speaker_attribution_prefix
+        from tools._person_settings import mark_own_person
+        try:
+            dcfg = (self.get_config() or {}).get("discord") or {}
+        except Exception:
+            dcfg = {}
+        who = mark_own_person(who, author_id, dcfg, "discord",
+                              (app_user_name(),))
         prefix = speaker_attribution_prefix(who) if who else ""
         return [{"role": "user", "content": prefix + t, "interjected": True}
                 for t in held]
@@ -411,6 +423,11 @@ class DiscordBot:
     # ── message handling ───────────────────────────────────────────
 
     async def _on_message(self, client, message):
+        if getattr(message, "guild", None) is None:
+            try:
+                self._dm_channels.add(str(message.channel.id))
+            except Exception:
+                pass
         # Never reply to ourselves or to other bots (a two-bot loop in a
         # server would generate forever).
         if message.author.id == client.user.id or message.author.bot:
@@ -460,10 +477,12 @@ class DiscordBot:
 
         content = _MENTION_RE.sub("", message.content or "").strip()
         # A voice message becomes words (12 Nov 2026; it was ignored without
-        # a word). Direct messages only: in a server channel it can't be
-        # addressed to the kin, so it's left like anything else that isn't.
+        # a word). In a server channel too, since 20 Nov 2026: by here it has
+        # passed the same gates as a typed message (spoken to, or a channel
+        # where the kin answers everything; an allowed person in an allowed
+        # place), so nothing is fetched for a message the kin won't answer.
         voice = self._voice_attachment(message)
-        if voice is not None and getattr(message, "guild", None) is None:
+        if voice is not None:
             heard = await self._hear_voice(message, voice)
             if heard is None:
                 return
@@ -699,6 +718,11 @@ class DiscordBot:
                     except Exception:
                         pass
 
+    def _dm_mark(self, channel_id):
+        """{"dm": True} for a direct-message channel, else {}."""
+        dms = getattr(self, "_dm_channels", None) or set()
+        return {"dm": True} if str(channel_id) in dms else {}
+
     def _channel_history(self, channel_id, share):
         """This channel's prior turns, model-shaped (role + content only),
         newest DISCORD_HISTORY_CAP kept. `share` picks the store:
@@ -708,16 +732,25 @@ class DiscordBot:
           share=False — SEGREGATED: read the channel's slice of the
                         standalone discord_history.json.
 
-        Either way it's this channel ONLY, so it never sees desktop or
+        Merged: a direct message sees the private side (desktop, shared
+        DMs, wake-ups, and groups switched on for it); a server channel sees
+        itself, plus the private side only if switched on for it. Before
+        20 Nov 2026 it was this channel ONLY, so it never saw desktop or
         another channel."""
         if share:
-            from kin_persistence import load_agent_conversation
-            source = f"discord:{channel_id}"
+            # Kept with the desktop: a direct message is the private side,
+            # like a shared Telegram DM; a server channel is its own place,
+            # plus the private side only if switched on for it
+            # (chat_helpers.visible_rows, 20 Nov 2026).
+            from kin_persistence import load_agent_config, load_agent_conversation
+            from chat_helpers import PRIVATE, visible_rows
+            dm = str(channel_id) in (getattr(self, "_dm_channels", None) or set())
             try:
-                rows = [m for m in (load_agent_conversation(self.agent_name)
-                                    or [])
-                        if isinstance(m, dict)
-                        and (m.get("source") or "") == source]
+                rows = visible_rows(
+                    load_agent_conversation(self.agent_name) or [],
+                    PRIVATE if dm else f"discord:{channel_id}",
+                    load_agent_config(self.agent_name) or {},
+                    own_place=f"discord:{channel_id}")
             except Exception:
                 return []
         else:
@@ -779,17 +812,25 @@ class DiscordBot:
             from kin_persistence import append_agent_conversation_turn
             append_agent_conversation_turn(
                 self.agent_name,
-                {**turn, "source": f"discord:{channel_id}"})
+                {**turn, **self._dm_mark(channel_id),
+                 "source": f"discord:{channel_id}"})
         else:
             from kin_persistence import append_discord_turn
             append_discord_turn(self.agent_name, channel_id, turn)
 
-    def _shares_desktop(self, author_id):
-        """Whether this person's Discord talk is kept with the desktop's.
-        Their own box in the person window; the old kin-wide box is the
-        fallback for someone saved before per-person sharing existed."""
+    def _shares_desktop(self, author_id, channel_id=None):
+        """Whether this Discord talk is kept with the desktop's: the
+        person's own box in the person window (the old kin-wide box is the
+        fallback for someone saved before per-person sharing existed), or
+        the channel has either of its sharing switches on (20 Nov 2026), so
+        what's said there can reach, or be reached from, the private side."""
         from tools._person_settings import person_value
         dcfg = (self.get_config() or {}).get("discord") or {}
+        if channel_id is not None:
+            cid = str(channel_id)
+            if ((dcfg.get("channel_private_sees") or {}).get(cid)
+                    or (dcfg.get("channel_sees_private") or {}).get(cid)):
+                return True
         return bool(person_value(dcfg, "discord", author_id, "share_desktop",
                                  fallback=dcfg.get("share_desktop", False)))
 
@@ -897,7 +938,7 @@ class DiscordBot:
             if share:
                 from kin_persistence import append_agent_conversation_turn
                 append_agent_conversation_turn(
-                    who, {**row, "source": f"discord:{ch.id}"})
+                    who, {**row, **self._dm_mark(ch.id), "source": f"discord:{ch.id}"})
             else:
                 from kin_persistence import append_discord_turn
                 append_discord_turn(who, ch.id, row)
@@ -1063,7 +1104,8 @@ class DiscordBot:
                 f"{self.agent_name} is still writing a reply here. Say stop, "
                 f"or wait for it to finish, then send /{name} again.")
             return
-        share = self._shares_desktop(getattr(message.author, "id", ""))
+        share = self._shares_desktop(getattr(message.author, "id", ""),
+                                     message.channel.id)
         if name == "status":
             await self._send_chunked(ch, self._status_text(message, share))
         elif name == "undo":
@@ -1156,7 +1198,7 @@ class DiscordBot:
         # saved before per-person sharing existed.
         from tools._person_settings import person_value
         author_id = getattr(message.author, "id", "")
-        share = self._shares_desktop(author_id)
+        share = self._shares_desktop(author_id, channel_id)
 
         # Inline attribution, no colon — same anti-impersonation shape as
         # the Telegram group path (a "[Name]:" token is a speaker-turn
@@ -1173,7 +1215,15 @@ class DiscordBot:
             person_value(dcfg, "discord", author_id, "label")
             or getattr(message.author, "display_name", None)
             or message.author.name)
-        user_text = speaker_attribution_prefix(who) + content
+        # The kin's own person is known by account, never by name: anyone
+        # in a server can call themselves anything (20 Nov 2026).
+        from chat_helpers import app_user_name
+        from tools._person_settings import mark_own_person
+        # Only what the kin is sent carries the mark; `who` stays the plain
+        # name for the desktop's own status lines.
+        who_for_kin = mark_own_person(who, author_id, dcfg, "discord",
+                                      (app_user_name(),))
+        user_text = speaker_attribution_prefix(who_for_kin) + content
 
         history = self._channel_history(channel_id, share)
 
@@ -1731,7 +1781,8 @@ class DiscordBot:
                 from kin_persistence import append_agent_conversation_turn
                 append_agent_conversation_turn(
                     self.agent_name,
-                    {**row, "source": f"discord:{channel_id}"})
+                    {**row, **self._dm_mark(channel_id),
+                     "source": f"discord:{channel_id}"})
             else:
                 from kin_persistence import append_discord_turn
                 append_discord_turn(self.agent_name, channel_id, row)

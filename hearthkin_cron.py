@@ -502,6 +502,17 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
         convo = _load_own_history(history_path)
     else:
         convo = load_agent_conversation(kin) or []
+        # A wake-up is the private side: its own rows, the desktop's, shared
+        # DMs', and only the groups and channels switched on for it, marked
+        # with where they were said. It used to get every row, groups
+        # included, whatever they were set to (chat_helpers.visible_rows,
+        # 20 Nov 2026).
+        try:
+            from chat_helpers import PRIVATE, visible_rows
+            from kin_persistence import load_agent_config
+            convo = visible_rows(convo, PRIVATE, load_agent_config(kin) or {})
+        except Exception:
+            pass
     # A compacted conversation is sent from its latest note onward, as on
     # every other surface (20 Nov 2026: wake-ups ignored compaction and sent
     # the whole window). The note itself comes along, as the kin's own.
