@@ -2930,6 +2930,16 @@ class TelegramBot:
                 f"Unknown command: /{cmd}. Try /help to see what's available."
             )
 
+    def _append_park_note(self, chat_id, user_id, turns):
+        """Keep a park note in the conversation it came from: a group's
+        history for a move made in a group, the person's own otherwise. Group
+        moves used to be noted in the person's DM history, so the kin in the
+        group never saw what its move did (audit, 20 Nov 2026)."""
+        if str(chat_id).startswith("-"):
+            self._append_group_history(chat_id, turns)
+        else:
+            self._append_turns_for(user_id, turns)
+
     def _route_park_emotes(self, reply_text, user_id, chat_id):
         """Park mode: turn the kin's action-emotes (*feeds luna*) into real
         moves in its own park, post what happened, and record it so the kin
@@ -2989,7 +2999,7 @@ class TelegramBot:
                              "\n".join(f"- {t} -> {o}" for t, o in results))
                 )
                 try:
-                    self._append_turns_for(
+                    self._append_park_note(chat_id, 
                         user_id,
                         [{"role": "system", "content": note, "ts": now_iso()}],
                     )
@@ -3069,7 +3079,7 @@ class TelegramBot:
                     pass
                 try:
                     from kin_persistence import now_iso as _now
-                    self._append_turns_for(user_id, [{
+                    self._append_park_note(chat_id, user_id, [{
                         "role": "system",
                         "content": ("[hearthkin: the park isn't reachable at "
                                     "the moment, so that move didn't run. "
@@ -3164,7 +3174,7 @@ class TelegramBot:
                     .replace("{command}", str(cmd))
                     .replace("{result}", str(kin_res)))
             try:
-                self._append_turns_for(
+                self._append_park_note(chat_id, 
                     user_id,
                     [{"role": "system", "content": note, "ts": now_iso()}],
                 )
