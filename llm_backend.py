@@ -4631,6 +4631,51 @@ def _ollama_show_raw(name, timeout=5, host=None):
         return None
 
 
+_OWN_STOPS_CACHE = {}
+_OWN_STOPS_RETRY_SECS = 300
+
+
+def model_own_stops(model, host=None):
+    """The stop words an Ollama model's own setup carries (its Modelfile's
+    `PARAMETER stop` lines), as a list. Empty for non-Ollama models or when
+    Ollama can't be asked.
+
+    Why this exists: when a request sends its own `stop` list, Ollama USES
+    THAT LIST INSTEAD of the model's, it doesn't add to it. A voice model
+    trained as a two-person script ("Them: ..." then "Sam: ...") relies on
+    its own stop at "\\nThem:" to end its turn. Rooms send their own stop, so
+    in a room that model carried straight on and wrote the other person's
+    reply as well (found 22 Nov 2026). Whoever sends a stop list adds these.
+
+    Cached per host and model. A failed lookup is retried after a few
+    minutes rather than every turn, so an unreachable host costs one
+    timeout, not one per reply."""
+    if not model or _is_openrouter_model(str(model)):
+        return []
+    key = (host or "", str(model))
+    hit = _OWN_STOPS_CACHE.get(key)
+    if hit is not None:
+        stops, ok, when = hit
+        if ok or (time.time() - when) < _OWN_STOPS_RETRY_SECS:
+            return list(stops)
+    info = _ollama_show_raw(model, host=host)
+    stops = []
+    if isinstance(info, dict):
+        for line in str(info.get("parameters") or "").splitlines():
+            parts = line.strip().split(None, 1)
+            if len(parts) != 2 or parts[0] != "stop":
+                continue
+            raw = parts[1].strip()
+            try:
+                val = json.loads(raw)
+            except ValueError:
+                val = raw.strip('"')
+            if isinstance(val, str) and val and val not in stops:
+                stops.append(val)
+    _OWN_STOPS_CACHE[key] = (stops, isinstance(info, dict), time.time())
+    return list(stops)
+
+
 def set_ollama_keep_alive(model, keep_alive, *, host=None, only_if_loaded=True):
     """Update an already-running Ollama model's keep_alive timer WITHOUT
     reloading it — so a 'Keep model loaded' change takes effect live instead

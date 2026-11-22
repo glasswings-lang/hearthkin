@@ -47,6 +47,7 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Fixed
 
+- **A kin in a room stops where its model is meant to stop.** Rooms tell the model to stop at another speaker's name, and Ollama then drops the stop words the model carries itself. Many models carry their own (Mistral, Llama 2, Cydonia and small Qwen 3 among them), and without them a model in a room could run on past its own turn and write someone else's. Rooms now add their stop word to the model's own instead of replacing them. One-to-one chats, Telegram and Discord never sent stop words, so they were never affected.
 - **No two controls in a small window share a shortcut letter.** The Telegram group window had Alt+C and Alt+M twice each, the Discord channel window Alt+N, park settings three letters, and wake-up settings Alt+O; one of each pair couldn't be reached that way. A test now checks these windows.
 - **Buttons that save say Save,** in the room, message-edit, park and wake-up windows, as in the rest (they said OK).
 - **The Telegram and Discord tabs use the same words.** Telegram's said "user" where everywhere else says "person"; the Discord channel window now says "Display label" and "Add by ID" like the Telegram group window; and the Discord tab has Telegram's "Test token" button, which asks Discord who the token belongs to.

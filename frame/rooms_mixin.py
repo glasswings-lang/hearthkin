@@ -1155,6 +1155,18 @@ class RoomsMixin:
             # fake transcript of Jade/Finn/Luna.
             "stop": ["\n["],
         }
+        # Sending a stop list makes Ollama drop the model's own, so add the
+        # model's own back. A voice model trained as a script stops at its
+        # partner's name; without this, in a room it wrote the partner's
+        # reply too (22 Nov 2026, "Them: Hey there!"). Fail-soft.
+        try:
+            options["stop"] = options["stop"] + [
+                s for s in llm_backend.model_own_stops(
+                    model, host=resolve_kin_ollama_host(
+                        cfg.get("ollama_host_name", "")))
+                if s not in options["stop"]]
+        except Exception:
+            pass
 
         self._stream_id += 1
         my_gen = self._stream_id
