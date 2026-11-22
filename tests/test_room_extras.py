@@ -114,6 +114,13 @@ class _Box:
 
 
 class Room:
+    # Room sharing (21 Nov 2026): not under test here.
+    def _room_private_rows(self, kin_name):
+        return []
+
+    def _room_share_out(self, row):
+        return None
+
     _regen_room_turn = Frame._regen_room_turn
     _room_shared_file_block = Frame._room_shared_file_block
     _room_park_move = Frame._room_park_move

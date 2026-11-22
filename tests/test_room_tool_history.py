@@ -88,6 +88,13 @@ class _Display:
 
 
 class Room:
+    # Room sharing (21 Nov 2026): not under test here.
+    def _room_private_rows(self, kin_name):
+        return []
+
+    def _room_share_out(self, row):
+        return None
+
     config = {"user_name": "Wren"}
     _room_history_for = Frame._room_history_for
     _room_opened_by_kin = Frame._room_opened_by_kin

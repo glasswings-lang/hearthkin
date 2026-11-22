@@ -1530,7 +1530,7 @@ def place_of(row):
     if not isinstance(row, dict):
         return PRIVATE
     src = str(row.get("source") or "")
-    if src.startswith("telegram:group:"):
+    if src.startswith("telegram:group:") or src.startswith("room:"):
         return src
     if src.startswith("discord:"):
         return PRIVATE if row.get("dm") is True else src
@@ -1561,6 +1561,15 @@ def sharing_settings(kin_cfg):
     for cid, on in (dc.get("channel_sees_private") or {}).items():
         if on:
             sees_private.add(f"discord:{cid}")
+    # A room's two switches, the same two (21 Nov 2026). Set in the room's
+    # settings and written into each member kin's config.
+    rm = cfg.get("rooms") or {}
+    for name, on in (rm.get("private_sees") or {}).items():
+        if on:
+            private_sees.add(f"room:{name}")
+    for name, on in (rm.get("sees_private") or {}).items():
+        if on:
+            sees_private.add(f"room:{name}")
     return private_sees, sees_private
 
 
@@ -1577,6 +1586,9 @@ def _where_label(place, kin_cfg):
                  or {}).get(cid) or {}
         name = str(entry.get("label") or "").strip()
         return f'the Discord channel "{name}"' if name else "a Discord channel"
+    if place.startswith("room:"):
+        name = place[len("room:"):].strip()
+        return f'the room "{name}"' if name else "a room"
     return "your private chats"
 
 
@@ -1648,13 +1660,22 @@ def keep_compaction_note(full, kept):
         return kept
 
 
-def view_after_compaction(conversation):
+def view_after_compaction(conversation, owner=None):
     """What a model is sent from `conversation`: everything, if it was never
     compacted; else the latest compaction's note, the few rows it kept from
     before it, and everything after it. A tool result whose call fell outside
     the kept rows is dropped (providers reject one). Never raises; returns a
-    new list and leaves `conversation` alone."""
+    new list and leaves `conversation` alone.
+
+    `owner`: a room, where each kin compacts for itself (21 Nov 2026). Only
+    that kin's compaction rows count, the others' are left out, and the note
+    comes back marked as that kin's (speaker), so the room sends it to that
+    kin alone."""
     convo = list(conversation or [])
+    if owner is not None:
+        convo = [m for m in convo if not (
+            isinstance(m, dict) and m.get("compact")
+            and m.get("speaker") != owner)]
     at = None
     for i in range(len(convo) - 1, -1, -1):
         m = convo[i]
@@ -1677,6 +1698,8 @@ def view_after_compaction(conversation):
     while kept and isinstance(kept[0], dict) and kept[0].get("role") == "tool":
         kept.pop(0)
     note = {"role": "system", "content": marker.get("content") or ""}
+    if owner is not None:
+        note["speaker"] = owner
     return [note] + kept + convo[at + 1:]
 
 

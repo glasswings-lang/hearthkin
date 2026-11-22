@@ -1032,19 +1032,14 @@ CAPABILITIES = [
 # live text would already have been read aloud).
 
 ROOMS = {
-    "sharing_switches": Absent(
-        "A room can't yet be shared into each kin's conversation at all (its "
-        "only switch feeds memory, not the conversation). Agreed 20 Nov 2026: "
-        "rooms get the same two switches when room sharing is built."),
-    "own_person_marked": NotHere(
-        "A room's only human is the person, at the desktop; every other "
-        "speaker is a kin, named by Hearthkin itself."),
-    "compaction_respected": Absent(
-        "A room keeps its own history and nothing can compact it yet, so a "
-        "long room sends every kin the whole transcript. Agreed 20 Nov 2026: "
-        "a room shared into each kin's own conversation uses that kin's own "
-        "compaction; a room kept apart gets a compaction point per kin, each "
-        "sized by that kin's own context window and settings, a note per kin."),
+    # The same two switches as a group, through the one rule (21 Nov 2026).
+    "sharing_switches": Present(markers="visible_rows"),
+    # Since 21 Nov 2026 the person's messages in a room go through the
+    # shared rule (person_row_text), like every surface, so whatever that
+    # rule adds (who's fronting, any later mark) reaches rooms too.
+    "own_person_marked": Present(markers="person_row_text"),
+    # Each kin compacts for itself in a room, its own note (21 Nov 2026).
+    "compaction_respected": Present(markers="view_after_compaction"),
     "per_turn_recall": Present(),
     "memory_index_repair": Present(),
     "speaker_attribution": Present(

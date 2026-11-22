@@ -333,6 +333,19 @@ class RoomEditDialog(wx.Dialog):
 
         self._refresh_distill_help()
 
+        # The two sharing switches every group and channel has (21 Nov
+        # 2026). Off by default, as there.
+        self.private_sees_check = wx.CheckBox(
+            panel, label="Each kin's private chats &include this room (what's "
+                         "said here reaches each member's own conversation, "
+                         "marked as said in this room)")
+        self.private_sees_check.SetValue(bool(cfg.get("private_sees", False)))
+        self.sees_private_check = wx.CheckBox(
+            panel, label="This room &gets each kin's private chats (each "
+                         "member here also has its own conversation with "
+                         "you, marked as said there)")
+        self.sees_private_check.SetValue(bool(cfg.get("sees_private", False)))
+
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         ok_btn = wx.Button(panel, wx.ID_OK, label="&Save")
         cancel_btn = wx.Button(panel, wx.ID_CANCEL, label="Ca&ncel")
@@ -357,6 +370,8 @@ class RoomEditDialog(wx.Dialog):
         # first-to-last. Same decision, same order, both ways in.
         ps.Add(self.distill_help, flag=wx.EXPAND | wx.BOTTOM, border=4)
         ps.Add(self.distill_check, flag=wx.BOTTOM, border=10)
+        ps.Add(self.private_sees_check, flag=wx.BOTTOM, border=6)
+        ps.Add(self.sees_private_check, flag=wx.BOTTOM, border=10)
         ps.Add(btn_row)
         panel.SetSizer(ps)
 
@@ -502,6 +517,8 @@ class RoomEditDialog(wx.Dialog):
             "auto_inactivity_min": self.idle_spin.GetIntValue(),
             "per_turn_token_cap": self.tok_spin.GetIntValue(),
             "distill_to_memory": self.distill_check.GetValue(),
+            "private_sees": self.private_sees_check.GetValue(),
+            "sees_private": self.sees_private_check.GetValue(),
         }
 
 

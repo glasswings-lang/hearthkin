@@ -29,8 +29,13 @@ class FileMenuMixin:
 
     def _on_compact(self, event):
         if self.current_room is not None:
-            self._compact_say("Compacting is for a conversation with one kin. "
-                              "Switch to a kin first.")
+            # A room compacts one kin at a time, each its own note
+            # (rooms_mixin._room_compact_start, 21 Nov 2026).
+            if self._streaming or getattr(self, "_compact_busy", False):
+                self._compact_say("Wait for the reply to finish, then "
+                                  "compact.")
+                return
+            self._room_compact_start()
             return
         if not self.current_agent or not self.conversation:
             self._compact_say("There's no conversation to compact yet.")

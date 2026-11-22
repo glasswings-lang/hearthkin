@@ -44,6 +44,13 @@ OPENING = kp.DEFAULT_ROOM_OPENING_FRAME
 
 
 class StubFrame:
+    # Room sharing (21 Nov 2026): not under test here.
+    def _room_private_rows(self, kin_name):
+        return []
+
+    def _room_share_out(self, row):
+        return None
+
     config = {"user_name": "SpeakerOne"}
     LET_THEM_BEGIN_LABEL = Frame.LET_THEM_BEGIN_LABEL
     CONTINUE_LABEL = Frame.CONTINUE_LABEL

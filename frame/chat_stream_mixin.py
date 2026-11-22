@@ -1514,17 +1514,22 @@ class ChatStreamMixin:
         conversation here (or everywhere, if that's switched on). Blank or
         "off" clears it. Said back in the status line, spoken."""
         import fronting
-        kin = self.current_agent
+        # A room is a conversation of its own; otherwise it's this kin's
+        # conversation here.
+        if getattr(self, "current_room", None):
+            kin, place = self.current_room, "room"
+        else:
+            kin, place = self.current_agent, "desktop"
         if not kin:
-            self._set_status("Open a kin first.", speak=True)
+            self._set_status("Open a kin or a room first.", speak=True)
             return
         dlg = wx.TextEntryDialog(
             self, "Who's fronting? Leave it blank, or type off, to clear it.",
-            "Who's fronting", fronting.get(kin, "desktop"))
+            "Who's fronting", fronting.get(kin, place))
         try:
             if dlg.ShowModal() != wx.ID_OK:
                 return
-            now = fronting.set(kin, "desktop", dlg.GetValue())
+            now = fronting.set(kin, place, dlg.GetValue())
         finally:
             dlg.Destroy()
         self._set_status(f"Fronting: {now}." if now

@@ -237,9 +237,10 @@ check("cancelling changes nothing", w2.conversation == convo
 
 w3 = Win()
 w3.current_room = "Den"
+w3._room_compact_start = lambda: w3.status.append("room compact started")
 w3._on_compact(None)
-check("in a room, it says it's for a conversation with one kin",
-      "one kin" in w3.status[-1])
+check("in a room, it compacts the room, one kin at a time (21 Nov 2026; it "
+      "used to refuse)", w3.status[-1] == "room compact started")
 
 # --- the heads-up ---------------------------------------------------------
 w4 = Win()

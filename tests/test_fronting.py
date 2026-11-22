@@ -158,6 +158,40 @@ check("...and not from someone else's account",
       "Only an account" in m.channel.sent[-1]
       and fronting.get("Kimi", "discord:55") == "Fern")
 
+# --- rooms: the person's messages go through the same rule ------------------
+from frame.rooms_mixin import RoomsMixin  # noqa: E402
+
+
+class _Room:
+    # Room sharing (21 Nov 2026): not under test here.
+    def _room_private_rows(self, kin_name):
+        return []
+
+    def _room_share_out(self, row):
+        return None
+
+    config = {"user_name": "Sam"}
+    current_room = "Den"
+    room_conversation = []
+
+    def _room_opened_by_kin(self):
+        return False
+
+
+fronting.set("Den", "room", "Juniper")
+_r = {"role": "user", "content": "hello all", "ts": "2026-11-21T06:00:00",
+      "speaker": "You"}
+fronting.stamp(_r, "Den", "room")
+_room = _Room()
+_room.room_conversation = [_r]
+hist = RoomsMixin._room_history_for(_room, "Wren")
+check("a room shows the person's message through the shared rule, fronting "
+      "and all", hist and hist[-1]["content"]
+      == "[2026-11-21 06:00] [Sam, Juniper fronting] hello all")
+check("a room is a conversation of its own",
+      fronting.get("Den", "room") == "Juniper"
+      and fronting.get("Wren", "desktop") != "Juniper")
+
 if _fails:
     print(f"{len(_fails)} FAILED: " + "; ".join(_fails))
     sys.exit(1)

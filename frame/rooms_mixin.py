@@ -357,7 +357,12 @@ class RoomsMixin:
                 new_cfg["auto_inactivity_min"] = res["auto_inactivity_min"]
                 new_cfg["per_turn_token_cap"] = res["per_turn_token_cap"]
                 new_cfg["distill_to_memory"] = res["distill_to_memory"]
+                new_cfg["private_sees"] = bool(res.get("private_sees"))
+                new_cfg["sees_private"] = bool(res.get("sees_private"))
                 save_room_config(target, new_cfg)
+                self._room_write_sharing(target, normalized,
+                                         new_cfg["private_sees"],
+                                         new_cfg["sees_private"])
                 if unknown:
                     wx.MessageBox(
                         f"Ignored unrecognized names: {', '.join(unknown)}",
@@ -518,7 +523,12 @@ class RoomsMixin:
                "speaker": "You"}
         if refs:
             row["attachments"] = refs
+        # Who's fronting, as on every surface (fronting.py): a room is one
+        # conversation of its own.
+        import fronting
+        fronting.stamp(row, self.current_room, "room")
         self.room_conversation.append(row)
+        self._room_share_out(row)
         try:
             save_room_conversation(self.current_room, self.room_conversation)
         except Exception as e:
@@ -563,6 +573,241 @@ class RoomsMixin:
         kin_name = self._room_active_order[self._room_round_index]
         self._stream_one_kin_in_room(kin_name)
 
+    # -- sharing a room with each kin's own conversation (21 Nov 2026) ----
+    # The same two switches as a Telegram group or Discord channel, read by
+    # the one rule (chat_helpers.visible_rows / sharing_settings). They're
+    # set in the room's settings and written into each member's config.
+
+    def _room_write_sharing(self, room, members, private_sees, sees_private):
+        """Put a room's two switches into every kin's config: on for its
+        members as set, gone for anyone who isn't a member."""
+        from kin_persistence import save_agent_config
+        for kin in list_agents():
+            try:
+                cfg = load_agent_config(kin) or {}
+                rm = dict(cfg.get("rooms") or {})
+                changed = False
+                for key, val in (("private_sees", private_sees),
+                                 ("sees_private", sees_private)):
+                    d = dict(rm.get(key) or {})
+                    want = bool(val) and kin in members
+                    if want and not d.get(room):
+                        d[room] = True
+                        changed = True
+                    elif not want and room in d:
+                        d.pop(room, None)
+                        changed = True
+                    rm[key] = d
+                if changed:
+                    cfg["rooms"] = rm
+                    save_agent_config(kin, cfg)
+                    if kin == self.current_agent:
+                        self.agent_cfg = cfg
+            except Exception as e:
+                append_failure_log("save_failures.log", kin,
+                                   "room sharing switches", e)
+
+    def _room_share_out(self, row):
+        """A room message also goes into each member's own conversation,
+        when the room's "private chats include this room" is on: marked with
+        the room as its place, so the kin reads it as said there. The
+        person's words as theirs, a kin's own reply as its own, another
+        kin's as that kin's."""
+        room = self.current_room
+        if not room or not isinstance(row, dict) or row.get("compact"):
+            return
+        if row.get("role") not in ("user", "assistant") or row.get(
+                "tool_calls"):
+            return
+        speaker = str(row.get("speaker") or "")
+        from kin_persistence import append_agent_conversation_turn
+        for kin in [m for m in self.room_cfg.get("members", [])
+                    if m in set(list_agents())]:
+            try:
+                kcfg = load_agent_config(kin) or {}
+                if not ((kcfg.get("rooms") or {}).get("private_sees")
+                        or {}).get(room):
+                    continue
+                out = {"content": row.get("content", ""),
+                       "ts": row.get("ts") or now_iso(),
+                       "source": f"room:{room}"}
+                if row.get("role") == "user":
+                    out["role"] = "user"
+                    out["sender_name"] = ((self.config or {}).get(
+                        "user_name", "") or "").strip()
+                    if row.get("fronting"):
+                        out["fronting"] = row["fronting"]
+                elif speaker == kin:
+                    out["role"] = "assistant"
+                else:
+                    out["role"] = "user"
+                    out["sender_name"] = speaker
+                append_agent_conversation_turn(kin, out)
+                # The open kin's conversation is held in memory too; keep
+                # it the same, or its next save would drop this row.
+                if kin == self.current_agent and isinstance(
+                        getattr(self, "conversation", None), list):
+                    self.conversation.append(out)
+            except Exception as e:
+                append_failure_log("save_failures.log", kin,
+                                   "room message into own conversation", e)
+
+    def _room_private_rows(self, kin_name):
+        """The kin's own private side, for a room switched to "this room
+        gets each kin's private chats": its private messages, marked as said
+        there, its own replies as its own (speaker), never this room's own
+        copies."""
+        room = self.current_room
+        try:
+            from chat_helpers import visible_rows
+            from kin_persistence import load_agent_conversation
+            kcfg = load_agent_config(kin_name) or {}
+            if not ((kcfg.get("rooms") or {}).get("sees_private")
+                    or {}).get(room):
+                return []
+            rows = visible_rows(load_agent_conversation(kin_name) or [],
+                                f"room:{room}", kcfg)
+        except Exception:
+            return []
+        out = []
+        for r in rows:
+            if not isinstance(r, dict) or r.get("compact") or r.get(
+                    "tool_calls") or str(r.get("source") or "") == f"room:{room}":
+                continue
+            if r.get("role") == "user":
+                out.append(dict(r))
+            elif r.get("role") == "assistant" and r.get("content"):
+                out.append(dict(r, speaker=kin_name))
+        return out
+
+    # -- compacting a room, one kin at a time (21 Nov 2026) --------------
+    # Agreed 20 Nov: a room kept apart gets a compaction point per kin, each
+    # with that kin's own note and its own "keep" setting. Each kin writes
+    # its note from the room as it sees it; you read each one, as on the
+    # desktop, and can retry or skip it.
+
+    def _room_compact_start(self):
+        existing = set(list_agents())
+        members = [m for m in self.room_cfg.get("members", [])
+                   if m in existing]
+        if not members or not self.room_conversation:
+            self._compact_say("There's nothing in this room to compact yet.")
+            return
+        self._room_compact_queue = list(members)
+        self._room_compact_done = []
+        self._room_compact_next()
+
+    def _room_compact_messages(self, kin):
+        """What a kin is sent when asked for its note for this room."""
+        from frame_shared import build_system_prompt, load_soul
+        from kin_persistence import (compact_request_text,
+                                     load_memory_for_prompt)
+        return ([{"role": "system", "content": build_system_prompt(
+            load_soul(kin) or "", load_memory_for_prompt(kin) or "",
+            enabled_tools=[], kin_name=kin)}]
+            + [m for m in self._room_history_for(kin)
+               if m.get("role") in ("system", "user", "assistant")
+               and not m.get("tool_calls")]
+            + [{"role": "user", "content": compact_request_text(
+                kin, self._compact_user_name())}])
+
+    def _room_compact_next(self):
+        queue = getattr(self, "_room_compact_queue", None) or []
+        if not queue:
+            done = getattr(self, "_room_compact_done", [])
+            self._compact_busy = False
+            self._compact_say(
+                ("Compacted the room for " + ", ".join(done)
+                 + ". Nothing was deleted.") if done
+                else "Not compacted. Nothing was changed.")
+            return
+        kin = queue[0]
+        import threading
+        from frame_shared import (_num_ctx_of, extract_inline_thinking,
+                                  llm_backend, resolve_kin_ollama_host)
+        from chat_helpers import compact_options
+        cfg = dict(load_agent_config(kin) or {})
+        try:
+            messages = self._room_compact_messages(kin)
+        except Exception as e:
+            self._room_compact_queue = queue[1:]
+            self._compact_say(f"Couldn't ask {kin} for a note: {e}.")
+            wx.CallAfter(self._room_compact_next)
+            return
+        self._compact_busy = True
+        room = self.current_room
+        self._compact_say(f"Asking {kin} to write its note for this room.")
+
+        def worker():
+            note, err = "", None
+            try:
+                result = llm_backend.chat(
+                    strip_model_annotation(str(cfg.get("model", "") or "")),
+                    messages,
+                    options=compact_options({
+                        "temperature": cfg.get("temperature", 0.8),
+                        "top_p": cfg.get("top_p", 0.9),
+                        "num_ctx": _num_ctx_of(cfg)}, cfg),
+                    stream=False, cache=bool(cfg.get("cache", True)),
+                    cache_ttl=str(cfg.get("cache_ttl", "auto")),
+                    max_context_tokens=max(512, _num_ctx_of(cfg) - 2000),
+                    kin_name=kin, surface="compact",
+                    ollama_host=resolve_kin_ollama_host(
+                        cfg.get("ollama_host_name", "")))
+                note, _ = extract_inline_thinking(
+                    getattr(result, "content", "") or "",
+                    getattr(result, "thinking", "") or "")
+                note = (note or "").strip()
+            except Exception as e:
+                err = str(e)
+            wx.CallAfter(self._room_compact_show, room, kin, note, err)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _room_compact_show(self, room, kin, note, err=None):
+        if room != self.current_room:
+            self._compact_busy = False
+            self._room_compact_queue = []
+            self._compact_say("You left the room, so nothing more was "
+                              "compacted.")
+            return
+        from chat_helpers import compact_keep_count
+        keep = compact_keep_count(load_agent_config(kin))
+        if err or not note:
+            self._compact_say(f"{kin} didn't write a note"
+                              + (f" ({err})" if err else "")
+                              + "; skipped.")
+            self._room_compact_queue = self._room_compact_queue[1:]
+            self._room_compact_next()
+            return
+        from dialogs.compact import CompactDialog
+        dlg = CompactDialog(self, kin, note, keep=keep)
+        r = dlg.ShowModal()
+        text = dlg.get_note()
+        dlg.Destroy()
+        if r == wx.ID_RETRY:
+            self._room_compact_next()        # same kin again
+            return
+        self._room_compact_queue = self._room_compact_queue[1:]
+        if r == wx.ID_OK and text:
+            self._room_apply_compaction(kin, text, keep)
+        self._room_compact_next()
+
+    def _room_apply_compaction(self, kin, note, keep):
+        from frame_shared import load_app_prompt
+        from chat_helpers import compact_marker
+        preface = load_app_prompt("compact_marker", kin).replace(
+            "{user}", self._compact_user_name())
+        row = compact_marker(note, keep, ts=now_iso(), preface=preface)
+        row["speaker"] = kin
+        self.room_conversation.append(row)
+        try:
+            save_room_conversation(self.current_room, self.room_conversation)
+        except Exception as e:
+            append_failure_log("save_failures.log", self.current_room or "?",
+                               "save_room_conversation (compact)", e)
+        self._room_compact_done.append(kin)
+
     def _room_history_for(self, kin_name):
         """The room transcript as kin_name should see it: its own turns as
         `assistant`, everyone else's as tagged `user` turns.
@@ -584,15 +829,24 @@ class RoomsMixin:
         # to see my new name everywhere" is the more useful
         # behavior than "freeze the old name in each turn").
         room_user_name = (self.config.get("user_name", "") or "").strip()
-        # Through the shared helper, like every other surface that names a
-        # speaker to a model (12 Nov 2026). The no-colon shape is an
-        # anti-impersonation rule; a hand-built copy here is what would keep
-        # the old shape the next time that rule changes.
         from chat_helpers import speaker_attribution_prefix
-        room_user_prefix = speaker_attribution_prefix(room_user_name)
 
+        try:
+            from kin_persistence import load_agent_config as _lac
+            _feed_thinking = bool((_lac(kin_name) or {}).get(
+                "feed_thinking", False))
+        except Exception:
+            _feed_thinking = False
         history = []
-        for m in self.room_conversation:
+        # Each kin's own compaction (Ctrl+Shift+K in a room): from its own
+        # latest note onward; another kin's notes are never its business.
+        from chat_helpers import view_after_compaction
+        _rows = list(self.room_conversation)
+        _private = self._room_private_rows(kin_name)
+        if _private:
+            _rows = sorted(_rows + _private,
+                           key=lambda r: str(r.get("ts") or ""))
+        for m in view_after_compaction(_rows, owner=kin_name):
             role = m.get("role")
             content = m.get("content", "")
             speaker = m.get("speaker", "")
@@ -604,9 +858,17 @@ class RoomsMixin:
             # that destabilizes generation.
             ts_prefix = format_ts_prefix(m.get("ts"))
             if role == "user":
+                # The person's message through the one rule every surface
+                # uses (chat_helpers.person_row_text): "[time] [Name] words",
+                # who's fronting included. Rooms used to build it their own
+                # way, so nothing added to that rule ever reached a room
+                # (21 Nov 2026). The name is the one in Preferences, read
+                # now, so a rename reaches the whole transcript.
+                from chat_helpers import person_row_text
                 entry = {
                     "role": "user",
-                    "content": ts_prefix + room_user_prefix + content,
+                    "content": person_row_text(
+                        dict(m, sender_name=room_user_name), {})[0],
                 }
                 # A picture the person shared; _room_fit_images decides,
                 # per kin, whether it's sent or described.
@@ -669,7 +931,7 @@ class RoomsMixin:
                     # sees its own reasoning, not other kins'. No ts prefix
                     # on own turns — see above.
                     own_msg = {"role": "assistant", "content": content}
-                    if m_thinking:
+                    if m_thinking and _feed_thinking:
                         own_msg["thinking"] = m_thinking
                     history.append(own_msg)
 
@@ -1265,7 +1527,6 @@ class RoomsMixin:
         # Per-kin thinking display / feed settings
         kin_cfg = load_agent_config(self._current_room_speaker) if self._current_room_speaker else {}
         show_thinking = kin_cfg.get("show_thinking", False)
-        feed_thinking = kin_cfg.get("feed_thinking", False)
 
         # Pull inline <thinking>...</thinking> markup out of content and
         # merge into the structured thinking field BEFORE logging /
@@ -1286,9 +1547,11 @@ class RoomsMixin:
         # docstring; the old order here let "[TS] [OtherKin]:" through and
         # that is exactly how the room impersonation leak persisted).
         from chat_helpers import speakers_shown
+        _uname = (self.config or {}).get("user_name", "")
         _shown = {n for n in speakers_shown(
-            self.room_conversation,
-            also=((self.config or {}).get("user_name", ""), "You"))
+            [dict(r, sender_name=_uname) if r.get("role") == "user" else r
+             for r in self.room_conversation if isinstance(r, dict)],
+            also=(_uname, "You"))
             if n.casefold() != (self._current_room_speaker or "").casefold()}
         reply, _imp = clean_kin_reply(reply, self._current_room_speaker,
                                       known_speakers=_shown)
@@ -1381,15 +1644,18 @@ class RoomsMixin:
         # Feed reasoning back via native `thinking` field (same shape Ollama
         # returns) when feed_thinking is on. Truncate per the per-kin cap so
         # it doesn't pile up across turns and slow every reply.
-        if thinking and feed_thinking:
-            cap = int(kin_cfg.get("think_max_chars", 1200) or 0)
-            if cap > 0 and len(thinking) > cap:
-                thinking = thinking[:cap] + "\n... [reasoning truncated]"
-            room_msg["thinking"] = thinking
+        # Kept as everywhere (chat_helpers.thinking_to_save); fed back only
+        # if this kin feeds its reasoning back (_room_history_for). It was
+        # kept only when feeding (21 Nov 2026).
+        from chat_helpers import thinking_to_save
+        _t = thinking_to_save(thinking, kin_cfg)
+        if _t:
+            room_msg["thinking"] = _t
         if reply_to_save != "[no reply produced]":
             # Shown, never saved as the kin's words: the other kin read it as
             # something it said (audit, 20 Nov 2026).
             self.room_conversation.append(room_msg)
+            self._room_share_out(room_msg)
             # Stopped at the reply-length cap: said, and noted for everyone
             # in the room (21 Nov 2026).
             _cut = getattr(self, "_room_cut_off_for", None)
