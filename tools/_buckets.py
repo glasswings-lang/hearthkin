@@ -119,6 +119,10 @@ INTENTIONALLY_TELEGRAM_BLOCKED = frozenset({
     # never through the Telegram per-user bucket. It is deliberately absent
     # from every bucket so it can't be driven from a chat turn.
     "reach_out",
+    # message_kin (kin writing to each other) is proactive-only for the same
+    # reason: a person on Telegram or Discord must not be able to have a kin
+    # write to the other kin in the house.
+    "message_kin",
 })
 
 # One-line user-facing explainers for the Settings telegram UI.

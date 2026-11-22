@@ -143,6 +143,21 @@ class HeartbeatSettingsDialog(wx.Dialog):
         # The labels the kin will actually be shown and must say back.
         self._allow_labels = self._dest_labels[1:]
 
+        # How often this kin may write to each other kin (kin_mail), on
+        # heartbeats and wake-ups alike. A cap like every other, so it's the
+        # person's to set, not a number in the code (22 Nov 2026).
+        try:
+            _kpd = int(hb.get("kin_messages_per_day", 1))
+        except (TypeError, ValueError):
+            _kpd = 1
+        kin_msgs_label = wx.StaticText(
+            self, label="Messages it may write to each other &kin a day, "
+                        "heartbeats and wake-ups (0 = none):")
+        self.kin_msgs_field = wx.TextCtrl(self, value=str(max(0, _kpd)))
+        self.kin_msgs_field.SetName(
+            "Messages it may write to each other kin a day, heartbeats and "
+            "wake-ups (0 = none)")
+
         ok_btn = wx.Button(self, wx.ID_OK, label="Sa&ve")
         cancel_btn = wx.Button(self, wx.ID_CANCEL, label="&Cancel")
         ok_btn.SetDefault()
@@ -164,6 +179,9 @@ class HeartbeatSettingsDialog(wx.Dialog):
         sizer.Add(allow_label, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         sizer.Add(self.allow_list, proportion=1,
                   flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
+        sizer.Add(kin_msgs_label, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        sizer.Add(self.kin_msgs_field, flag=wx.EXPAND | wx.LEFT | wx.RIGHT,
+                  border=8)
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         btn_row.AddStretchSpacer(1)
         btn_row.Add(ok_btn, flag=wx.RIGHT, border=4)
@@ -194,6 +212,10 @@ class HeartbeatSettingsDialog(wx.Dialog):
             m = re.match(r"^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$", (v or "").strip())
             return f"{int(m.group(1)):02d}:{m.group(2)}" if m else fb
 
+        try:
+            kpd = max(0, min(100, int(self.kin_msgs_field.GetValue().strip() or "1")))
+        except (TypeError, ValueError):
+            kpd = 1
         surface, rid = self._dest_rows[max(0, self.dest_choice.GetSelection())]
         dest = {"surface": surface}
         if surface != "desktop" and rid:
@@ -216,5 +238,6 @@ class HeartbeatSettingsDialog(wx.Dialog):
             "active_end": _norm(self.end_field.GetValue(), "22:00"),
             "destination": dest,
             "allowed_destinations": allowed,
+            "kin_messages_per_day": kpd,
         })
         return out

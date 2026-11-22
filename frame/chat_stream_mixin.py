@@ -549,7 +549,7 @@ class ChatStreamMixin:
 
         cfg = self.agent_cfg if self.current_agent else {}
         show_thinking = cfg.get("show_thinking", False)
-        feed_thinking = cfg.get("feed_thinking", False)
+        # feed_thinking is honoured where history is built (render_mixin).
 
         # Pull any inline <thinking>...</thinking> markup out of content
         # and merge it into the structured thinking field. Normalizes the
@@ -768,6 +768,20 @@ class ChatStreamMixin:
         # on Telegram and on a cron wake-up. Before this the desktop was the
         # one surface that read the line and did nothing with it.
         self._maybe_route_park_command(reply_to_save, ts, user_text)
+        # A wake-up sent into this chat can write to another kin with a
+        # ```to:Name block, as on a wake-up that runs on its own (kin_mail).
+        if self.current_agent and _is_cron_user_text(user_text):
+            try:
+                import kin_mail
+                _mail_note = kin_mail.send_fences(self.current_agent,
+                                                  reply_to_save)
+                if _mail_note:
+                    self.chat_display.AppendText("\n" + _mail_note + "\n")
+                    self.conversation.append(
+                        {"role": "system", "content": _mail_note, "ts": ts})
+            except Exception as e:
+                append_failure_log("kin_messages.log", self.current_agent,
+                                   "wake-up in chat", e)
         self._persist_current_conversation()
         # A cron wake-up that took the live-injection path still owes the
         # daily journal an entry — the kin's reply IS the entry, and on the

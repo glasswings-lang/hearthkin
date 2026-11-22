@@ -58,6 +58,7 @@ from .archive_staging import archive_staging
 from .tff import tff
 from .tff import _HOST as _TFF_HOST
 from .reach_out import reach_out
+from .message_kin import message_kin
 from .analyze_sound import analyze_sound
 from .listen import listen
 from .look import look
@@ -105,6 +106,7 @@ _REGISTRY = {
     "archive_staging": archive_staging,
     "tff": tff,
     "reach_out": reach_out,
+    "message_kin": message_kin,
     "analyze_sound": analyze_sound,
     "listen": listen,
     "look": look,
@@ -181,7 +183,7 @@ def list_available():
 # the Proactive-heartbeat feature, which grants it on its own; scheduled cron
 # wakes get it too. load_tools strips it from everyday turns and re-grants it
 # only when proactive_wake or cron_turn is set.
-_PROACTIVE_TOOLS = frozenset({"reach_out"})
+_PROACTIVE_TOOLS = frozenset({"reach_out", "message_kin"})
 
 
 # Params that are supplied by the framework (never by the model) and must be
@@ -277,6 +279,8 @@ def load_tools(allowed_names, *, context=None, model=None, cron_turn=False,
         schema = build_schema(fn, hide_params=hidden)
         if name == "reach_out":
             _name_reach_out_destinations(schema, context)
+        if name == "message_kin":
+            _name_other_kin(schema, context)
         schemas.append(schema)
         executor[name] = _make_executor(fn, bound)
     return schemas, executor
@@ -300,21 +304,47 @@ def _name_reach_out_destinations(schema, context):
         allowed = (cfg.get("heartbeat") or {}).get("allowed_destinations") or []
         names = [str(d.get("label", "")).strip() for d in allowed
                  if isinstance(d, dict) and str(d.get("label", "")).strip()]
-        if not names:
-            return
         fn_block = schema.get("function") or {}
         desc = fn_block.get("description") or ""
+        # Say truthfully where leaving `to` out goes (22 Nov 2026): "your
+        # operator" alone hid which app and place that is.
+        from tools.reach_out import _where_it_goes
+        default = _where_it_goes(cfg)
+        if not names:
+            fn_block["description"] = desc.rstrip() + (
+                f"\n\nLeaving `to` out sends it to {default}.")
+            return
         fn_block["description"] = desc.rstrip() + (
             "\n\nPlaces your operator has opened to you (pass one of these as "
             "`to`, exactly as written): "
             + ", ".join(f'"{n}"' for n in names)
-            + ". Real people are in these. Leave `to` out to reach your "
-              "operator instead."
+            + ". Real people are in these, and only the people there will see "
+              "it. Leave `to` out to send it to " + default + " instead."
         )
         # Also constrain the parameter itself, so a model that reads schemas
         # more carefully than prose gets the same list.
         props = ((fn_block.get("parameters") or {}).get("properties") or {})
         if "to" in props:
+            props["to"]["enum"] = names
+    except Exception:
+        pass
+
+
+def _name_other_kin(schema, context):
+    """List the other kin in this house inside message_kin's schema, so a kin
+    knows who it can write to (and the parameter only takes those names).
+    Best-effort: a failure leaves the plain description."""
+    try:
+        import kin_mail
+        names = kin_mail.other_kin((context or {}).get("agent_name", ""))
+        fn_block = schema.get("function") or {}
+        desc = fn_block.get("description") or ""
+        fn_block["description"] = desc.rstrip() + (
+            "\n\nThe other kin in this house: "
+            + (", ".join(f'"{n}"' for n in names) if names else "none yet")
+            + ".")
+        props = ((fn_block.get("parameters") or {}).get("properties") or {})
+        if names and "to" in props:
             props["to"]["enum"] = names
     except Exception:
         pass

@@ -1475,7 +1475,6 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
         # Stopped at its length cap: the kin is told, as everywhere.
         steer_notes = list(steer_notes) + [
             cut_off_note_row(kin)["content"]]
-    _added = getattr(result, "messages_added", None) or []
     # Persist tool round-trips (if any) so the kin's next read of
     # conversation.jsonl sees what they actually did. Without this the
     # kin would only see the final text reply on the next session and
@@ -1628,6 +1627,14 @@ def _finish_cron_reply(kin, result, messages, model, options, cache,
     # perform the write. Gated on write tools being cron-safe-enabled.
     bridge_note, bridge_confirm = _maybe_authoring_bridge_cron(
         kin, reply, safe_tools, toolless_scopes, model)
+    # A ```to:Name block writes to another kin (kin_mail); what went and what
+    # didn't is told to the kin with the other notes.
+    _mail_note = ""
+    try:
+        import kin_mail
+        _mail_note = kin_mail.send_fences(kin, reply)
+    except Exception as e:
+        cron_helpers.log_cron_error(kin, "kin_message", str(e))
     # Steering notes for a turn nobody was awake to read. Both are appended to
     # the kin's own history AFTER the reply they describe, so the correction
     # arrives in the same place the kin will next look — not to the operator,
@@ -1644,6 +1651,8 @@ def _finish_cron_reply(kin, result, messages, model, options, cache,
     note = _maybe_read_nudge_cron(kin, reply, safe_tools, _added)
     if note:
         steer_notes.append(note)
+    if _mail_note:
+        steer_notes.append(_mail_note)
     # "Show reasoning" (12 Nov 2026): the reasoning behind a wake-up's reply
     # was pulled out and dropped. With the kin's box ticked it now rides into
     # the journal entry (the operator-facing record), never into the reply
@@ -1762,7 +1771,8 @@ def _run_cron_park_turn(kin, reply, messages, model, options, cache,
 # Heartbeat tools: reach_out (the point) + a couple of read-only tools so the
 # kin can reflect before deciding whether it has anything to say. Small and
 # fixed — a heartbeat is a quiet moment, not a work session.
-_HEARTBEAT_TOOLS = ["reach_out", "memory_search", "recent_thinking"]
+_HEARTBEAT_TOOLS = ["reach_out", "message_kin", "memory_search",
+                    "recent_thinking"]
 
 
 def _log_heartbeat(kin, outcome):
@@ -1812,6 +1822,15 @@ def run_heartbeat(kin, cfg, should_stop=None):
                                 str(_ad(kin).parent / "inbox.md"))
         from kin_persistence import house_line
         _house = house_line(kin)
+        # Another kin may have written (kin_mail). Given here, at the start,
+        # with the house line, and recorded in the kin's own conversation.
+        try:
+            import kin_mail
+            _mail = kin_mail.waiting_block(kin)
+        except Exception:
+            _mail = ""
+        if _mail:
+            _house = (_house + "\n\n" + _mail) if _house else _mail
         if _house:
             framed = _house + "\n\n" + framed
     except Exception:
@@ -1890,9 +1909,23 @@ def run_heartbeat(kin, cfg, should_stop=None):
         from chat_helpers import scan_intermediate_tool_content
         _, names_fired = scan_intermediate_tool_content(
             getattr(result, "messages_added", None) or [])
-        fired = "reach_out" in names_fired
+        fired = bool({"reach_out", "message_kin"} & set(names_fired))
     except Exception:
         fired = False
+    # A ```to:Name block in the reply writes to that kin, with or without
+    # tools (kin_mail.send_fences); the note goes to the kin's history.
+    try:
+        import kin_mail
+        _mail_note = kin_mail.send_fences(
+            kin, getattr(result, "content", "") or "")
+        if _mail_note:
+            append_agent_conversation_turn(kin, {
+                "role": "system", "content": _mail_note,
+                "ts": datetime.datetime.now().isoformat(timespec="seconds")})
+            if ": sent;" in _mail_note or "so it was sent to" in _mail_note:
+                fired = True
+    except Exception as e:
+        _log_heartbeat(kin, f"kin-message-failed={type(e).__name__}:{e}")
     # The kin wrote something and never sent it.
     #
     # This is the one surface where a missed tool call DELETES the kin's own
@@ -1937,7 +1970,7 @@ def run_heartbeat(kin, cfg, should_stop=None):
                 from chat_helpers import scan_intermediate_tool_content
                 _, after = scan_intermediate_tool_content(
                     getattr(second, "messages_added", None) or [])
-                fired = "reach_out" in after
+                fired = bool({"reach_out", "message_kin"} & set(after))
                 # Only NOW has the kin actually been asked. Setting this
                 # before the call looks equivalent and is not: a nudge that
                 # raises would file the kin's words as a decision it never

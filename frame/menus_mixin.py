@@ -89,6 +89,10 @@ class MenusMixin:
         self.mnu_delete_agent = agent_menu.Append(wx.ID_ANY, "&Delete kin...")
         agent_menu.AppendSeparator()
         self.mnu_save_soul = agent_menu.Append(wx.ID_ANY, "&Save soul file\tCtrl+Shift+S")
+        # Everything kin have written to each other (kin_mail), one plain
+        # file per pair, so the person can read all of it at any time.
+        self.mnu_kin_messages = agent_menu.Append(
+            wx.ID_ANY, "&Messages between kin...")
         menubar.Append(agent_menu, "&Kin")
 
         room_menu = wx.Menu()
@@ -239,6 +243,8 @@ class MenusMixin:
         # EditKinDialog's "Rename..." button rather than a menu item.
         self.Bind(wx.EVT_MENU, self._on_delete_agent, self.mnu_delete_agent)
         self.Bind(wx.EVT_MENU, self._on_save_soul, self.mnu_save_soul)
+        self.Bind(wx.EVT_MENU, lambda _e: self._on_kin_messages(),
+                  self.mnu_kin_messages)
         self.Bind(wx.EVT_MENU, self._on_new_room, self.mnu_new_room)
         self.Bind(wx.EVT_MENU, self._on_edit_room, self.mnu_edit_room)
         self.Bind(wx.EVT_MENU, self._on_delete_room, self.mnu_delete_room)
@@ -441,6 +447,36 @@ class MenusMixin:
                 nvda_speak(f"Couldn't open usage log: {e}")
             except Exception:
                 pass
+
+    def _on_kin_messages(self):
+        """Kin > Messages between kin: open the folder holding everything
+        kin have written to each other (kin_mail), one plain file per pair.
+        Says so plainly when there's nothing yet, rather than opening an
+        empty folder."""
+        try:
+            import kin_mail
+            folder = kin_mail._dir()
+            pairs = sorted(p for p in folder.glob("*.md"))
+            if not pairs:
+                self._set_status("No kin have written to each other yet.")
+                try:
+                    nvda_speak("No kin have written to each other yet.")
+                except Exception:
+                    pass
+                return
+            if sys.platform == "win32":
+                os.startfile(str(folder))
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.run(["open", str(folder)])
+            else:
+                import subprocess
+                subprocess.run(["xdg-open", str(folder)])
+            self._set_status(
+                f"Opened messages between kin: {len(pairs)} "
+                + ("conversation" if len(pairs) == 1 else "conversations"))
+        except Exception as e:
+            self._set_status(f"Couldn't open messages between kin: {e}")
 
     def _on_open_kin_folder(self):
         """Open the active kin's folder (~/.hearthkin/kin/<name>/)

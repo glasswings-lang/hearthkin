@@ -13,6 +13,36 @@ turn_steering.log_unsent_reach for which case keeps the text)."""
 
 import datetime
 
+# The last message held per kin (see the kin check in reach_out): sending the
+# same one again means the kin meant it.
+_HELD = {}
+
+
+def _where_it_goes(cfg, to=""):
+    """Where a reach_out would land, in the words the kin should hear: the
+    person's own name for the place, and which app."""
+    hb = (cfg or {}).get("heartbeat") or {}
+    want = str(to or "").strip()
+    if want:
+        for d in hb.get("allowed_destinations") or []:
+            if isinstance(d, dict) and str(d.get("label", "")).strip(
+                    ).casefold() == want.casefold():
+                import reach_places
+                return reach_places.where_words(d.get("surface", ""), want)
+        return repr(want)
+    dest = hb.get("destination") or {"surface": "desktop"}
+    surface = dest.get("surface", "desktop")
+    if surface == "desktop":
+        return "your person's desktop chat"
+    try:
+        import reach_places
+        for r in reach_places.place_rows(cfg):
+            if r["surface"] == surface and str(r["id"]) == str(dest.get("id", "")):
+                return reach_places.where_words(surface, r["label"])
+        return f"your person on {reach_places.where_words(surface)}"
+    except Exception:
+        return "your person"
+
 
 def reach_out(message: str, to: str = "", agent_name: str = "") -> str:
     """Send a short message on your own initiative, to reach out when you
@@ -49,6 +79,28 @@ def reach_out(message: str, to: str = "", agent_name: str = "") -> str:
         cfg = load_agent_config(agent_name) or {}
     except Exception as e:
         return f"reach_out: could not load your config ({e})."
+
+    # A message that opens by speaking to another kin ("Opal --", "Dear
+    # Opal,") is held once, wherever it was going (22 Nov 2026). Kimi wrote
+    # to Opal on a heartbeat and sent it to a Telegram group, the one place
+    # it had been given, with no way to know Opal wasn't there. Kin reach
+    # each other with message_kin. Sending the same message again goes
+    # through, so a kin that really does mean that place isn't stuck.
+    try:
+        import kin_mail
+        addressed = kin_mail.addressed_kin(text, agent_name)
+    except Exception:
+        addressed = None
+    if addressed and _HELD.get(agent_name) != (text, (to or "").strip()):
+        _HELD[agent_name] = (text, (to or "").strip())
+        return (f"reach_out: nothing was sent yet. This opens by speaking to "
+                f"{addressed}, another kin in this house, and kin aren't "
+                f"reached through reach_out: it would have gone to "
+                f"{_where_it_goes(cfg, to)}, where {addressed} isn't. To write "
+                f"to {addressed}, use message_kin with to=\"{addressed}\". If "
+                f"you did mean it for {_where_it_goes(cfg, to)}, send exactly "
+                f"the same reach_out again and it will go.")
+    _HELD.pop(agent_name, None)
 
     hb = cfg.get("heartbeat") or {}
     dest = hb.get("destination") or {"surface": "desktop"}

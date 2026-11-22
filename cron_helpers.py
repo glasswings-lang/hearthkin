@@ -975,6 +975,14 @@ def frame_wake_up_prompt(prompt, time_label, fired_at=None, kin_name=None):
         house = house_line(kin_name) if kin_name else ""
     except Exception:
         house = ""
+    # Another kin may have written (kin_mail): given here with the house line.
+    try:
+        import kin_mail
+        mail = kin_mail.waiting_block(kin_name) if kin_name else ""
+    except Exception:
+        mail = ""
+    if mail:
+        house = (house + "\n\n" + mail) if house else mail
     return (house + "\n\n" + framed) if house else framed
 
 
