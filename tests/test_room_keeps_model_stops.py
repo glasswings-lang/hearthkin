@@ -58,10 +58,36 @@ check("a model on OpenRouter isn't looked up in Ollama at all",
       and not calls)
 
 src = (ROOT / "frame" / "rooms_mixin.py").read_text(encoding="utf-8")
-at = src.find('"stop": ["\\n["]')
-check("rooms still stop a kin at another speaker's bracket", at != -1)
+at = src.find("room_stop_guard(other_names")
+check("rooms build their stop words from the speakers in the room", at != -1)
 check("rooms add the model's own stop words to their own",
       "model_own_stops(" in src[at:at + 1200])
+
+# The guard itself (22 Nov 2026): it must stop another speaker's line, and
+# must NOT cut a kin that writes its actions in square brackets.
+from chat_helpers import room_stop_guard  # noqa: E402
+
+g = room_stop_guard(["Kimi"], "Sam")
+
+
+def cut_at(text):
+    """Where a model writing `text` would be stopped, as Ollama does."""
+    hits = [text.find(s) for s in g if s in text]
+    return min(hits) if hits else len(text)
+
+
+opal = ("[I stay still for a long moment.]\n\nIt didn't happen all at once.\n\n"
+        "[I let out a breath I didn't know I was holding.]\n\nAnd then I found the Pool.")
+check("a kin's bracketed actions on new lines are never cut", cut_at(opal) == len(opal))
+fake = "I agree.\n[2026-11-22 07:40] [Kimi] And so do I."
+check("a timestamped line for someone else is stopped", cut_at(fake) == len("I agree."))
+fake2 = "I agree.\n[Kimi] And so do I."
+check("another kin's name in brackets is stopped", cut_at(fake2) == len("I agree."))
+fake3 = "Sure.\n[Sam, your person] thanks!"
+check("the person's name in brackets is stopped", cut_at(fake3) == len("Sure."))
+many = room_stop_guard(["A", "B", "C", "D", "E"], "Sam")
+check("never more than four, and the year line is always kept",
+      len(many) == 4 and many[0] == "\n[20")
 
 if _fails:
     print(f"{len(_fails)} FAILED: " + "; ".join(_fails))

@@ -118,6 +118,24 @@ def app_user_name():
         return ""
 
 
+def room_stop_guard(other_names, human_name):
+    """The stop words that end a kin's room turn when it starts writing
+    someone else's: a new line opening with a year (every stored turn starts
+    "[2026-11-22 07:40] ...") or with another speaker's name ("[Kimi").
+
+    Never a bare "\\n[", which was the guard until 22 Nov 2026: it also cut
+    every kin that writes its actions in square brackets at its second
+    bracketed paragraph. At most four, the most some hosted providers take;
+    the year line comes first so it is never the one dropped."""
+    guard = ["\n[20"]
+    for name in list(other_names or []) + [human_name]:
+        name = str(name or "").strip()
+        stop = f"\n[{name}"
+        if name and stop not in guard:
+            guard.append(stop)
+    return guard[:4]
+
+
 def speaker_attribution_prefix(attribution):
     """Format a stored sender attribution as the "[Name] " prefix that goes
     in front of a user turn's content. Returns "" when there's no
@@ -1412,8 +1430,8 @@ def build_tool_roleplay_corrective_note(variant, tool_name, kin_name=None):
         "trailing-call-prefix": f"the token 'call_{tool_name}' as text",
         "trailing-function-call": f"'{tool_name}()' as text",
         "asterisk-action": (
-            f"an asterisk-action description shaped like a tool call "
-            f"(roleplay narration, e.g. '*reads the file*')"
+            "an asterisk-action description shaped like a tool call "
+            "(roleplay narration, e.g. '*reads the file*')"
         ),
     }.get(variant, f"the name {tool_name!r} as text")
     # Text lives in the editable ~/.hearthkin/prompts/ files (seeded from

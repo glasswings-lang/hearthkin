@@ -1152,9 +1152,20 @@ class RoomsMixin:
             "num_predict": self.room_cfg.get("per_turn_token_cap", 2000),
             # Halt the moment the model tries to open another speaker's
             # bracket block — this is what stops SpeakerNine from writing a whole
-            # fake transcript of Jade/Finn/Luna.
-            "stop": ["\n["],
+            # fake transcript of Jade/Finn/Luna. Built just below.
+            "stop": [],
         }
+        # What another speaker's line looks like here: every stored turn
+        # opens with its time, "[2026-11-22 07:40] [Kimi] ...", and a turn
+        # without one opens with the name. So stop on a new line that starts
+        # with a year or with someone else's name in this room -- NOT on any
+        # "[" at all. That old guard ("\n[") cut every kin who writes its
+        # actions in square brackets ("[I stay still...]") at its second
+        # bracketed paragraph (found 22 Nov 2026, Opal meeting Kimi). Capped
+        # at four, the most some hosted providers accept; the year covers
+        # every timestamped turn whatever the cap drops.
+        from chat_helpers import room_stop_guard
+        options["stop"] = room_stop_guard(other_names, room_human or "You")
         # Sending a stop list makes Ollama drop the model's own, so add the
         # model's own back. A voice model trained as a script stops at its
         # partner's name; without this, in a room it wrote the partner's
