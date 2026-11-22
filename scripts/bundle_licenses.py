@@ -91,6 +91,28 @@ WANTED = {
     "h11",
     "annotated-types",
     "typing_extensions",
+    "typing-inspection",   # pydantic transitive
+    # Found missing 22 Nov 2026 by comparing what PyInstaller actually
+    # bundled against licenses/: these shipped with no licence text.
+    # Discord (discord.py and what it pulls in):
+    "discord.py",
+    "aiohttp",
+    "aiohappyeyeballs",
+    "aiosignal",
+    "attrs",
+    "frozenlist",
+    "multidict",
+    "propcache",
+    "yarl",
+    # huggingface-hub's newer transitives (it moved off requests):
+    "httpx2",
+    "httpcore2",
+    "hf-xet",
+    "click",
+    "colorama",            # click transitive on Windows
+    "truststore",
+    # Audio files:
+    "soundfile",
     # Stdlib/Python itself isn't installed via pip, but the Python
     # license is also redistributable; we copy it out below from a
     # known location.
@@ -124,6 +146,16 @@ def find_license_text(dist):
     # Fallback to the metadata License field (one-line summary).
     meta = dist.metadata
     license_classifier = meta.get("License") or ""
+    # Newer wheels name it as an SPDX expression; older ones only in their
+    # "License ::" classifiers. tokenizers has neither file nor License
+    # field, only these (found 22 Nov 2026), so it shipped with no notice.
+    if not license_classifier or license_classifier == "UNKNOWN":
+        license_classifier = (meta.get("License-Expression") or "").strip()
+    if not license_classifier:
+        classes = [c.split("::")[-1].strip()
+                   for c in (meta.get_all("Classifier") or [])
+                   if c.startswith("License ::")]
+        license_classifier = "; ".join(classes)
     if license_classifier and license_classifier != "UNKNOWN":
         # Wrap the summary in some context so it's clear what it is.
         return (
@@ -209,16 +241,43 @@ def main():
     found_names = {(dist.metadata.get("Name") or "").lower() for dist in importlib.metadata.distributions()}
     missing_wanted = {n for n in WANTED if n.lower() not in found_names}
     if missing_wanted:
+        # Not installed means not bundled either, so nothing is missing
+        # from the app. The check that matters is the one below.
         print(
-            "  Warning: WANTED packages not found in environment (not installed?): "
-            + ", ".join(sorted(missing_wanted)),
+            "  Note: listed but not installed (so not bundled, nothing to "
+            "include): " + ", ".join(sorted(missing_wanted)),
             file=sys.stderr,
         )
-        print(
-            "  Their license texts were NOT included. Install them (pip install -r requirements.txt)"
-            " before building a release artifact.",
-            file=sys.stderr,
-        )
+
+    # The check that matters (22 Nov 2026): every third-party package the
+    # app ACTUALLY contains must have its licence here. The list above is
+    # kept by hand, and it had drifted: discord.py and its eight helpers,
+    # tokenizers, soundfile and others shipped in releases with no licence
+    # text at all. This runs after PyInstaller, so it reads what was really
+    # packed, and fails the build rather than warning about it.
+    pyz = repo_root() / "build" / "Hearthkin" / "PYZ-00.pyz"
+    if pyz.exists():
+        try:
+            from PyInstaller.archive.readers import ZlibArchiveReader
+            tops = {n.split(".")[0] for n in ZlibArchiveReader(str(pyz)).toc}
+        except Exception as e:
+            print(f"  Could not read what was bundled ({e}); "
+                  "the licence coverage check did not run.", file=sys.stderr)
+            return
+        owners = importlib.metadata.packages_distributions()
+        std = set(sys.stdlib_module_names)
+        bundled = {owners[t][0] for t in tops
+                   if t in owners and t not in std and not t.startswith("_")}
+        have = {f.stem.rsplit("-", 1)[0].lower() for f in out.glob("*.txt")}
+        lacking = sorted(d for d in bundled if d.lower() not in have)
+        if lacking:
+            print("  ERROR: bundled in the app but no licence included: "
+                  + ", ".join(lacking)
+                  + ". Add them to WANTED in scripts/bundle_licenses.py.",
+                  file=sys.stderr)
+            sys.exit(1)
+        print(f"  Every bundled third-party package ({len(bundled)}) "
+              "has its licence included.")
 
 
 if __name__ == "__main__":
