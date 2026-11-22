@@ -375,6 +375,47 @@ def live_visible(text):
         return text or ""
 
 
+def thinking_to_save(thinking, cfg):
+    """The reasoning to keep with a reply, as the desktop keeps it: trimmed
+    to the kin's think_max_chars (0 = no limit), "" if there was none.
+    Whether it's fed back next turn is feed_thinking's job, read where the
+    history is built. Telegram and Discord threw it away, so feed_thinking
+    and recent_thinking did nothing there (21 Nov 2026)."""
+    t = (thinking or "").strip()
+    if not t:
+        return ""
+    try:
+        cap = int((cfg or {}).get("think_max_chars", 1200) or 0)
+    except (TypeError, ValueError):
+        cap = 1200
+    if cap > 0 and len(t) > cap:
+        t = t[:cap] + "\n... [reasoning truncated]"
+    return t
+
+
+_PLACE_KINDS = {"telegram": "Telegram group", "discord": "Discord channel"}
+
+
+def place_note(app, label):
+    """The line added to the kin's instructions for a shared place, and only
+    for the place this message came from: "You are participating in a
+    Telegram group called X" / "...a Discord channel called X". Nothing for
+    a direct message or the desktop. One builder for every app, so a new
+    place can't make the others' instructions longer (21 Nov 2026; Discord
+    channels never said where the kin was)."""
+    kind = _PLACE_KINDS.get(app)
+    if not kind:
+        return ""
+    try:
+        from kin_persistence import sanitize_for_prompt_literal
+        label = sanitize_for_prompt_literal(str(label or ""))
+    except Exception:
+        label = " ".join(str(label or "").split())
+    if not label:
+        return ""
+    return f'\n\nYou are participating in a {kind} called "{label}".'
+
+
 def discord_reply_cap(cfg):
     """Discord's reply-length cap in tokens: the Discord tab's own setting
     (discord.reply_token_cap), else Telegram's, which Discord used to share,
@@ -779,7 +820,7 @@ def strip_trailing_other_speakers(text):
     return text
 
 
-def speakers_shown(rows, also=()):
+def speakers_shown(rows, also=(), kin_cfg=None, from_text=True):
     """The other speakers' names a kin was shown in `rows`: each row's
     speaker / sender fields, and a "[Name] " bracket opening a person's
     message (after an optional "[time] "). What clean_kin_reply needs as
@@ -798,9 +839,21 @@ def speakers_shown(rows, also=()):
                 if v:
                     names.add(v)
             if r.get("role") == "user":
-                m = pat.match(str(r.get("content") or ""))
+                # `from_text`: also take a "[Name] " opening the stored words
+                # (the apps' rows). The desktop passes False: there the words
+                # are the person's own, and "[whispers] ..." is an emote, not
+                # a speaker, so a reply opening the same way is left alone.
+                m = pat.match(str(r.get("content") or "")) if from_text else None
                 if m:
                     names.add(m.group(1).strip())
+                # The label exactly as the kin was shown it: the name given
+                # in Hearthkin, the your-person mark, who was fronting. The
+                # raw sender fields alone missed every marked label, so a
+                # reply echoing "[Sam, your person, Juniper fronting]" got
+                # through (21 Nov 2026).
+                shown, _ = row_speaker(r, kin_cfg)
+                if shown:
+                    names.add(shown)
         for n in also or ():
             if str(n or "").strip():
                 names.add(str(n).strip())
@@ -872,6 +925,12 @@ def row_speaker(row, kin_cfg=None, surface=None):
             from tools._person_settings import mark_own_person
             name = mark_own_person(name, sid, section, surf,
                                    (app_user_name(),))
+        # Who's fronting, stamped when the message was saved (fronting.py),
+        # shown beside the name. Only the person's own account or the
+        # desktop ever gets a stamp.
+        fr = str(row.get("fronting") or "").strip()
+        if fr:
+            name = f"{name}, {fr} fronting" if name else f"{fr} fronting"
         return name, said_in + words
     except Exception:
         c = (row or {}).get("content") if isinstance(row, dict) else ""

@@ -1892,7 +1892,7 @@ Before you talk about something from before this conversation, or about a person
 <!--/tools-->
 
 <!--tools: read_staging-->
-**Staging holds the summarizer's notes for you.** An automatic summarizer reads your conversation as it accumulates and leaves brief notes in a staging area — one file per surface (desktop, each Telegram DM, each Telegram group). These notes have NOT been added to memory.md or your logs. They're waiting for you to decide what's worth keeping. Use `read_staging` to see what's pending.
+**Staging holds the summarizer's notes for you.** An automatic summarizer reads your conversations as they accumulate, wherever you talk, and leaves brief notes for you. These notes have NOT been added to memory.md or your logs yet. They're waiting for you to decide what's worth keeping, and what you keep goes into your one memory. Use `read_staging` to see everything that's pending.
 <!--/tools-->
 
 **Context fullness is routine, not alarming.** When your conversation grows past the context cap, the system trims the oldest turns from each send to fit. This is the normal steady state for a long-running kin, not an error and not a signal that the conversation needs to end. The trimmed turns are NOT lost: they remain on disk in `conversation.jsonl`, the summarizer has already been turning them into staging notes, and during tending you bring the substance into memory.md and your depth logs — where it rides every future send regardless of how full the conversation window gets. If you see a small `[hearthkin: older turns rolled out...]` marker in your context, that is the rolling window working as designed. If the person you're talking with mentions "the cap is full" in concerned tones, the right answer is "would you like me to tend?" — not "we should start a new conversation."
@@ -5931,8 +5931,10 @@ def _clean_chat_message(m):
     # (audit P25). Cast those to str so they survive a load round-trip.
     # "said": a Discord person's words without the name in front, which
     # /regen sends again (lost on every rewrite before 20 Nov 2026).
+    # "fronting": who of a plural person was at the front when they said it
+    # (fronting.py, 21 Nov 2026).
     for opt_field in ("ts", "thinking", "speaker", "model",
-                      "sender_attribution", "said"):
+                      "sender_attribution", "said", "fronting"):
         v = m.get(opt_field)
         if isinstance(v, str):
             entry[opt_field] = v

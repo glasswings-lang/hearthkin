@@ -175,8 +175,14 @@ class ChatSendMixin:
         # (audit, 20 Nov 2026).
         from chat_helpers import format_ts_prefix
         import datetime as _dt
+        # Who's fronting, beside the person's message (fronting.py).
+        from chat_helpers import speaker_attribution_prefix
+        import fronting as _fr
+        _front = _fr.get(self.current_agent, "desktop")
         new_user_msg = {"role": "user", "content": format_ts_prefix(
-            _dt.datetime.now().isoformat(timespec="seconds")) + user_text}
+            _dt.datetime.now().isoformat(timespec="seconds"))
+            + (speaker_attribution_prefix(f"{_front} fronting")
+               if _front else "") + user_text}
         if attachment_refs:
             new_user_msg["attachments"] = attachment_refs
         messages.append(new_user_msg)
@@ -291,6 +297,8 @@ class ChatSendMixin:
         }
         if attachment_refs:
             persisted_user_msg["attachments"] = attachment_refs
+        import fronting as _fr
+        _fr.stamp(persisted_user_msg, self.current_agent, "desktop")
         self.conversation.append(persisted_user_msg)
         self._user_turn_persisted = True
         try:

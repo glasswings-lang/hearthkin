@@ -103,6 +103,17 @@ class MenusMixin:
         # no way to take an exchange back except editing it.
         self.mnu_undo_exchange = chat_menu.Append(
             wx.ID_ANY, "&Undo last exchange\tCtrl+Shift+U")
+        # Who's fronting (fronting.py): per conversation, as /front on the
+        # apps; the check item makes one setting count everywhere.
+        self.mnu_front = chat_menu.Append(
+            wx.ID_ANY, "Who's &fronting...\tCtrl+Shift+F")
+        self.mnu_front_everywhere = chat_menu.AppendCheckItem(
+            wx.ID_ANY, "Same fronting e&verywhere")
+        try:
+            import fronting as _fr
+            self.mnu_front_everywhere.Check(_fr.everywhere())
+        except Exception:
+            pass
         self.mnu_stop = chat_menu.Append(wx.ID_ANY, "Sto&p generating\tEsc")
         # Stop only reaches the reply on THIS screen. A kin working on
         # Telegram or Discord could not be stopped from the desktop at all;
@@ -233,6 +244,9 @@ class MenusMixin:
         self.Bind(wx.EVT_MENU, self._on_delete_room, self.mnu_delete_room)
         self.Bind(wx.EVT_MENU, self._on_regen, self.mnu_regen)
         self.Bind(wx.EVT_MENU, self._on_undo_exchange, self.mnu_undo_exchange)
+        self.Bind(wx.EVT_MENU, self._on_front, self.mnu_front)
+        self.Bind(wx.EVT_MENU, self._on_front_everywhere,
+                  self.mnu_front_everywhere)
         self.Bind(wx.EVT_MENU, self._on_stop, self.mnu_stop)
         self.Bind(wx.EVT_MENU, self._on_stop_everywhere, self.mnu_stop_everywhere)
         self.Bind(wx.EVT_MENU, self._on_whats_busy, self.mnu_whats_busy)

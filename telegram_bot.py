@@ -1360,6 +1360,7 @@ class TelegramBot:
     BOT_COMMANDS_GROUP = [
         {"command": "help", "description": "List available commands."},
         {"command": "whoami", "description": "Show your user ID and this chat's ID."},
+        {"command": "front", "description": "Say who's fronting here: /front <name>, or /front off."},
     ]
     BOT_COMMANDS = [
         {"command": "help", "description": "List available commands."},
@@ -1373,6 +1374,7 @@ class TelegramBot:
         {"command": "regen", "description": "Redo the kin's last reply."},
         {"command": "undo", "description": "Drop the last user/assistant exchange."},
         {"command": "compact", "description": "The kin writes itself a note and carries on from it."},
+        {"command": "front", "description": "Say who's fronting here: /front <name>, or /front off."},
         {"command": "note", "description": "Append text to today's journal: /note <text>."},
         {"command": "play", "description": "Take a turn in a kin's game: /play tff look."},
         {"command": "think", "description": "Show the reasoning behind the last reply."},
@@ -2899,6 +2901,19 @@ class TelegramBot:
         if cmd == "help":
             self._cmd_help(chat_id, is_private=is_private)
             return
+        if cmd == "front":
+            # Who's fronting (fronting.py): per conversation, only from the
+            # person's own account, answered by Hearthkin, not the kin.
+            if not self._user_is_me(user_id):
+                self._send_chunked(chat_id, "Only an account marked "
+                                   "\"This is me\" can set who's fronting.")
+                return
+            import fronting
+            place = (f"telegram:{chat_id}" if is_private
+                     else f"telegram:group:{chat_id}")
+            self._send_chunked(chat_id, fronting.reply_line(
+                arg, self.agent_name, place))
+            return
         if cmd == "whoami":
             self._cmd_whoami(
                 user_id, chat_id,
@@ -2916,8 +2931,8 @@ class TelegramBot:
                 chat_id,
                 f"/{cmd} only works in a direct message with "
                 f"{self.agent_name}. The commands that work in groups "
-                f"are /help and /whoami (the latter is how you find a "
-                f"group's chat_id from inside the group)."
+                f"are /help, /whoami (the way to find a group's chat_id "
+                f"from inside the group) and /front."
             )
             return
 
@@ -5000,10 +5015,13 @@ class TelegramBot:
             # by `_sender_attribution()`; re-applying here is a no-op
             # but keeps the embed-site call sites symmetric so future
             # readers can't accidentally pipe an unsanitized variable.
+            _cur = {"sender_id": user_id,
+                    "sender_attribution": sender_attribution}
+            if self._user_is_me(user_id):
+                import fronting
+                fronting.stamp(_cur, self.agent_name, f"telegram:{chat_id}")
             sender_prefix_current = speaker_attribution_prefix(row_speaker(
-                {"sender_id": user_id,
-                 "sender_attribution": sender_attribution},
-                _dm_kin_cfg, "telegram")[0])
+                _cur, _dm_kin_cfg, "telegram")[0])
             if sender_prefix_current:
                 dm_bracketed.add(
                     sender_prefix_current.strip().strip("[]").strip())
@@ -5268,13 +5286,23 @@ class TelegramBot:
                 persisted_user_turn["sender_attribution"] = sender_attribution
             if sender_name:
                 persisted_user_turn["sender_name"] = sender_name
+            if self._user_is_me(user_id):
+                import fronting
+                fronting.stamp(persisted_user_turn, self.agent_name,
+                               f"telegram:{chat_id}")
             new_turns = [persisted_user_turn]
             authoring_confirm = None
             if content:
                 new_turns.extend(added_turns)
-                new_turns.append({
-                    "role": "assistant", "content": content, "ts": now_iso(),
-                })
+                _row = {"role": "assistant", "content": content,
+                        "ts": now_iso()}
+                # Reasoning kept as the desktop keeps it; fed back only if
+                # the kin feeds reasoning back (_without_thinking).
+                from chat_helpers import thinking_to_save
+                _t = thinking_to_save(thinking, self._kin_config())
+                if _t:
+                    _row["thinking"] = _t
+                new_turns.append(_row)
                 if salvaged_from_intermediate:
                     from kin_persistence import load_app_prompt
                     new_turns.append({
@@ -5840,10 +5868,8 @@ class TelegramBot:
                 # "[Display Name (@username)]" prefix after the
                 # timestamp, so the kin doesn't need to be told how
                 # to parse it — the structure is self-explanatory.
-                sys_prompt += (
-                    f"\n\nYou are participating in a Telegram group "
-                    f"called \"{group_label}\"."
-                )
+                from chat_helpers import place_note
+                sys_prompt += place_note("telegram", group_label)
                 messages.append({"role": "system", "content": sys_prompt})
 
             # Per-message sender attribution lives INLINE in the user
@@ -5938,10 +5964,14 @@ class TelegramBot:
             # sender. Inlined into content by _emit_user_with_sender.
             # Attachments (if any) go on the message; llm_backend.chat()
             # expands them based on the provider when it dispatches.
+            _cur = {"sender_id": user_id,
+                    "sender_attribution": sender_attribution}
+            if self._user_is_me(user_id):
+                import fronting
+                fronting.stamp(_cur, self.agent_name,
+                               f"telegram:group:{chat_id}")
             _emit_user_with_sender(row_speaker(
-                {"sender_id": user_id,
-                 "sender_attribution": sender_attribution},
-                _grp_kin_cfg, "telegram")[0],
+                _cur, _grp_kin_cfg, "telegram")[0],
                                    user_ts, cleaned_text, attachments)
 
             full_cfg = load_agent_config(self.agent_name) or {}
@@ -6178,15 +6208,21 @@ class TelegramBot:
             }
             if attachments:
                 persisted_user_turn["attachments"] = list(attachments)
+            if self._user_is_me(user_id):
+                import fronting
+                fronting.stamp(persisted_user_turn, self.agent_name,
+                               f"telegram:group:{chat_id}")
             new_turns = [persisted_user_turn]
             authoring_confirm = None
             if content:
                 new_turns.extend(added_turns)
-                new_turns.append({
-                    "role": "assistant",
-                    "content": content,
-                    "ts": now_iso(),
-                })
+                _row = {"role": "assistant", "content": content,
+                        "ts": now_iso()}
+                from chat_helpers import thinking_to_save
+                _t = thinking_to_save(thinking, self._kin_config())
+                if _t:
+                    _row["thinking"] = _t
+                new_turns.append(_row)
                 if salvaged_from_intermediate:
                     # Tell the kin what happened. They wrote a real
                     # reply alongside a tool call; their post-tool

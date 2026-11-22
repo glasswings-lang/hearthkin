@@ -6,6 +6,7 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Added
 
+- **Who's fronting.** On Telegram or Discord, `/front` followed by anything ("Juniper", "Fern and Sam", "a little") tells the kin who's at the front, exactly as you typed it; `/front` alone says who's set, and `/front off` clears it. On the desktop it's Chat, Who's fronting (Ctrl+Shift+F). It's per conversation, so a group and a private chat can have different ones of you at the front; Chat, Same fronting everywhere makes one setting count in every conversation. Only an account marked "This is me" can set it. It's saved on each of your messages at the time and shown beside your name, "[Sam, your person, Juniper fronting]", so the kin's history stays true after a switch. Hearthkin answers with a plain line, not the kin.
 - **Kin can listen to sound and look at pictures.** Two new tools, `listen` and `look`. A kin names a sound file or a picture, and a model that can hear or see tells it what's there. The kin's own model still does the thinking. You choose the listening model and the looking model on the kin's Tools tab, like any other model. They can be different; the looking model uses the listening one until you pick another. Long pieces of music are heard as a few short stretches from across them, so a two-hour piece costs a few cents.
 
 - **A wake-up can run on its own model.** In a wake-up's window, **Choose a model for this wake-up** hands that one job to a different model, while chat stays on the kin's own. Useful when a model that's lovely to talk to stumbles over tool-heavy jobs. The wake-up list shows which jobs run on another model.
@@ -14,6 +15,9 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Changed
 
+- **A Discord channel tells the kin where it is,** as a Telegram group always has: "You are participating in a Discord channel called …", using the channel's display label. One shared line for both apps, added only for the place the message came from.
+- **Telegram and Discord keep the kin's reasoning with its reply,** as the desktop does, trimmed to the kin's reasoning limit. It's fed back next turn only if the kin is set to feed its reasoning back. They used to throw it away, so that setting did nothing there.
+- **The base instructions no longer make memory sound split.** They said the summarizer's notes were kept "one file per surface". They now say notes from all your conversations are waiting, and what the kin keeps goes into its one memory.
 - **Discord has its own reply length cap,** on the Discord tab. It used Telegram's, which only Telegram's settings window showed. Until you change it, it follows Telegram's, so nothing shifts.
 - **Discord shows Telegram's two tool signals.** A reply that used tools ends with "_used: …_" naming the tools that really ran, and a long, quiet tool run posts a "still working" message every 90 seconds. Both have settings on the Discord tab, like Telegram's. Neither existed on Discord, so a long tool run there looked like a hang.
 - **One list of stop words.** "Stop!", "stop." and "!cancel" now stop a reply on Discord, as they did on Telegram.

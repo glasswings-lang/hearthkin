@@ -1569,7 +1569,8 @@ def _finish_cron_reply(kin, result, messages, model, options, cache,
         from chat_helpers import clean_kin_reply
         try:
             from chat_helpers import speakers_shown
-            _shown = speakers_shown(load_agent_conversation(kin)[-200:])
+            _shown = speakers_shown(load_agent_conversation(kin)[-200:],
+                                    kin_cfg=load_agent_config(kin))
         except Exception:
             _shown = set()
         reply, _impersonated = clean_kin_reply(reply, kin,

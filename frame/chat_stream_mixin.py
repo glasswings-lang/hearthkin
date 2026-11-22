@@ -1509,6 +1509,35 @@ class ChatStreamMixin:
         self._persist_current_conversation()
         self._send_message(last_user, regen_attachment_refs=regen_atts)
 
+    def _on_front(self, event=None):
+        """Chat, Who's fronting: the desktop's /front, for this kin's
+        conversation here (or everywhere, if that's switched on). Blank or
+        "off" clears it. Said back in the status line, spoken."""
+        import fronting
+        kin = self.current_agent
+        if not kin:
+            self._set_status("Open a kin first.", speak=True)
+            return
+        dlg = wx.TextEntryDialog(
+            self, "Who's fronting? Leave it blank, or type off, to clear it.",
+            "Who's fronting", fronting.get(kin, "desktop"))
+        try:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            now = fronting.set(kin, "desktop", dlg.GetValue())
+        finally:
+            dlg.Destroy()
+        self._set_status(f"Fronting: {now}." if now
+                         else "Fronting: nobody set.", speak=True)
+
+    def _on_front_everywhere(self, event=None):
+        import fronting
+        on = bool(self.mnu_front_everywhere.IsChecked())
+        fronting.set_everywhere(on)
+        self._set_status("Fronting is now the same in every conversation."
+                         if on else "Fronting is now set per conversation.",
+                         speak=True)
+
     def _on_undo_exchange(self, event):
         """Chat -> Undo last exchange (Ctrl+Shift+U): take back your last
         message and the kin's reply to it, with its tool steps and any notes

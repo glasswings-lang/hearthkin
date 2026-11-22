@@ -268,22 +268,19 @@ class RenderMixin:
 
         Guarded throughout: this feeds a cleanup pass on the reply path, and
         a failure to enumerate names must never cost someone their reply."""
-        names = set()
+        # The shared list every surface uses (chat_helpers.speakers_shown),
+        # labels exactly as the kin was shown them, minus this kin's own
+        # name. This used to be a private copy that missed marked labels.
         try:
+            from chat_helpers import speakers_shown
             own = (self.current_agent or "").strip().casefold()
-            for msg in (self.conversation or []):
-                if not isinstance(msg, dict):
-                    continue
-                for key in ("speaker", "sender_attribution", "sender_name"):
-                    val = msg.get(key)
-                    if not isinstance(val, str):
-                        continue
-                    val = val.strip().strip("[]").strip()
-                    if val and val.casefold() != own:
-                        names.add(val)
+            return {n.strip("[]").strip() for n in speakers_shown(
+                        self.conversation or [], kin_cfg=self.agent_cfg or {},
+                        from_text=False)
+                    if n.strip("[]").strip()
+                    and n.strip("[]").strip().casefold() != own}
         except Exception:
             return set()
-        return names
 
     def _refresh_load_older_button(self):
         """Show / hide the 'Load older messages' button based on

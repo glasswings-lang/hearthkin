@@ -422,7 +422,7 @@ src = (ROOT / "discord_bot.py").read_text(encoding="utf-8")
 gen = src[src.find("    def _generate(self"):src.find("    def _persist_tool_turn")]
 check("tool steps are saved BEFORE the final reply",
       0 < gen.find("for _turn in added_turns:")
-      < gen.find('self._persist_turn(channel_id, "assistant", text, share)'))
+      < gen.find('self._persist_turn(channel_id, "assistant", text, share'))
 check("an empty reply leaves the kin a note",
       # The placeholder-was-posted note since 20 Nov 2026 (the group one
       # says nothing was posted, which isn't true here).

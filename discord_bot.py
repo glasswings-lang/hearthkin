@@ -85,7 +85,8 @@ from chat_helpers import is_stop_word as _is_stop_word
 # the kin is @-mentioned in it, since "!play" and the like there are often
 # meant for another bot (21 Nov 2026).
 _COMMANDS = frozenset({"help", "commands", "status", "regen", "regenerate",
-                       "retry", "undo", "clear", "forget", "compact"})
+                       "retry", "undo", "clear", "forget", "compact",
+                       "front"})
 
 
 def discord_test_token(token):
@@ -459,6 +460,15 @@ class DiscordBot:
                 return False
             entry["stop"] = True
             return True
+
+    def _is_me(self, author_id):
+        """The account is marked "This is me" on the Discord tab."""
+        try:
+            from tools._person_settings import person_value
+            dcfg = (self.get_config() or {}).get("discord") or {}
+            return bool(person_value(dcfg, "discord", author_id, "is_me"))
+        except Exception:
+            return False
 
     def _may_stop(self, entry, author_id):
         if str(entry.get("author_id")) == str(author_id):
@@ -984,7 +994,13 @@ class DiscordBot:
                 turns.append({"role": "user", "content": person_row_text(
                     m, _kin_cfg, "discord")[0]})
             elif role in ("user", "assistant", "system") and content:
-                turns.append({"role": role, "content": content})
+                t = {"role": role, "content": content}
+                # Fed back only when the kin feeds its reasoning back, as on
+                # the desktop and Telegram.
+                if (role == "assistant" and m.get("thinking")
+                        and _kin_cfg.get("feed_thinking", False)):
+                    t["thinking"] = m["thinking"]
+                turns.append(t)
         # A trimmed store can start between a call and its results; a tool
         # result whose call scrolled away can't be sent (providers reject it).
         while turns and turns[0].get("role") == "tool":
@@ -999,7 +1015,7 @@ class DiscordBot:
         return turns
 
     def _persist_turn(self, channel_id, role, content, share, said=None,
-                      speaker=None, ts=None):
+                      speaker=None, ts=None, thinking=None):
         """Store one turn in whichever store `share` selects (merged
         conversation.jsonl vs segregated discord_history.json).
 
@@ -1014,9 +1030,11 @@ class DiscordBot:
                     timespec="seconds")}
         if said is not None:
             turn["said"] = said
+        if thinking:
+            turn["thinking"] = thinking
         if speaker:
             turn.update({k: v for k, v in speaker.items()
-                         if k in ("sender_id", "sender_name")
+                         if k in ("sender_id", "sender_name", "fronting")
                          and v not in (None, "")})
         if share:
             from kin_persistence import append_agent_conversation_turn
@@ -1258,6 +1276,7 @@ class DiscordBot:
             return (
                 f"Commands {self.agent_name} answers to here:\n"
                 "/help: this message\n"
+                "/front: say who's fronting here (/front off clears it)\n"
                 "stop: end the reply being written, keeping what's written "
                 "so far\n\n"
                 "The others (/status, /regen, /undo, /clear, /compact) "
@@ -1274,6 +1293,7 @@ class DiscordBot:
             "/clear: wipe this conversation (memory is kept)\n"
             "/compact: the kin writes itself a note and carries on from it "
             "and the last few messages (nothing is deleted)\n"
+            "/front: say who's fronting here (/front off clears it)\n"
             "stop: end the reply being written, keeping what's written "
             "so far\n"
             "You can start them with ! instead of / if Discord gets in "
@@ -1314,6 +1334,18 @@ class DiscordBot:
         in_dm = getattr(message, "guild", None) is None
         if name in ("help", "commands"):
             await self._send_chunked(ch, self._help_text(in_dm))
+            return
+        if name == "front":
+            # Who's fronting (fronting.py), in a channel too: per
+            # conversation, only from the person's own account, answered
+            # by Hearthkin, not the kin.
+            if not self._is_me(getattr(message.author, "id", "")):
+                await self._send_chunked(ch, "Only an account marked \"This "
+                                         "is me\" can set who's fronting.")
+                return
+            import fronting
+            await self._send_chunked(ch, fronting.reply_line(
+                arg, self.agent_name, f"discord:{ch.id}"))
             return
         if not in_dm:
             await self._send_chunked(
@@ -1452,6 +1484,9 @@ class DiscordBot:
                     "sender_name": sanitize_for_prompt_literal(
                         getattr(message.author, "display_name", None)
                         or message.author.name)}
+        if self._is_me(author_id):
+            import fronting
+            fronting.stamp(_speaker, self.agent_name, f"discord:{channel_id}")
         _ts = _dt.datetime.now().isoformat(timespec="seconds")
         user_text, who_for_kin = person_row_text(
             {"role": "user", "content": content, "ts": _ts, **_speaker},
@@ -1546,6 +1581,15 @@ class DiscordBot:
         # scaffolding to exactly what the kin can call here.
         system = build_system_prompt(soul, memory, enabled_tools=tool_names,
                                      kin_name=self.agent_name)
+        # Where the kin is, as a Telegram group says (chat_helpers.place_note):
+        # the channel's display label, else Discord's own name for it. A
+        # direct message adds nothing.
+        if getattr(message, "guild", None) is not None:
+            from chat_helpers import place_note
+            _entry = channel_entries(dcfg).get(str(channel_id)) or {}
+            system += place_note("discord", _entry.get("label")
+                                 or getattr(message.channel, "name", "")
+                                 or f"channel {channel_id}")
         if tool_names:
             system += load_app_prompt(
                 "tool_use_hint", self.agent_name).replace(
@@ -1823,7 +1867,9 @@ class DiscordBot:
 
         # The footer is for the reader, not the record — storing it would put
         # the harness's bookkeeping into the kin's own voice.
-        self._persist_turn(channel_id, "assistant", text, share)
+        from chat_helpers import thinking_to_save
+        self._persist_turn(channel_id, "assistant", text, share,
+                           thinking=thinking_to_save(thinking, cfg) or None)
         if _cut_off and text:
             from chat_helpers import cut_off_note_row
             self._persist_turn(channel_id, "system", cut_off_note_row(
