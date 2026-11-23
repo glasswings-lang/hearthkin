@@ -10,6 +10,8 @@ Pinned:
   * emptying a conversation copies it into backups/cleared/ first, every word;
   * taking away more than half, or more than ten messages, copies it too;
   * undo-sized changes (one or two messages) make no copy;
+  * replacing a conversation with a LONGER one still copies the old one;
+  * adding on, or rewriting the same messages differently, copies nothing;
   * if the copy can't be written, nothing is emptied;
   * Discord's clear keeps a copy of what it takes away;
   * the check can fail: with the copy step removed, no copy appears.
@@ -76,6 +78,26 @@ kp.save_agent_conversation(KIN, talk(200))
 kp.save_agent_conversation(KIN, talk(180))
 check("taking away more than ten copies it", len(copies()) == 3)
 
+# Replaced by a LONGER conversation (File, Open conversation): every live
+# message goes, though the file grows. Found the night it first shipped.
+kp.save_agent_conversation(KIN, talk(12))
+before = len(copies())
+saved = [{"role": "user", "content": f"old {i}", "ts": f"2026-03-{i % 28 + 1:02d}"}
+         for i in range(300)]
+kp.save_agent_conversation(KIN, saved)
+check("replacing a short conversation with a longer one copies the short one",
+      len(copies()) == before + 1)
+
+# Adding to the end, or the same messages with fields reordered, is no loss.
+before = len(copies())
+kp.save_agent_conversation(KIN, saved + talk(5))
+reordered = [dict(reversed(list(m.items()))) for m in saved + talk(5)]
+kp.save_agent_conversation(KIN, reordered)
+check("adding on, or the same messages written differently, makes no copy",
+      len(copies()) == before)
+
+kp.save_agent_conversation(KIN, talk(200))
+
 # A copy that can't be made: nothing is emptied.
 real_copy = kp.shutil.copy2
 
@@ -94,7 +116,7 @@ try:
 finally:
     kp.shutil.copy2 = real_copy
 check("if the copy can't be made, the clear is refused", refused)
-check("...and the conversation is still all there", len(kp.load_agent_conversation(KIN)) == 180)
+check("...and the conversation is still all there", len(kp.load_agent_conversation(KIN)) == 200)
 
 # Discord's clear, the person's own channel history.
 import discord_bot  # noqa: E402

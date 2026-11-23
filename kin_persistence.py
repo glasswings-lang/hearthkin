@@ -23,6 +23,7 @@ Migrated automatically from the legacy ~/.ollama_chat/ tree on first
 run via _migrate_legacy() (idempotent: noop if either already exists).
 """
 
+import collections
 import copy
 import datetime
 import json
@@ -6440,7 +6441,7 @@ def save_agent_conversation(name, conversation):
             except (TypeError, ValueError):
                 continue
         text = "\n".join(lines) + ("\n" if lines else "")
-        keep_copy_before_big_rewrite(name, path, len(lines))
+        keep_copy_before_big_rewrite(name, path, len(lines), lines)
         atomic_write_text(path, text)
 
 
@@ -6460,17 +6461,50 @@ def cleared_copies_dir(name):
     return agent_dir(name) / "backups" / "cleared"
 
 
-def keep_copy_before_big_rewrite(name, path, new_count):
-    """Copy `path` (a conversation.jsonl) aside before a rewrite down to
+def keep_copy_before_big_rewrite(name, path, new_count, new_lines=None):
+    """Copy `path` (a conversation.jsonl) aside before a rewrite to
     `new_count` messages, if that takes away a lot. Returns the copy's path,
     or None when no copy was needed. If a needed copy can't be made it
     RAISES, so the rewrite doesn't happen: nothing is destroyed that wasn't
-    kept."""
+    kept.
+
+    "Takes away" counts what the new text no longer holds, not just how
+    much shorter it is: loading a long saved conversation over a short live
+    one (File, Open conversation) made it LONGER while throwing every
+    live message away, and the first version of this missed exactly that
+    (23 Nov 2026). With `new_lines` given, each old line not found among
+    them counts as taken away."""
     if not path.exists() or path.stat().st_size == 0:
         return None
     with open(path, "r", encoding="utf-8", errors="replace") as f:
-        old_count = sum(1 for ln in f if ln.strip())
-    dropped = old_count - max(0, int(new_count))
+        old_lines = [ln.rstrip("\r\n") for ln in f if ln.strip()]
+    old_count = len(old_lines)
+    if new_lines is not None:
+        # Matched by who said what, and when, not by the exact text of the
+        # line: the desktop's copy of a message can carry its fields in a
+        # different order or without bookkeeping ones, and a regenerate
+        # must not look like the whole history going.
+        def _key(ln):
+            try:
+                m = json.loads(ln)
+            except Exception:
+                return ("raw", ln)
+            if not isinstance(m, dict):
+                return ("raw", ln)
+            c = m.get("content")
+            if not isinstance(c, str):
+                c = json.dumps(c, sort_keys=True, ensure_ascii=False)
+            return (m.get("role"), m.get("ts"), c)
+        have = collections.Counter(_key(ln) for ln in new_lines)
+        dropped = 0
+        for ln in old_lines:
+            k = _key(ln)
+            if have[k] > 0:
+                have[k] -= 1
+            else:
+                dropped += 1
+    else:
+        dropped = old_count - max(0, int(new_count))
     if dropped <= 0 or (dropped <= CLEAR_COPY_MIN and dropped * 2 <= old_count):
         return None
     try:
