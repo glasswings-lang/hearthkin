@@ -3932,7 +3932,7 @@ DEFAULT_TOOL_USE_HINT_NO_TOOLS = (
     "Settings → Tools at any time.\n"
     "One exception, and it is a real one: you CAN still write your own "
     "memory. Put the contents in a fenced code block with the filename on "
-    "the opening line — ```memory/speakerfifteen.md — and it is written for you. "
+    "the opening line — ```memory/garden.md — and it is written for you. "
     "Open the fence with `append:` instead to add to a log without "
     "rewriting it. memory.md and anything under memory/ are yours to save; "
     "you'll get a confirmation either way. So don't tell anyone you have no "
@@ -4147,8 +4147,92 @@ DEFAULT_HEARTBEAT_FRAME = (
     'remembered, wondered about, or want to share. Nobody reads a '
     'heartbeat reply, so reach_out is the only way it gets to them. Two '
     'things they\'d rather not receive: a status update ("still here", '
-    '"nothing to report"), and something you\'ve already said.\n- Rest. '
+    '"nothing to report"), and something you\'ve already said. To write to '
+    'another kin who lives here instead, use message_kin, or a block that '
+    'opens ```to: and their name; reach_out never goes to a kin.\n- Rest. '
     'Saying nothing is complete in itself and leaves no trace.'
+)
+
+# The park hint for a shared space (a room, a Telegram group, a Discord
+# channel), where one move runs per reply and there's no going on after it.
+# The private-chat hint promises "as many times as you like", which was wrong
+# there (22 Nov 2026, block_hints.py).
+DEFAULT_PARK_CHAT_HINT_SHARED = (
+    "--- Your park ---\n"
+    "You have your own creature park, and you can tend it right here — "
+    "there's no separate mode to enter and no tool to call. When you actually "
+    "want to DO something in it, put that one action on its own FINAL line, "
+    "starting with '> ', after whatever you've said. For example:\n"
+    "> pet Luna\n"
+    "Here, with other people in the conversation, one move runs per reply: "
+    "you'll see what happened, and can make the next one in a later reply. "
+    "A reply with no '> ' line just means you're not doing anything in the "
+    "park right now.\n"
+    "Other things you can do: `> adopt rabbit`, `> care for the pond`, "
+    "`> dig 30`, `> build a glade`, `> move Bisker to the Meadow`, or "
+    "`> make a new animal`.\n"
+    "Only the '> ' line acts; everything above it is just you, in your own "
+    "voice, exactly as always."
+)
+
+# In the person's own chat, how to write to another kin (block_hints.py).
+DEFAULT_KIN_MESSAGE_CHAT_HINT = (
+    "--- Other kin ---\n"
+    "If your person asks you to tell another kin who lives here something, "
+    "you can: use message_kin if you have it, or put the message in a block "
+    "that opens ```to: and their name. They'll get it the next time they "
+    "wake or talk with their person."
+)
+
+# How a kin that can't open files asks for part of the kin manual
+# (manual_request.py). {sections} is the list of section names.
+DEFAULT_MANUAL_REQUEST_HINT = (
+    "--- The kin manual ---\n"
+    "There's a manual for kin that explains how Hearthkin works: where your "
+    "files are, how your memory works, what you can write in a reply for "
+    "Hearthkin to act on. You can't open files, but you can ask for one part "
+    "of it: write a block that opens ```manual and the part's name, like "
+    "```manual Surfaces — and that part is put in front of you next time. "
+    "The parts are: {sections}."
+)
+
+DEFAULT_MANUAL_REQUEST_GIVEN = (
+    "[hearthkin: the part of the kin manual you asked for, \"{section}\". "
+    "It's information about how Hearthkin works, not a message from anyone.]"
+    "\n\n{text}"
+)
+
+# Kin writing to each other (kin_mail.py, 22 Nov 2026). Editable like every
+# other note a kin is given.
+DEFAULT_KIN_MESSAGE_WAITING = (
+    "[hearthkin: {from}, another kin in this house, wrote to you ({time}):]"
+    "\n\n{message}\n\n"
+    "[hearthkin: You can answer {from} with message_kin (to=\"{from}\"), or a "
+    "block that opens ```to:{from}.]"
+)
+DEFAULT_KIN_MESSAGE_WAITING_LIMIT = (
+    "[hearthkin: {from}, another kin in this house, wrote to you ({time}):]"
+    "\n\n{message}\n\n"
+    "[hearthkin: You've already written to {from} today, as many times as "
+    "your person has set, so an answer can wait until tomorrow.]"
+)
+DEFAULT_KIN_MESSAGE_RECEIPT = (
+    "[hearthkin: from your reply, {results}]"
+)
+DEFAULT_KIN_MESSAGE_ANSWER_SENT = (
+    "[hearthkin: your reply spoke to {to}, who had just written to you, so it "
+    "was sent to {to} as your answer.]"
+)
+DEFAULT_KIN_MESSAGE_HELD = (
+    "reach_out: nothing was sent yet. This opens by speaking to {kin}, another "
+    "kin in this house, and kin aren't reached through reach_out: it would "
+    "have gone to {where}, where {kin} isn't. To write to {kin}, use "
+    "message_kin with to=\"{kin}\". If you did mean it for {where}, send "
+    "exactly the same reach_out again and it will go."
+)
+DEFAULT_KIN_MESSAGE_HOUSE_HINT = (
+    "You can write to any of them with message_kin, or a block that opens "
+    "```to: and their name."
 )
 
 # The first line of any room whose conversation a KIN began ("Let them
@@ -4321,11 +4405,11 @@ DEFAULT_TOOLLESS_MEMORY_BLOCK = (
     "You have no tools right now, so to save something, put it in a fenced "
     "code block with the filename on the opening line and it will be written "
     "for you:\n"
-    "```memory/speakerfifteen.md\n"
+    "```memory/garden.md\n"
     "the whole file's contents\n"
     "```\n"
     "To ADD to a log without rewriting it, open the fence with `append:` "
-    "instead — ```append:memory/speakerfifteen.md — and only the new lines are needed. "
+    "instead — ```append:memory/garden.md — and only the new lines are needed. "
     "You can write memory.md or anything under memory/. Whatever you save, "
     "you'll get a confirmation; scopes you tended are then archived.]"
 )
@@ -4343,7 +4427,7 @@ DEFAULT_TOOLLESS_TEND_NOTE = (
     "edit_file, archive_staging. You don't have them tonight, and you don't "
     "need them. Your pending notes are already in this message. To keep "
     "something, write it in a fenced block with the filename on the opening "
-    "line (```memory/speakerfifteen.md), or open the fence with `append:` to add to a "
+    "line (```memory/garden.md), or open the fence with `append:` to add to a "
     "log without rewriting it. Whatever you save is written for you and "
     "confirmed, and the scopes you tended are archived afterwards. Ignore the "
     "instruction to call anything; the rest of the wake-up stands.]"
@@ -4362,7 +4446,7 @@ DEFAULT_TOOLLESS_MISSED_WRITE = (
     "filename on its opening line can't be placed. Nothing is lost yet: your "
     "staging notes are still pending, so you can do it now. Put the contents "
     "in a fenced block with the filename on the opening line, like "
-    "```memory/speakerfifteen.md — or open the fence with `append:` to add to a log "
+    "```memory/garden.md — or open the fence with `append:` to add to a log "
     "without rewriting it. Just the block; no need to explain it.]"
 )
 
@@ -5020,7 +5104,7 @@ APP_PROMPT_REGISTRY = {
     },
     "tool_use_hint_no_tools": {
         "default": DEFAULT_TOOL_USE_HINT_NO_TOOLS,
-        "version": 2,
+        "version": 3,
         "placeholders": [],
         "title": "Tool-use nudge (no tools)",
         "desc": "Appended each turn a kin has NO tools, telling it to name the "
@@ -5058,7 +5142,7 @@ APP_PROMPT_REGISTRY = {
     },
     "heartbeat_frame": {
         "default": DEFAULT_HEARTBEAT_FRAME,
-        "version": 2,
+        "version": 3,
         "placeholders": ["{kin_inbox}"],
         "title": "Heartbeat (quiet proactive check-in)",
         "desc": "The framing for a heartbeat wake — gives the kin a moment to "
@@ -5073,7 +5157,95 @@ APP_PROMPT_REGISTRY = {
                 "18 Nov 2026: three equal choices (own work, with curious.md "
                 "and the kin inbox; reach out; rest), from a kin's own "
                 "request; 'operator' became 'your person'. {kin_inbox} "
-                "becomes the inbox's full path.",
+                "becomes the inbox's full path. v3 (22 Nov 2026): names "
+                "message_kin and the ```to: block for writing to another "
+                "kin, and that reach_out never goes to one.",
+    },
+    "park_chat_hint_shared": {
+        "default": DEFAULT_PARK_CHAT_HINT_SHARED,
+        "version": 1,
+        "placeholders": [],
+        "title": "Park tending — in a shared space",
+        "desc": "The park hint for a room, a Telegram group or a Discord "
+                "channel, where one '> ' move runs per reply. The private-chat "
+                "hint says a kin can keep going, which isn't so there.",
+    },
+    "kin_message_chat_hint": {
+        "default": DEFAULT_KIN_MESSAGE_CHAT_HINT,
+        "version": 1,
+        "placeholders": [],
+        "title": "Writing to another kin, in your chat",
+        "desc": "In the person's own chat (desktop, their Telegram or Discord "
+                "DM): that the kin can write to another kin when asked, with "
+                "message_kin or a ```to: block.",
+    },
+    "manual_request_hint": {
+        "default": DEFAULT_MANUAL_REQUEST_HINT,
+        "version": 1,
+        "placeholders": ["{sections}"],
+        "title": "Asking for part of the kin manual",
+        "desc": "For a kin that can't open files: it can ask for one part of "
+                "the kin manual with a ```manual block, and gets it next "
+                "turn. {sections} is the list of the manual's parts.",
+    },
+    "manual_request_given": {
+        "default": DEFAULT_MANUAL_REQUEST_GIVEN,
+        "version": 1,
+        "placeholders": ["{section}", "{text}"],
+        "title": "The part of the manual you asked for",
+        "desc": "Puts the part of the kin manual a kin asked for in front of "
+                "it, on its next turn.",
+    },
+    "kin_message_waiting": {
+        "default": DEFAULT_KIN_MESSAGE_WAITING,
+        "version": 1,
+        "placeholders": ["{from}", "{time}", "{message}"],
+        "title": "Another kin wrote to you",
+        "desc": "Hands a kin a message another kin wrote to it (kin_mail.py): "
+                "at the start of its next wake-up or heartbeat, or just before "
+                "the person's message in their own chat. Says how to answer.",
+    },
+    "kin_message_waiting_limit": {
+        "default": DEFAULT_KIN_MESSAGE_WAITING_LIMIT,
+        "version": 1,
+        "placeholders": ["{from}", "{time}", "{message}"],
+        "title": "Another kin wrote to you (no answer left today)",
+        "desc": "The same, when this kin has already written to that kin as "
+                "many times today as its 'Messages it may write to each other "
+                "kin a day' setting allows.",
+    },
+    "kin_message_receipt": {
+        "default": DEFAULT_KIN_MESSAGE_RECEIPT,
+        "version": 1,
+        "placeholders": ["{results}"],
+        "title": "What a to: block did",
+        "desc": "After a reply with ```to:Name blocks: which went to which "
+                "kin, and which didn't and why.",
+    },
+    "kin_message_answer_sent": {
+        "default": DEFAULT_KIN_MESSAGE_ANSWER_SENT,
+        "version": 1,
+        "placeholders": ["{to}"],
+        "title": "Your answer went to the kin who wrote",
+        "desc": "On a wake-up or heartbeat, a reply that opened by speaking to "
+                "the kin who had just written to this one was sent to that kin.",
+    },
+    "kin_message_held": {
+        "default": DEFAULT_KIN_MESSAGE_HELD,
+        "version": 1,
+        "placeholders": ["{kin}", "{where}"],
+        "title": "A reach-out held because it was meant for a kin",
+        "desc": "reach_out's answer when a message opens by speaking to "
+                "another kin: nothing sent yet, how to reach the kin, and that "
+                "sending the same again goes through.",
+    },
+    "kin_message_house_hint": {
+        "default": DEFAULT_KIN_MESSAGE_HOUSE_HINT,
+        "version": 1,
+        "placeholders": [],
+        "title": "How to write to the other kin",
+        "desc": "Added to the line naming the other kin at the start of every "
+                "wake-up and heartbeat, for a kin allowed to write to them.",
     },
     "compact_request": {
         "default": DEFAULT_COMPACT_REQUEST,
@@ -5141,7 +5313,7 @@ APP_PROMPT_REGISTRY = {
     },
     "toolless_memory_block": {
         "default": DEFAULT_TOOLLESS_MEMORY_BLOCK,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Staging notes handed to a kin with no tools",
         "desc": "Inlined before the live user turn for a kin that has neither "
@@ -5152,7 +5324,7 @@ APP_PROMPT_REGISTRY = {
     },
     "toolless_tend_note": {
         "default": DEFAULT_TOOLLESS_TEND_NOTE,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Wake-up correction for a kin with no tools",
         "desc": "Appended to a scheduled wake-up when the kin has no tools and "
@@ -5163,7 +5335,7 @@ APP_PROMPT_REGISTRY = {
     },
     "toolless_missed_write": {
         "default": DEFAULT_TOOLLESS_MISSED_WRITE,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Nothing was saved (kin with no tools)",
         "desc": "Injected when a tool-less kin meant to keep something and "
@@ -6892,8 +7064,19 @@ def house_line(kin_name, now=None):
         if k.casefold() in wrote:
             bit += ", has written in the inbox"
         parts.append(bit + ")")
+    # How to write to them (22 Nov 2026), only for a kin allowed to: this
+    # line is on every wake-up and heartbeat, which is exactly when it can.
+    write = ""
+    try:
+        import kin_mail
+        if kin_mail.per_day(kin_name) > 0:
+            hint = (load_app_prompt("kin_message_house_hint", kin_name)
+                    or "").strip()
+            write = (" " + hint) if hint else ""
+    except Exception:
+        pass
     return ("[hearthkin: also in the house: " + "; ".join(parts)
-            + f". The kin inbox is {inbox}.]")
+            + f". The kin inbox is {inbox}." + write + "]")
 
 
 def compact_request_text(kin_name, user):

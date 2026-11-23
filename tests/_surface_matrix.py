@@ -389,7 +389,9 @@ CAPABILITIES = [
         key="tool_use_hint",
         what="Tells the model, in an editable prompt, which tools it may call",
         why="Small models otherwise narrate using a tool instead of calling it",
-        markers="tool_use_hint",
+        # Since 22 Nov 2026 every surface gets it, with the block hints,
+        # from the one shared teacher (block_hints.for_turn).
+        markers=("tool_use_hint", "block_hints"),
         surfaces={
             "desktop": Present(),
             "telegram": Present(),

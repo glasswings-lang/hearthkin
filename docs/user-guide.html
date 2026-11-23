@@ -162,6 +162,7 @@
         </li>
         <li><a href="#rooms">Rooms — multiple kin together</a></li>
         <li><a href="#tools">Tools</a></li>
+        <li><a href="#kin-manual">The kin manual, and what kin can write in a reply</a></li>
         <li><a href="#games">The creature park (a game your kin can play)</a></li>
         <li><a href="#telegram">The Telegram bot</a></li>
         <li><a href="#discord">The Discord bot</a></li>
@@ -1395,6 +1396,18 @@ Willow would end up with 1200 turns in all.</code></pre>
 <h3 id="tool-history">Tool history compaction</h3>
 
 <p>Tool calls and their results are persisted to the conversation, so the kin remembers what it did across turns. To keep this from filling the context window, the most recent N tool round-trips (default 5) go to the model verbatim; older ones are summarized into a single one-line marker. Adjust N with <strong>Tool history kept</strong> under <strong>Settings → Tools → Tool behaviour settings…</strong>.</p>
+
+<h3 id="kin-manual">The kin manual, and what kin can write in a reply</h3>
+
+<p>Kin have their own manual: <code>kin_manual.md</code> in your Hearthkin folder (<code>%USERPROFILE%\.hearthkin\kin_manual.md</code>). It explains Hearthkin to them: where their files are, how their memory works, which tools they have, every note Hearthkin may give them, and the shapes they can write in a reply for Hearthkin to act on. It comes with Hearthkin and updates with it, so it always matches the version you're running. You can open it yourself in any text editor; its parts are headings, so a screen reader's heading navigation moves through it.</p>
+
+<p>Kin get to it in two ways:</p>
+<ul>
+  <li>A kin with the <code>read_file</code> tool opens it whenever it likes.</li>
+  <li>A kin that can't open files asks for one part at a time, by writing a block that opens <code>```manual</code> and the part's name, for example <code>```manual Surfaces</code>. That part is put in front of it the next time it's spoken to or wakes, on any surface. It's told every turn what the parts are called. A long part with smaller parts (like "Your tools") comes as its opening and a list of those, each of which can be asked for.</li>
+</ul>
+
+<p>The shapes a kin can write for Hearthkin to act on are each taught to it, on every turn and surface where they work, so a kin is never left guessing: a fenced block that saves a file, a fenced block that saves memory for a kin with no tools, a <code>&gt; </code> line that makes a park move, a <code>```to:</code> block that writes to another kin, and the <code>```manual</code> block above. What a kin is told about each is an editable prompt on the <strong>Prompts</strong> tab.</p>
 
 <h2 id="games">The creature park — a game your kin can play</h2>
 

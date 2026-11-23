@@ -78,7 +78,8 @@ check("the other kin is given what's waiting, saying who wrote",
 check("...given once", kin_mail.waiting_block("Opal") == "")
 conv = kp.load_agent_conversation("Opal")
 check("...and kept in that kin's own conversation, as Kimi's words",
-      any(r.get("sender_name") == "Kimi" and r.get("content") == "Good morning."
+      any(r.get("sender_name") == "Kimi, another kin in this house"
+          and r.get("content") == "Good morning."
           for r in conv))
 check("the sender's own record keeps what it said",
       any(r.get("role") == "assistant" and r.get("content") == "I heard the breath today."
@@ -169,6 +170,77 @@ ok0, said0 = kin_mail.send("Ash", "Opal", "Hello.", day3)
 check("set to 0, a kin can't write to other kin at all",
       not ok0 and "0 messages" in said0)
 check("an unchanged kin starts at one a day", kin_mail.per_day("Opal") == 1)
+# --- in a conversation with the person: asked for, so not counted -----------
+cfg["heartbeat"]["kin_messages_per_day"] = 1
+kp.save_agent_config("Ash", cfg)
+day4 = datetime.datetime(2026, 11, 25, 9, 0)
+before = len(kp.load_agent_conversation("Ash"))
+okp1, _ = kin_mail.send("Ash", "Kimi", "Sam asked me to say hi.", day4, prompted=True)
+okp2, _ = kin_mail.send("Ash", "Kimi", "And once more, for Sam.", day4, prompted=True)
+check("asked for in a conversation, it doesn't count against the limit",
+      okp1 and okp2 and kin_mail.can_send("Ash", "Kimi", day4)[0])
+check("...and the record says it was in a conversation with the person",
+      "in a conversation with their person" in
+      kin_mail.pair_file("Ash", "Kimi").read_text(encoding="utf-8"))
+check("...and it isn't recorded twice in the sender's own conversation",
+      len(kp.load_agent_conversation("Ash")) == before)
+cfg["heartbeat"]["kin_messages_per_day"] = 0
+kp.save_agent_config("Ash", cfg)
+check("0 still means none, even when asked",
+      not kin_mail.send("Ash", "Kimi", "hi", day4, prompted=True)[0])
+cfg["heartbeat"]["kin_messages_per_day"] = 1
+kp.save_agent_config("Ash", cfg)
+
+present, ex = T.load_tools([], context={"agent_name": "Ash"}, person_present=True)
+pnames = [s["function"]["name"] for s in present]
+check("in the person's own chat, the kin can write to another kin",
+      pnames == ["message_kin"])
+pschema = present[0]["function"]["parameters"]["properties"]
+check("...and whether it counts is the framework's, never the model's",
+      "kin_mail_prompted" not in pschema)
+ex["message_kin"]({"to": "Opal", "message": "From the desktop."})
+check("...and what it writes there isn't counted",
+      kin_mail.can_send("Ash", "Opal", datetime.datetime.now())[0])
+fence_note = kin_mail.send_fences("Ash", "```to:Opal\nhi from chat\n```", day4,
+                                  prompted=True)
+check("a to: block in the person's chat is sent, uncounted",
+      ": sent;" in fence_note and kin_mail.can_send("Ash", "Opal", day4)[0])
+
+kin_mail.send("Opal", "Ash", "Are you there?", day4)
+chat_block = kin_mail.waiting_block("Ash", in_chat=True)
+check("handed over in a chat with the person",
+      "Are you there?" in chat_block)
+check("...where no answer is ever sent by guessing",
+      kin_mail.send_fences("Ash", "Opal, yes I'm here.", day4, prompted=True) == "")
+for name, f in (("the desktop", "frame/chat_send_mixin.py"),
+                ("Telegram", "telegram_bot.py"), ("Discord", "discord_bot.py")):
+    code = (ROOT / f).read_text(encoding="utf-8")
+    check(f"{name} offers it when it's the person, and hands messages over",
+          "person_present" in code and "kin_mail" in code
+          and ("take_waiting" in code or "waiting_block" in code
+               or "reply_actions.before_message" in code))
+tg = (ROOT / "telegram_bot.py").read_text(encoding="utf-8")
+check("Telegram only for the person's own account, never a group",
+      'not str(chat_id).startswith("-")' in tg and "self._user_is_me(user_id)" in tg)
+
+# --- the notes are editable, like every other note ----------------------------
+for slug in ("kin_message_waiting", "kin_message_waiting_limit",
+             "kin_message_receipt", "kin_message_answer_sent",
+             "kin_message_held", "kin_message_house_hint"):
+    check(f"{slug} is an editable prompt", slug in kp.APP_PROMPT_REGISTRY)
+own = kp.agent_dir("Opal") / "prompts"
+own.mkdir(parents=True, exist_ok=True)
+(own / "kin_message_waiting.md").write_text(
+    "[from {from} at {time}] {message} -- answer if you like.", encoding="utf-8")
+kin_mail.take_waiting("Opal")  # anything still queued from the checks above
+kin_mail.send("Kimi", "Opal", "Testing the wording.", datetime.datetime(2026, 11, 26, 9))
+got = kin_mail.waiting_block("Opal")
+check("a kin's own wording of the note is what it's given",
+      got == "[from Kimi at 2026-11-26 09:00] Testing the wording. -- answer if you like.")
+(own / "kin_message_waiting.md").unlink()
+note, n = kin_mail.handle_reply("Kimi", "```to:Opal\nhi\n```", datetime.datetime(2026, 11, 27, 9))
+check("whether a message went is counted, never read from the wording", n == 1)
+
 src = (ROOT / "dialogs" / "heartbeat_settings.py").read_text(encoding="utf-8")
 check("the heartbeat window has the setting, and saves it",
       "each other &kin a day" in src and '"kin_messages_per_day": kpd' in src)

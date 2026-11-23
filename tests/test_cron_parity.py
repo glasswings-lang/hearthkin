@@ -115,13 +115,16 @@ check("...and reported as impersonation, not quietly cleaned",
 print("--- the model is told which tools it may call ---")
 
 build_src = inspect.getsource(hearthkin_cron._build_messages)
-check("the wake-up appends the tool-use hint", "tool_use_hint" in build_src)
+# Since 22 Nov 2026 the hint comes from the shared teacher (block_hints),
+# given the wake-up's cron-safe tools; it names them only when there are some.
+check("the wake-up appends the tool-use hint",
+      "block_hints.for_turn" in build_src)
 check("...naming the cron-safe tools, not the kin's whole list",
-      "enabled_tools" in build_src and "{tools}" in build_src)
-hint_at = build_src.find("tool_use_hint")
-gate_at = build_src.find("if enabled_tools:")
+      'for_turn(\n                kin, "wake_up", list(enabled_tools))' in build_src)
+import block_hints  # noqa: E402
 check("...and only when there are tools to name",
-      0 <= gate_at < hint_at)
+      "{tools}" not in block_hints.tool_part("Nobody", [])
+      and "read_file" in block_hints.tool_part("Nobody", ["read_file"]))
 
 
 # ── 3. the role-play corrective ────────────────────────────────────────

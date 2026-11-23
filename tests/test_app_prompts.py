@@ -98,7 +98,7 @@ GOLDEN_TOOL_USE_HINT_NO_TOOLS = (
     # cannot do the one thing it can do will apologise instead of remembering.
     "One exception, and it is a real one: you CAN still write your own "
     "memory. Put the contents in a fenced code block with the filename on "
-    "the opening line — ```memory/speakerfifteen.md — and it is written for you. "
+    "the opening line — ```memory/garden.md — and it is written for you. "
     "Open the fence with `append:` instead to add to a log without "
     "rewriting it. memory.md and anything under memory/ are yours to save; "
     "you'll get a confirmation either way. So don't tell anyone you have no "

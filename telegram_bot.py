@@ -4927,6 +4927,13 @@ class TelegramBot:
             # shouldn't be nudged to call any. Drop them for this turn.
             if park_mode:
                 effective_tools = []
+            # Your own direct message ("This is me"): you can ask the kin to
+            # write to another kin, as on the desktop (22 Nov 2026). Only for a
+            # kin that uses tools at all, so a model without them is never
+            # sent into a tool loop; that kin can use a ```to:Name block.
+            elif (kin_tool_names and self._user_is_me(user_id)
+                  and "message_kin" not in effective_tools):
+                effective_tools = list(effective_tools) + ["message_kin"]
 
             messages = []
             sys_prompt = build_system_prompt(soul, memory, enabled_tools=effective_tools,
@@ -4948,16 +4955,19 @@ class TelegramBot:
             # the emote `park_mode` toggle above (a keeper also gets the fuller
             # MECHANISM on its cron turns — this covers it, and every chat kin,
             # on the DM surface, which is where the `>` line actually runs).
-            try:
-                import park_keeper as _pk
-                if _pk.kin_park_mode(self.agent_name) in ("chat", "keeper"):
-                    from kin_persistence import load_app_prompt
-                    _park_hint = load_app_prompt(
-                        "park_chat_hint", self.agent_name)
-                    if _park_hint and _park_hint.strip():
-                        sys_prompt = (sys_prompt or "") + "\n\n" + _park_hint
-            except Exception:
-                pass
+            # Since 22 Nov 2026 that hint comes with every other block hint
+            # from block_hints.for_turn: in the tool loop when the kin has
+            # tools here, and just below when it hasn't.
+            if not effective_tools:
+                try:
+                    import block_hints
+                    _surface, _present, _mem = self._hint_scope(user_id, chat_id)
+                    sys_prompt = (sys_prompt or "") + block_hints.for_turn(
+                        self.agent_name, _surface, [],
+                        person_present=_present, memory_ok=_mem)
+                except Exception as e:
+                    append_failure_log("telegram_failures.log", self.agent_name,
+                                       "block hints (DM)", e)
             if sys_prompt.strip():
                 messages.append({"role": "system", "content": sys_prompt})
             # Apply ts + sender prefix to USER history entries only.
@@ -5111,6 +5121,25 @@ class TelegramBot:
                 append_failure_log(
                     "telegram_failures.log", self.agent_name,
                     "shared-file injection failed", e)
+
+            # Another kin may have written (kin_mail). In the person's own
+            # direct message it's handed over here, just before their
+            # message, and kept in the kin's conversation, so a kin with no
+            # heartbeat or wake-ups still receives it (22 Nov 2026).
+            # Parts of the kin manual it asked for come the same way, for
+            # anyone (reply_actions).
+            if messages:
+                try:
+                    import reply_actions
+                    _mail = reply_actions.before_message(
+                        self.agent_name,
+                        mail_in_chat=self._user_is_me(user_id))
+                    if _mail:
+                        messages.insert(len(messages) - 1,
+                                        {"role": "system", "content": _mail})
+                except Exception as e:
+                    append_failure_log("kin_messages.log", self.agent_name,
+                                       "deliver on Telegram", e)
 
             # Tool path decision uses effective_tools resolved above
             # (kin's tools.json ∩ user's bucket). Empty → plain chat path.
@@ -5350,6 +5379,21 @@ class TelegramBot:
                     new_turns.append({
                         "role": "system", "content": authoring_note, "ts": now_iso(),
                     })
+                # In the person's own DM, a ```to:Name block writes to that
+                # kin, as on the desktop (kin_mail). Never for anyone else.
+                # A ```manual block works for anyone (reply_actions).
+                try:
+                    import reply_actions
+                    _me = self._user_is_me(user_id)
+                    for _mail_note in reply_actions.after_reply(
+                            self.agent_name, content, kin_mail_ok=_me,
+                            prompted=True)[0]:
+                        new_turns.append({"role": "system",
+                                          "content": _mail_note,
+                                          "ts": now_iso()})
+                except Exception as e:
+                    append_failure_log("kin_messages.log", self.agent_name,
+                                       "to: block on Telegram", e)
                 # Reading nudge: kin narrated reading content without loading it
                 # and nothing was auto-attached this turn.
                 read_nudge = self._maybe_read_nudge_telegram(
@@ -5870,6 +5914,20 @@ class TelegramBot:
                 # to parse it — the structure is self-explanatory.
                 from chat_helpers import place_note
                 sys_prompt += place_note("telegram", group_label)
+                # A turn without tools is taught its blocks here; with tools,
+                # the tool loop does it (block_hints, 22 Nov 2026). Groups
+                # ran park lines and memory blocks and never said so.
+                if not effective_tools:
+                    try:
+                        import block_hints
+                        _s, _p, _mem = self._hint_scope(user_id, chat_id)
+                        sys_prompt += block_hints.for_turn(
+                            self.agent_name, _s, [], person_present=_p,
+                            memory_ok=_mem)
+                    except Exception as e:
+                        append_failure_log("telegram_failures.log",
+                                           self.agent_name,
+                                           "block hints (group)", e)
                 messages.append({"role": "system", "content": sys_prompt})
 
             # Per-message sender attribution lives INLINE in the user
@@ -5900,9 +5958,8 @@ class TelegramBot:
             # attribution at all (sender_name=None on rows from
             # before the capture landed). Strip the legacy prefix
             # when found so it doesn't duplicate the new inline one.
-            # (Pattern lives at module level — see _LEGACY_SENDER_RE —
-            # to avoid recompiling on every group message, audit T18.)
-            legacy_sender_re = _LEGACY_SENDER_RE
+            # That strip now happens in the shared speaker rule
+            # (chat_helpers.row_speaker, used below), checked 22 Nov 2026.
             emitted_senders = set()
             # Past reasoning only if the kin feeds it back (see the DM path).
             _feed_think = bool(self._kin_config().get("feed_thinking", False))
@@ -6052,6 +6109,16 @@ class TelegramBot:
                             shared_this_turn = True
                 except Exception:
                     pass
+            # Parts of the kin manual this kin asked for (reply_actions).
+            try:
+                import reply_actions
+                _before = reply_actions.before_message(self.agent_name)
+                if _before and messages:
+                    messages.insert(len(messages) - 1,
+                                    {"role": "system", "content": _before})
+            except Exception as e:
+                append_failure_log("kin_messages.log", self.agent_name,
+                                   "manual on Telegram group", e)
 
             # effective_tools resolved above (kin's tools.json ∩ bucket).
             show_thinking = bool(full_cfg.get("show_thinking", False))
@@ -6272,11 +6339,23 @@ class TelegramBot:
                 # content in text instead of a write_file call, perform the
                 # write. Gated on write tools being in the effective set.
                 authoring_note, authoring_confirm = self._run_authoring_bridge_telegram(
-                    content, effective_tools, added_turns, user_id=user_id)
+                    content, effective_tools, added_turns, user_id=user_id,
+                    chat_id=chat_id)
                 if authoring_note:
                     new_turns.append({
                         "role": "system", "content": authoring_note, "ts": now_iso(),
                     })
+                # A ```manual block asks for part of the kin manual
+                # (reply_actions); no ```to: in a group.
+                try:
+                    import reply_actions
+                    for _n in reply_actions.after_reply(self.agent_name,
+                                                        content)[0]:
+                        new_turns.append({"role": "system", "content": _n,
+                                          "ts": now_iso()})
+                except Exception as e:
+                    append_failure_log("kin_messages.log", self.agent_name,
+                                       "manual block in group", e)
                 # Reading nudge — suppressed when a file was auto-attached this
                 # turn (a trusted sender shared one; content is already present).
                 read_nudge = self._maybe_read_nudge_telegram(
@@ -6618,6 +6697,11 @@ class TelegramBot:
             context={"agent_name": self.agent_name, "confine_paths": _confine,
                      "said_scope": _said},
             model=tg_model,
+            # message_kin is only in the list for the person's own direct
+            # message (see the DM path); a group never adds it.
+            person_present=("message_kin" in effective_tools
+                            and not str(chat_id).startswith("-")
+                            and self._user_is_me(user_id)),
         )
         # Wrap use_webcam with the per-user approval flow (ask /
         # auto / deny radio in Settings → Telegram → Users) if it's
@@ -6644,6 +6728,7 @@ class TelegramBot:
         # refuse tools cold.
         messages = self._inject_tool_use_hint(
             list(messages), [s["function"]["name"] for s in schemas],
+            user_id=user_id, chat_id=chat_id,
         )
 
         # Tool-call display is per-kin opt-in via the Telegram tab's
@@ -7121,40 +7206,31 @@ class TelegramBot:
             s = s[:400] + " …(truncated for display; model sees full output)"
         return s
 
-    def _inject_tool_use_hint(self, messages, tool_names):
-        """Append a 'you actually have these tools' nudge to the
-        system prompt. Same pattern as the desktop path's
-        _inject_tool_use_hint — many models (Gemma family especially)
-        default to refusing tool use unless explicitly told they have
-        them despite proper schemas being provided. Plus the
-        anti-pseudo-call steering that landed on the desktop side
-        2026-06-06 after Haiku 4.5 wrote 'call_context_status' as
-        text instead of issuing a structured tool_use call."""
-        # Hint text is shared with the desktop surface and lives in
-        # ~/.hearthkin/prompts/ (editable). Previously this surface carried
-        # its own thinner copy with no no-tools branch; unified here so
-        # Telegram gets the same (stronger) anti-pseudo-call steering.
-        from kin_persistence import load_app_prompt
-        if tool_names:
-            hint = load_app_prompt("tool_use_hint", self.agent_name).replace(
-                "{tools}", ", ".join(tool_names))
-            # Kin that can write files get the authoring-bridge fallback too —
-            # the low-load "save via a fenced block" path for when the big
-            # write_file argument snags (the write-gesture that bites hardest
-            # in groups). Honored by _run_authoring_bridge_telegram after the
-            # reply. See authoring_bridge.py.
-            if {"write_file", "edit_file"} & set(tool_names):
-                hint += load_app_prompt("authoring_bridge_hint", self.agent_name)
-        else:
-            hint = load_app_prompt("tool_use_hint_no_tools", self.agent_name)
-        for i, m in enumerate(messages):
-            if m.get("role") == "system":
-                new = dict(m)
-                new["content"] = (m.get("content") or "") + hint
-                messages[i] = new
-                return messages
-        # No system message — prepend a bare-hint one.
-        return [{"role": "system", "content": hint.strip()}] + messages
+    def _hint_scope(self, user_id, chat_id):
+        """(surface, person_present, memory_ok) for block_hints on this turn.
+        A group is shared; your own direct message has you present. Memory
+        blocks from a kin with no tools act in a group only for you, or for
+        someone whose own tools could write (22 Nov 2026): anyone else's turn
+        must not steer the kin's memory through a block."""
+        group = str(chat_id).startswith("-")
+        me = self._user_is_me(user_id)
+        if not group:
+            return "telegram_dm", me, True
+        bucket = self._user_tool_bucket(user_id)
+        return "telegram_group", False, bool(me or bucket in ("write", "full"))
+
+    def _inject_tool_use_hint(self, messages, tool_names, user_id=None,
+                              chat_id=None):
+        """Teach this turn's tools and blocks (block_hints.for_turn), the one
+        place every surface asks, so none acts on a shape it never taught.
+        Called on every turn, tools or not: Telegram used to call it only
+        inside the tool loop, so a kin with no tools here was never told what
+        it could still do (22 Nov 2026)."""
+        import block_hints
+        surface, present, memory_ok = self._hint_scope(user_id, chat_id)
+        return block_hints.inject(messages, block_hints.for_turn(
+            self.agent_name, surface, list(tool_names or []),
+            person_present=present, memory_ok=memory_ok))
 
     def _teachable_tool(self, name):
         """True if `name` is a tool/game that supports teaching (has a game
@@ -7182,7 +7258,7 @@ class TelegramBot:
         return False
 
     def _run_authoring_bridge_telegram(self, content, effective_tools, added_turns,
-                                       user_id=None):
+                                       user_id=None, chat_id=None):
         """Authoring bridge for the Telegram surfaces (DM + group — where the
         write-gesture bites most). If the kin authored file content in its
         natural text register — a ```write:<path>``` fence, or a *writes X*
@@ -7207,6 +7283,12 @@ class TelegramBot:
                 # For a kin with NO tools this bridge is its only write path,
                 # confined to its own memory — otherwise a kin on a phone can
                 # never keep anything. Any other tool set still returns here.
+                # In a group, only on your turn or that of someone whose own
+                # tools could write (_hint_scope): anyone else's turn must not
+                # steer the kin's memory through a block (22 Nov 2026).
+                if chat_id is not None and not self._hint_scope(
+                        user_id, chat_id)[2]:
+                    return None, None
                 return self._commit_toolless_memory_telegram(
                     content, effective_tools)
             import os

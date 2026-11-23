@@ -768,14 +768,18 @@ class ChatStreamMixin:
         # on Telegram and on a cron wake-up. Before this the desktop was the
         # one surface that read the line and did nothing with it.
         self._maybe_route_park_command(reply_to_save, ts, user_text)
-        # A wake-up sent into this chat can write to another kin with a
-        # ```to:Name block, as on a wake-up that runs on its own (kin_mail).
-        if self.current_agent and _is_cron_user_text(user_text):
+        # A ```to:Name block writes to another kin (kin_mail): on a wake-up
+        # sent into this chat, as on one that runs on its own, and in the
+        # person's own chat, where it doesn't count against the daily limit.
+        # A ```manual block asks for part of the kin manual. Both through
+        # reply_actions, the one place every surface acts on them.
+        if self.current_agent:
             try:
-                import kin_mail
-                _mail_note = kin_mail.send_fences(self.current_agent,
-                                                  reply_to_save)
-                if _mail_note:
+                import reply_actions
+                _notes, _ = reply_actions.after_reply(
+                    self.current_agent, reply_to_save, kin_mail_ok=True,
+                    prompted=not _is_cron_user_text(user_text))
+                for _mail_note in _notes:
                     self.chat_display.AppendText("\n" + _mail_note + "\n")
                     self.conversation.append(
                         {"role": "system", "content": _mail_note, "ts": ts})

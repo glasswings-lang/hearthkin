@@ -190,11 +190,12 @@ _PROACTIVE_TOOLS = frozenset({"reach_out", "message_kin"})
 # stripped from every model-facing schema regardless of whether the caller
 # passed them in `context`. See the hide logic in `load_tools`.
 _FRAMEWORK_HIDDEN_PARAMS = frozenset({"agent_name", "confine_paths",
-                                      "read_ledger", "said_scope"})
+                                      "read_ledger", "said_scope",
+                                      "kin_mail_prompted"})
 
 
 def load_tools(allowed_names, *, context=None, model=None, cron_turn=False,
-               proactive_wake=False):
+               proactive_wake=False, person_present=False):
     """Build the (schemas, executor_dict) pair for the named tools.
 
     `allowed_names` is typically the result of `load_agent_tools_file` —
@@ -261,6 +262,15 @@ def load_tools(allowed_names, *, context=None, model=None, cron_turn=False,
             n for n in _PROACTIVE_TOOLS
             if n in _REGISTRY and n not in allowed_names
         ]
+    elif person_present:
+        # A conversation with the person themself there: the desktop, or
+        # their own direct message (never a group, a channel, a room, or
+        # anyone else). They can ask a kin to write to another kin, and
+        # what's written then doesn't count against the daily limit, which
+        # is for kin writing with nobody watching (22 Nov 2026).
+        if "message_kin" in _REGISTRY and "message_kin" not in allowed_names:
+            allowed_names = allowed_names + ["message_kin"]
+        context["kin_mail_prompted"] = True
     schemas = []
     executor = {}
     for name in allowed_names:

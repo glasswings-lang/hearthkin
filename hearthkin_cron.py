@@ -517,25 +517,25 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
                 enabled_tools, (load_agent_config(kin).get("model") or "").strip())
         except Exception:
             _on_text_path = False
-    if enabled_tools and not _on_text_path:
-        try:
-            from kin_persistence import load_app_prompt
-            sys_content = (sys_content or "") + load_app_prompt(
-                "tool_use_hint", kin).replace(
-                    "{tools}", ", ".join(enabled_tools))
-        except Exception:
-            pass
-    # Kin that can write files get the authoring-bridge fallback hint — tending
-    # is where write-gesturing bites (the kin is asked to write memory files),
-    # and the low-load fenced-write path is honored by _maybe_authoring_bridge_cron
-    # after the reply. See authoring_bridge.py.
-    if enabled_tools and ({"write_file", "edit_file"} & set(enabled_tools)):
-        try:
-            from kin_persistence import load_app_prompt
-            sys_content = (sys_content or "") + load_app_prompt(
-                "authoring_bridge_hint", kin)
-        except Exception:
-            pass
+    # What to teach comes from the one place every surface asks (block_hints,
+    # 22 Nov 2026). A kin with no tools used to be taught nothing here unless
+    # staging happened to be pending. On the text path the tool list is left
+    # out (above) but the file-saving block is still taught, since that's the
+    # road such a model is sent down.
+    try:
+        import block_hints
+        if enabled_tools and not _on_text_path:
+            sys_content = (sys_content or "") + block_hints.for_turn(
+                kin, "wake_up", list(enabled_tools))
+        else:
+            sys_content = (sys_content or "") + block_hints.for_turn(
+                kin, "wake_up", [])
+            if enabled_tools and ({"write_file", "edit_file"}
+                                  & set(enabled_tools)):
+                from kin_persistence import load_app_prompt
+                sys_content += load_app_prompt("authoring_bridge_hint", kin)
+    except Exception:
+        pass
     if history_path:
         convo = _load_own_history(history_path)
     else:
@@ -1332,10 +1332,17 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
                 # the kin's last turn — so a keeper on cron can see you tending
                 # alongside it, not just a park that mysteriously changed.
                 _others = _host.unseen_moves(kin)
+                # The editable versions (Prompts tab). They were registered
+                # and shown as editable but never loaded, so editing them did
+                # nothing (found 22 Nov 2026).
+                from kin_persistence import load_app_prompt
+                _mech = load_app_prompt("park_mechanism", kin) or _PK.MECHANISM
+                _ask = load_app_prompt("park_turn_instruction", kin) or None
                 messages.append({
                     "role": "user",
-                    "content": _PK.MECHANISM + "\n"
-                    + _PK.build_turn_message(_look, _hint, others=_others),
+                    "content": _mech + "\n"
+                    + _PK.build_turn_message(_look, _hint, others=_others,
+                                             instruction=_ask),
                 })
     except Exception:
         pass
@@ -1629,12 +1636,16 @@ def _finish_cron_reply(kin, result, messages, model, options, cache,
         kin, reply, safe_tools, toolless_scopes, model)
     # A ```to:Name block writes to another kin (kin_mail); what went and what
     # didn't is told to the kin with the other notes.
-    _mail_note = ""
+    # A ```manual block asks for part of the kin manual. Both via
+    # reply_actions, the one place every surface acts on them.
+    _mail_notes = []
     try:
-        import kin_mail
-        _mail_note = kin_mail.send_fences(kin, reply)
+        import reply_actions
+        _mail_notes, _ = reply_actions.after_reply(kin, reply,
+                                                   kin_mail_ok=True)
     except Exception as e:
         cron_helpers.log_cron_error(kin, "kin_message", str(e))
+    _mail_note = "\n\n".join(_mail_notes)
     # Steering notes for a turn nobody was awake to read. Both are appended to
     # the kin's own history AFTER the reply they describe, so the correction
     # arrives in the same place the kin will next look — not to the operator,
@@ -1826,7 +1837,10 @@ def run_heartbeat(kin, cfg, should_stop=None):
         # with the house line, and recorded in the kin's own conversation.
         try:
             import kin_mail
-            _mail = kin_mail.waiting_block(kin)
+            import reply_actions
+            _mail = "\n\n".join(t for t in (
+                kin_mail.waiting_block(kin),
+                reply_actions.before_message(kin)) if t)  # manual parts asked for
         except Exception:
             _mail = ""
         if _mail:
@@ -1914,16 +1928,17 @@ def run_heartbeat(kin, cfg, should_stop=None):
         fired = False
     # A ```to:Name block in the reply writes to that kin, with or without
     # tools (kin_mail.send_fences); the note goes to the kin's history.
+    # A ```manual block too (reply_actions, the one place for both).
     try:
-        import kin_mail
-        _mail_note = kin_mail.send_fences(
-            kin, getattr(result, "content", "") or "")
-        if _mail_note:
+        import reply_actions
+        _mail_notes, _mail_sent = reply_actions.after_reply(
+            kin, getattr(result, "content", "") or "", kin_mail_ok=True)
+        for _mail_note in _mail_notes:
             append_agent_conversation_turn(kin, {
                 "role": "system", "content": _mail_note,
                 "ts": datetime.datetime.now().isoformat(timespec="seconds")})
-            if ": sent;" in _mail_note or "so it was sent to" in _mail_note:
-                fired = True
+        if _mail_sent:
+            fired = True
     except Exception as e:
         _log_heartbeat(kin, f"kin-message-failed={type(e).__name__}:{e}")
     # The kin wrote something and never sent it.

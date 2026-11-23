@@ -5,6 +5,7 @@ Hearthkin(wx.Frame) class in hearthkin.pyw; every method here runs with
 the frame as `self`. Moved verbatim — no logic changed.
 """
 from frame_shared import (
+    append_failure_log,
     clean_kin_reply,
     load_app_prompt,
     _is_cron_user_text,
@@ -108,6 +109,24 @@ class ChatSendMixin:
                 self._set_status(f"Couldn't save attachment: {e}")
                 return False
 
+        # Another kin may have written to this one (kin_mail). Handed over
+        # here, at the start of the person's next message, so a kin with no
+        # heartbeat or wake-ups still receives it. Added to the conversation
+        # held in memory (and painted), so it's in this turn's history and
+        # saved with it; nothing is written to disk behind the app's back.
+        if self.current_agent:
+            try:
+                import kin_mail
+                for _w in kin_mail.take_waiting(self.current_agent,
+                                                record=False):
+                    _row = kin_mail.waiting_row(_w)
+                    self.conversation.append(_row)
+                    self._append_block(_row["sender_name"], _w["text"],
+                                       datetime.datetime.now())
+            except Exception as e:
+                append_failure_log("kin_messages.log", self.current_agent,
+                                   "deliver on desktop", e)
+
         # Use the per-kin text cache instead of hitting disk on every
         # send. EditKinDialog invalidates the cache on Save Soul / Save
         # Memory; load_agent populates it on kin switch (audit H21).
@@ -138,15 +157,9 @@ class ChatSendMixin:
         # _route_park_command was added to close, one layer up: we taught the
         # harness to listen on every surface and to teach on one.
         #
-        # Best-effort and additive: a park problem must never cost a send.
-        try:
-            import park_keeper
-            if park_keeper.kin_park_mode(self.current_agent) in ("chat", "keeper"):
-                _park_hint = load_app_prompt("park_chat_hint", self.current_agent)
-                if _park_hint and _park_hint.strip():
-                    sys_content = (sys_content or "") + "\n\n" + _park_hint
-        except Exception:
-            pass
+        # Since 22 Nov 2026 the park hint comes with every other block hint
+        # from block_hints.for_turn (see _inject_tool_use_hint), on every
+        # surface that runs the line.
         # Compact older tool round-trips into single role=system markers
         # before translating each surviving message. The kin's per-config
         # `tool_history_keep` decides how many recent pairs stay verbatim.
@@ -216,6 +229,16 @@ class ChatSendMixin:
                     messages.insert(len(messages) - 1,
                                     {"role": "system", "content": _block})
                     self._shared_files_this_turn = _shared
+        except Exception:
+            pass
+        # Parts of the kin manual this kin asked for (reply_actions), just
+        # before the message it answers, like a shared file.
+        try:
+            import reply_actions
+            _before = reply_actions.before_message(self.current_agent)
+            if _before and messages:
+                messages.insert(len(messages) - 1,
+                                {"role": "system", "content": _before})
         except Exception:
             pass
 
@@ -542,6 +565,10 @@ class ChatSendMixin:
             context={"agent_name": self.current_agent},
             model=self._current_chat_model_clean(),
             cron_turn=cron_turn,
+            # The desktop is the person's own chat: they can ask the kin to
+            # write to another kin (message_kin). A wake-up sent here is not
+            # them, so it gets the wake-up's tools instead.
+            person_present=not cron_turn,
         )
         # Wrap the exec executor with harness-side approval if it's in
         # the enabled set. Other executors pass through unchanged. The
@@ -697,50 +724,25 @@ class ChatSendMixin:
         self._stream_buf = ""
         self._paint_cursor = 0
 
-    def _inject_tool_use_hint(self, messages, tool_names, *, with_authoring_hint=True):
-        """Append a tool-use nudge to the system message. The kin's soul
-        is left intact; the hint just gets concatenated underneath it so
-        the model sees both the persona and either the "you actually
-        have these tools, use them" instruction (when tool_names is
-        non-empty) or a "you currently have no tools — ask if you'd
-        want one" instruction (when tool_names is empty).
-
-        The no-tools branch closes the gap that produces the
-        roleplayed-tending pattern: a kin without tools has no idea it
-        has no tools, so it will happily roleplay reading staging notes
-        that it cannot actually read. This hint
-        makes the absence visible per-turn and gives the kin a script
-        for what to do instead.
-
-        Hint is ephemeral: it lives only in the request's system
-        message, never gets persisted to conversation.jsonl."""
-        # Hint text lives in ~/.hearthkin/prompts/ (editable); load_app_prompt
-        # seeds + serves it. Shared verbatim with the Telegram surface.
-        from kin_persistence import load_app_prompt
-        if tool_names:
-            hint = load_app_prompt("tool_use_hint", self.current_agent).replace(
-                "{tools}", ", ".join(tool_names))
-            # Kin that can write files get the authoring-bridge fallback too:
-            # a low-load way to save a file (fenced ```write:<path>``` block, or
-            # a *writes X* emote + fence) for when the big write_file argument
-            # snags. See authoring_bridge.py + _maybe_run_authoring_bridge.
-            if with_authoring_hint and {"write_file", "edit_file"} & set(tool_names):
-                hint += load_app_prompt("authoring_bridge_hint", self.current_agent)
-        else:
-            hint = load_app_prompt("tool_use_hint_no_tools", self.current_agent)
-        new_messages = []
-        injected = False
-        for m in messages:
-            if not injected and m.get("role") == "system":
-                copy = dict(m)
-                copy["content"] = (m.get("content") or "") + hint
-                new_messages.append(copy)
-                injected = True
-            else:
-                new_messages.append(m)
-        if not injected:
-            new_messages = [{"role": "system", "content": hint.lstrip()}] + new_messages
-        return new_messages
+    def _inject_tool_use_hint(self, messages, tool_names, *, with_authoring_hint=True,
+                              kin=None, surface=None, person_present=None):
+        """Teach this turn's tools and blocks (block_hints.for_turn), the one
+        place every surface asks, so none can act on a shape it never taught.
+        `kin`/`surface` default to the open desktop kin; a room passes the kin
+        whose turn it is and "room". A wake-up sent into this chat is
+        "wake_up", with nobody present. Ephemeral: it lives only in this
+        request's system message, never in conversation.jsonl.
+        `with_authoring_hint` is kept for callers; every caller passes True."""
+        import block_hints
+        kin = kin or self.current_agent
+        if surface is None:
+            surface = ("wake_up" if self._is_wake_up_turn(messages)
+                       else "desktop")
+        if person_present is None:
+            person_present = surface == "desktop"
+        text = block_hints.for_turn(kin, surface, list(tool_names or []),
+                                    person_present=person_present)
+        return block_hints.inject(messages, text)
 
     def _turn_had_write_tool_call(self, turn_tool_history):
         """True if this turn's tool round-trips include a write-class tool

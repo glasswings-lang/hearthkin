@@ -461,6 +461,23 @@ class DiscordBot:
             entry["stop"] = True
             return True
 
+    def _memory_ok(self, message, author_id):
+        """Whether a memory block from a kin with no tools is acted on this
+        turn. In a direct message, yes. In a server channel, only for you or
+        someone whose own tools could write: anyone else's turn must not
+        steer the kin's memory through a block (22 Nov 2026)."""
+        if getattr(message, "guild", None) is None:
+            return True
+        if self._is_me(author_id):
+            return True
+        try:
+            from tools._person_settings import person_value
+            dcfg = (self.get_config() or {}).get("discord") or {}
+            return person_value(dcfg, "discord", author_id,
+                                "bucket") in ("write", "full")
+        except Exception:
+            return False
+
     def _is_me(self, author_id):
         """The account is marked "This is me" on the Discord tab."""
         try:
@@ -1516,7 +1533,15 @@ class DiscordBot:
         # A "*" entry (anyone) now really covers anyone without their own,
         # as the person window always said; it used to be ignored here.
         bucket = person_value(dcfg, "discord", author_id, "bucket")
-        enabled = filter_tool_names(load_kin_tools(self.agent_name) or [], bucket)
+        _kin_tools = load_kin_tools(self.agent_name) or []
+        enabled = filter_tool_names(_kin_tools, bucket)
+        # Your own direct message ("This is me"): you can ask the kin to write
+        # to another kin, as on the desktop and Telegram (22 Nov 2026). Never
+        # in a server channel. Only for a kin that uses tools at all.
+        _me_dm = (getattr(message, "guild", None) is None
+                  and self._is_me(author_id))
+        if _me_dm and _kin_tools and "message_kin" not in enabled:
+            enabled = list(enabled) + ["message_kin"]
         if enabled:
             from tools import load_tools
             # confine_paths revokes the absolute-path escape hatch for file
@@ -1536,7 +1561,8 @@ class DiscordBot:
                 context={"agent_name": self.agent_name,
                          "confine_paths": _confine,
                          "said_scope": _said},
-                model=model)
+                model=model,
+                person_present=_me_dm)
             if self._wrap_exec is not None:
                 executor = self._wrap_exec(executor, self.agent_name,
                                            user_id=str(author_id))
@@ -1590,10 +1616,17 @@ class DiscordBot:
             system += place_note("discord", _entry.get("label")
                                  or getattr(message.channel, "name", "")
                                  or f"channel {channel_id}")
-        if tool_names:
-            system += load_app_prompt(
-                "tool_use_hint", self.agent_name).replace(
-                    "{tools}", ", ".join(tool_names))
+        # This turn's tools and blocks, from the one place every surface
+        # asks (block_hints, 22 Nov 2026). Discord used to send only the tool
+        # list, so it saved fenced files, ran park lines and kept no-tools
+        # memory blocks without ever saying any of that was possible.
+        import block_hints
+        system += block_hints.for_turn(
+            self.agent_name,
+            "discord_dm" if getattr(message, "guild", None) is None
+            else "discord_channel",
+            tool_names, person_present=_me_dm,
+            memory_ok=self._memory_ok(message, author_id))
         messages = [{"role": "system", "content": system}]
         messages.extend(history)
         # Attached text documents go in front of the user's turn — same
@@ -1609,6 +1642,20 @@ class DiscordBot:
             except Exception as e:
                 append_failure_log("discord_failures.log", self.agent_name,
                                    "text attachment injection failed", e)
+        # Another kin may have written (kin_mail): in the person's own DM
+        # it's handed over here, before their message, and kept in the kin's
+        # conversation, as on Telegram and the desktop (22 Nov 2026).
+        # Parts of the kin manual it asked for come the same way, for anyone
+        # (reply_actions).
+        try:
+            import reply_actions
+            _mail = reply_actions.before_message(self.agent_name,
+                                                 mail_in_chat=_me_dm)
+            if _mail:
+                messages.append({"role": "system", "content": _mail})
+        except Exception as e:
+            append_failure_log("kin_messages.log", self.agent_name,
+                               "deliver on Discord", e)
         user_msg = {"role": "user", "content": user_text}
         if image_paths:
             user_msg["attachments"] = list(image_paths)
@@ -1903,8 +1950,15 @@ class DiscordBot:
             _bridge_confine = resolve_file_reach(
                 _all.get("discord") or {}, "discord",
                 getattr(message.author, "id", ""), _all)
-            kin_note, human_note = turn_steering.authoring_bridge_notes(
-                self.agent_name, text, tool_names, confine=_bridge_confine)
+            # A kin with no write tools saves memory through this bridge; in a
+            # server channel only on your turn or a writer's (_memory_ok).
+            _aid = getattr(message.author, "id", "")
+            if ({"write_file", "edit_file"} & set(tool_names or [])
+                    or self._memory_ok(message, _aid)):
+                kin_note, human_note = turn_steering.authoring_bridge_notes(
+                    self.agent_name, text, tool_names, confine=_bridge_confine)
+            else:
+                kin_note, human_note = None, None
             if kin_note:
                 notes.append(kin_note)
             if human_note:
@@ -1923,6 +1977,15 @@ class DiscordBot:
                 shared_this_turn=bool(text_docs))
             if note:
                 notes.append(note)
+            # In the person's own DM, a ```to:Name block writes to that kin,
+            # as on the desktop and Telegram (kin_mail). Never in a channel.
+            # A ```manual block works for anyone (reply_actions).
+            import reply_actions
+            _me_dm_here = (getattr(message, "guild", None) is None
+                           and self._is_me(getattr(message.author, "id", "")))
+            notes.extend(reply_actions.after_reply(
+                self.agent_name, text, kin_mail_ok=_me_dm_here,
+                prompted=True)[0])
             for note in notes:
                 self._persist_turn(channel_id, "system", note, share)
         except Exception as e:

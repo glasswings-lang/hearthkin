@@ -1139,6 +1139,14 @@ class RoomsMixin:
                 self._room_shared_this_turn = True
         except Exception:
             pass
+        # Parts of the kin manual this kin asked for (reply_actions).
+        try:
+            import reply_actions
+            _before = reply_actions.before_message(kin_name)
+            if _before:
+                messages.append({"role": "system", "content": _before})
+        except Exception:
+            pass
 
         options = {
             "temperature": cfg.get("temperature", 0.8),
@@ -1307,6 +1315,12 @@ class RoomsMixin:
 
         `show_thinking` is the active kin's setting (passed in by the
         dispatcher which has already loaded that kin's cfg)."""
+        # A kin with no tools is taught what it CAN write here too (memory
+        # blocks, park lines, the manual): rooms acted on those and never
+        # said so (block_hints, 22 Nov 2026).
+        messages = self._inject_tool_use_hint(
+            list(messages), [], kin=kin_name, surface="room",
+            person_present=False)
         # Per-turn memory recall for this room kin — its own relevant depth,
         # inlined on the latest user turn (no tool call). The block is a
         # clearly-bracketed [hearthkin: …] note, not a [Name]: speaker turn, so
@@ -1396,7 +1410,8 @@ class RoomsMixin:
         # was withheld while a fenced save in a room would never happen.
         messages = self._inject_tool_use_hint(
             list(messages), [s["function"]["name"] for s in schemas],
-            with_authoring_hint=True,
+            with_authoring_hint=True, kin=kin_name, surface="room",
+            person_present=False,
         )
         # Per-turn memory recall for this room kin (its own depth, inlined on
         # the latest user turn; no tool call). Fail-soft.
@@ -1729,6 +1744,12 @@ class RoomsMixin:
                         getattr(self, "_room_shared_this_turn", False)))
                 if _read:
                     _notes.append(_read)
+                # A ```manual block asks for part of the kin manual
+                # (reply_actions). No ```to: here: a room isn't where kin
+                # write to each other.
+                import reply_actions
+                _more, _ = reply_actions.after_reply(_speaker, reply_to_save)
+                _notes.extend(_more)
             for _n in _notes:
                 self.room_conversation.append({
                     "role": "system", "content": _n, "ts": ts,

@@ -93,13 +93,10 @@ def reach_out(message: str, to: str = "", agent_name: str = "") -> str:
         addressed = None
     if addressed and _HELD.get(agent_name) != (text, (to or "").strip()):
         _HELD[agent_name] = (text, (to or "").strip())
-        return (f"reach_out: nothing was sent yet. This opens by speaking to "
-                f"{addressed}, another kin in this house, and kin aren't "
-                f"reached through reach_out: it would have gone to "
-                f"{_where_it_goes(cfg, to)}, where {addressed} isn't. To write "
-                f"to {addressed}, use message_kin with to=\"{addressed}\". If "
-                f"you did mean it for {_where_it_goes(cfg, to)}, send exactly "
-                f"the same reach_out again and it will go.")
+        from kin_persistence import load_app_prompt
+        return (load_app_prompt("kin_message_held", agent_name)
+                .replace("{kin}", addressed)
+                .replace("{where}", _where_it_goes(cfg, to)))
     _HELD.pop(agent_name, None)
 
     hb = cfg.get("heartbeat") or {}

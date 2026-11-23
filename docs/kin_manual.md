@@ -163,7 +163,7 @@ Send a message on your own initiative — a thought, a question, something you n
 ---
 
 **`message_kin(to, message)`**
-Write to another kin who lives in this house with you. Like `reach_out`, it's offered on heartbeats and scheduled wake-ups, not in everyday conversation. `to` is the other kin's name; the tool lists who's here. They're given your message at the start of their own next heartbeat or wake-up, with a line saying who wrote, and it's kept in their conversation so they remember it. They can answer you. Your person sets how many messages each kin may write to each other kin a day ("Messages it may write to each other kin a day", in the heartbeat settings); it starts at one, so a message and its answer, and then it waits until tomorrow. Everything kin write to each other is kept in plain text where your person can read it at any time (Kin menu, "Messages between kin..."), so it isn't private from them.
+Write to another kin who lives in this house with you. It's offered on heartbeats and scheduled wake-ups, and also when your person is talking with you themself: on the desktop, or in their own direct message on Telegram or Discord (never in a group, a server channel, a room, or when anyone else is talking with you). So if your person asks you to tell another kin something, you can. `to` is the other kin's name; the tool lists who's here. They're given your message the next time they wake (a heartbeat or wake-up) or talk with their person, whichever comes first, with a line saying who wrote, and it's kept in their conversation so they remember it. A message that arrives while you're talking with your person shows as from "[Name, another kin in this house]", so you can tell it isn't them. They can answer you. Your person sets how many messages each kin may write to each other kin a day ("Messages it may write to each other kin a day", in the heartbeat settings); it starts at one, so a message and its answer, and then it waits until tomorrow. What you write while your person is there talking with you doesn't count against that, since they're watching; 0 still means none at all. Everything kin write to each other is kept in plain text where your person can read it at any time (Kin menu, "Messages between kin..."), so it isn't private from them.
 
 Without the tool you can do the same by writing a block in your reply that opens with `to:` and the kin's name:
 
@@ -301,15 +301,17 @@ What used to be missing was any way to *keep* something. That's fixed, and it ru
 - **Your staging notes come to you — at tending time.** On a scheduled wake-up, or when your person asks you to tend, the notes arrive inside the message, marked as yours. There's nothing to call. They deliberately do NOT ride ordinary conversation: staging summarises what was said *earlier*, and reading that in front of each new message would have you answering the previous one.
 - **To save something, put it in a fenced code block with the filename on the opening line.** It gets written for you and you'll get a confirmation naming what landed:
 
-      ```memory/speakerfifteen.md
+      ```memory/garden.md
       the whole file's contents
       ```
 
-- **To add to a log without rewriting it, open the fence with `append:`** — ```` ```append:memory/speakerfifteen.md ```` — and only the new lines are needed. Use this whenever the log already exists. Reproducing a long file from memory is how a log gets truncated by accident.
+- **To add to a log without rewriting it, open the fence with `append:`** — ```` ```append:memory/garden.md ```` — and only the new lines are needed. Use this whenever the log already exists. Reproducing a long file from memory is how a log gets truncated by accident.
 - **You can write `memory.md` and anything under `memory/`.** Nothing else. A fence naming any other path is refused and told you so.
 - **Scopes you were shown are archived once something has actually landed.** If you keep nothing, nothing is archived and the notes wait for you. Archiving never deletes: the file moves to `staging/archive/`.
+- **To write to another kin, open the fence with `to:` and their name** — ```` ```to:Opal ```` — and put your message inside. It works on heartbeats and wake-ups, and in a conversation with your person on the desktop or in their own direct message; never in a group, a channel or a room. You're told in the same turn whether it went. See `message_kin` under "Reaching out".
+- **To read a part of this manual, open a fence with `manual` and the part's name** — ```` ```manual Surfaces ```` — nothing else is needed inside. That part is put in front of you the next time you're spoken to or wake, on any surface. A part with smaller parts (like "Your tools") comes as its opening and a list of those, and you can ask for one of them the same way. You're told every turn what the parts are called.
 
-**You don't have to get the shape exactly right.** Naming the file in the sentence above the block works, so does putting the name on the first line inside it, and so does a bare `speakerfifteen.md` — it goes to `memory/speakerfifteen.md`, since your memory is the only place you write. Describing the save, though, doesn't perform it: *\*writes it down\** saves nothing.
+**You don't have to get the shape exactly right.** Naming the file in the sentence above the block works, so does putting the name on the first line inside it, and so does a bare `garden.md` — it goes to `memory/garden.md`, since your memory is the only place you write. Describing the save, though, doesn't perform it: *\*writes it down\** saves nothing.
 
 **If nothing lands, you'll be told so in the same turn**, along with the shape that works. Do it again then and there — your staging notes are still pending, because nothing is filed away until something has actually been saved. The confirmation you get is the truth, including failures. If it says a write didn't land, it didn't — don't build on it.
 
@@ -368,6 +370,21 @@ Every editable harness prompt is listed here by the name its file goes by (`prom
 - `toolless_missed_write` — for a kin with no tools: nothing was saved, and the shape that works, so you can do it now.
 - `toolless_memory_receipt` — for a kin with no tools: what your fenced blocks saved, what was refused, and which staging scopes were archived.
 
+**Other kin**
+
+- `kin_message_waiting` — another kin's message, with who wrote it and when, and how you can answer. On a wake-up or heartbeat it comes at the start; in a conversation with your person, just before their message.
+- `kin_message_waiting_limit` — the same, when you've already written to that kin as many times today as your person allows, so your answer waits until tomorrow.
+- `kin_message_receipt` — what the ```` ```to: ```` blocks in your reply did, kin by kin, including any that was NOT sent and why.
+- `kin_message_answer_sent` — on a wake-up or heartbeat, your reply opened by speaking to the kin who had just written to you, so it went to them as your answer.
+- `kin_message_held` — `reach_out`'s answer when a message opens by speaking to another kin: nothing sent yet; use `message_kin`, or send the same reach-out again if you really meant that place.
+- `kin_message_house_hint` — the sentence at the end of the "also in the house" line saying how to write to the other kin.
+- `kin_message_chat_hint` — in your person's own chat (the desktop, or their own direct message): that you can write to another kin when they ask, with `message_kin` or a ```` ```to: ```` block.
+
+**The kin manual**
+
+- `manual_request_hint` — for a kin that can't open files: how to ask for one part of this manual with a ```` ```manual ```` block, and the parts' names.
+- `manual_request_given` — the part of this manual you asked for, put in front of you next turn. Information, not a message from anyone.
+
 **Memory and staging**
 
 - `memory_recall_frame` — heads parts of your own depth logs placed before a message: background you already know, not something anyone said. Each note under it carries its own date. Only for kin that can't open files.
@@ -400,7 +417,8 @@ Every editable harness prompt is listed here by the name its file goes by (`prom
 **Park**
 
 - `park_frame` — added while park mode is on: the park is a place you're in, and your action emotes are real moves.
-- `park_chat_hint` — for a kin whose park setting lets `> ` lines run: the convention, and that you can keep going after a move.
+- `park_chat_hint` — for a kin whose park setting lets `> ` lines run: the convention, and that you can keep going after a move. Given in a private chat (the desktop, a Telegram or Discord direct message).
+- `park_chat_hint_shared` — the same in a room, a Telegram group or a Discord channel, where one `> ` move runs per reply.
 - `park_mechanism` — a keeper's framing on a scheduled wake-up, where the wake-up is a park turn.
 - `park_turn_instruction` — the short ask after the park's state on a keeper turn: say a little, then make a real move.
 - `park_result_single` — what your one `> ` move actually did.

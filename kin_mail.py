@@ -135,8 +135,15 @@ def can_send(sender, to, now=None):
     return True, ""
 
 
-def send(sender, to_name, text, now=None):
-    """Send one message. Returns (ok, what to tell the sender)."""
+def send(sender, to_name, text, now=None, prompted=False):
+    """Send one message. Returns (ok, what to tell the sender).
+
+    `prompted`: written in a conversation with the person there (the desktop,
+    or their own direct message), so probably at their asking. It doesn't
+    count against the daily limit, which exists for kin writing to each
+    other with nobody watching. The other kin's answer, written later on its
+    own, still counts against ITS limit. Not recorded separately either: the
+    tool call or the block in the reply is already in that conversation."""
     now = now or datetime.datetime.now()
     body = str(text or "").strip()
     to = resolve_kin(to_name, sender)
@@ -148,9 +155,13 @@ def send(sender, to_name, text, now=None):
                        "The others in this house are: " + ", ".join(names) + ".")
     if not body:
         return False, "the message was empty, so nothing was sent."
-    ok, why = can_send(sender, to, now)
-    if not ok:
-        return False, why
+    if per_day(sender) <= 0:
+        return False, ("your person hasn't set you up to write to other kin "
+                       "(you may write 0 messages a day).")
+    if not prompted:
+        ok, why = can_send(sender, to, now)
+        if not ok:
+            return False, why
     stamp = now.strftime("%Y-%m-%d %H:%M")
     try:
         f = pair_file(sender, to)
@@ -158,31 +169,47 @@ def send(sender, to_name, text, now=None):
             f"# {sender} and {to}\n\nEverything these two kin have written to "
             "each other, oldest first.\n\n")
         with open(f, "a", encoding="utf-8") as fh:
-            fh.write(f"{head}## {stamp}, {sender} to {to}\n\n{body}\n\n")
+            fh.write(f"{head}## {stamp}, {sender} to {to}"
+                     + (", in a conversation with their person" if prompted
+                        else "") + f"\n\n{body}\n\n")
         state = _load_state()
-        key = _pair_key(sender, to)
-        st = state.get(key) or {}
-        if st.get("day") != _today(now):
-            st = {"day": _today(now), "sent_by": []}
-        st["sent_by"] = list(st.get("sent_by") or []) + [sender]
-        state[key] = st
+        if not prompted:
+            key = _pair_key(sender, to)
+            st = state.get(key) or {}
+            if st.get("day") != _today(now):
+                st = {"day": _today(now), "sent_by": []}
+            st["sent_by"] = list(st.get("sent_by") or []) + [sender]
+            state[key] = st
         waiting = state.setdefault("waiting", [])
         waiting.append({"from": sender, "to": to, "at": stamp, "text": body})
         _save_state(state)
     except Exception as e:
         _log(sender, "send", e)
         return False, f"it couldn't be saved ({e}), so nothing was sent."
-    _record(sender, {"role": "assistant", "content": body,
-                     "ts": now.isoformat(timespec="seconds"),
-                     "source": f"kin_message:{to}"})
-    return True, (f"your message is with {to}. They'll be given it at their "
-                  f"next heartbeat or wake-up, and can answer.")
+    if not prompted:
+        _record(sender, {"role": "assistant", "content": body,
+                         "ts": now.isoformat(timespec="seconds"),
+                         "source": f"kin_message:{to}"})
+    return True, (f"your message is with {to}. They'll be given it the next "
+                  f"time they wake, or talk with their person, and can "
+                  f"answer.")
 
 
-def take_waiting(kin_name):
+def waiting_row(w):
+    """How a delivered message sits in the recipient's conversation: as words
+    from the kin who wrote, marked so they're never mistaken for the person."""
+    return {"role": "user", "content": w["text"],
+            "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+            "sender_name": f"{w['from']}, another kin in this house",
+            "source": f"kin_message:{w['from']}"}
+
+
+def take_waiting(kin_name, record=True):
     """Messages waiting for this kin, removed from the queue. Each is also
     recorded in the kin's own conversation, so it's remembered even where the
-    turn that delivers it isn't kept (a heartbeat)."""
+    turn that delivers it isn't kept (a heartbeat). `record=False` for the
+    desktop, which holds the open kin's conversation in memory and adds the
+    rows itself (writing behind its back would be lost at its next save)."""
     try:
         state = _load_state()
     except Exception:
@@ -198,12 +225,9 @@ def take_waiting(kin_name):
     except Exception as e:
         _log(kin_name, "deliver", e)
         return []
-    for w in mine:
-        _record(kin_name, {"role": "user", "content": w["text"],
-                           "ts": datetime.datetime.now().isoformat(
-                               timespec="seconds"),
-                           "sender_name": w["from"],
-                           "source": f"kin_message:{w['from']}"})
+    if record:
+        for w in mine:
+            _record(kin_name, waiting_row(w))
     return mine
 
 
@@ -214,29 +238,48 @@ def take_waiting(kin_name):
 _DELIVERED = {}
 
 
-def waiting_block(kin_name):
+def waiting_block(kin_name, in_chat=False):
     """The note put at the start of a heartbeat or wake-up when another kin
-    has written. "" when nothing is waiting."""
+    has written. "" when nothing is waiting.
+
+    `in_chat`: given in a conversation with the person instead (their own
+    direct message), where no answer is sent by guesswork -- the kin answers
+    with the tool or a block, and the person is right there."""
     mine = take_waiting(kin_name)
     if not mine:
         return ""
-    _DELIVERED[str(kin_name).casefold()] = {w["from"] for w in mine}
+    if not in_chat:
+        _DELIVERED[str(kin_name).casefold()] = {w["from"] for w in mine}
     parts = []
     for w in mine:
         frm = w["from"]
-        can, _ = can_send(kin_name, frm)
-        how = (f"You can answer {frm}: message_kin with "
-               f"to=\"{frm}\", or a block that opens ```to:{frm}."
-               if can else f"You've already written to {frm} today.")
-        parts.append(f"[hearthkin: {frm}, another kin in this house, wrote to "
-                     f"you ({w['at']}):]\n\n{w['text']}\n\n[hearthkin: {how}]")
+        can = True if in_chat else can_send(kin_name, frm)[0]
+        slug = "kin_message_waiting" if can else "kin_message_waiting_limit"
+        # {message} last, so a message containing "{from}" stays as written.
+        parts.append(_prompt(slug, kin_name)
+                     .replace("{from}", frm).replace("{time}", w["at"])
+                     .replace("{message}", w["text"]))
     return "\n\n".join(parts)
 
 
-def send_fences(sender, reply_text, now=None):
+def _prompt(slug, kin):
+    """An editable note (~/.hearthkin/prompts/<slug>.md, or the kin's own),
+    like every other note Hearthkin gives a kin."""
+    from kin_persistence import load_app_prompt
+    return load_app_prompt(slug, kin)
+
+
+def send_fences(sender, reply_text, now=None, prompted=False):
     """Send every ```to:Name block in a reply. Returns a plain note for the
     kin's history saying what went and what didn't, or "" when the reply had
     none. The same shape works for a kin with tools or without."""
+    return handle_reply(sender, reply_text, now, prompted)[0]
+
+
+def handle_reply(sender, reply_text, now=None, prompted=False):
+    """send_fences, also saying how many messages actually went: (note,
+    count). The count is what a caller checks, never the note's wording,
+    which the person can change."""
     found = FENCE_RE.findall(reply_text or "")
     wrote_to_me = _DELIVERED.pop(str(sender).casefold(), set())
     if not found:
@@ -248,18 +291,21 @@ def send_fences(sender, reply_text, now=None):
         # Kimi, and its reply opens by speaking to Kimi. So it goes, once,
         # and only to the kin who wrote this turn.
         to = addressed_kin(reply_text, sender)
-        if to and to in wrote_to_me and can_send(sender, to, now)[0]:
+        if (not prompted and to and to in wrote_to_me
+                and can_send(sender, to, now)[0]):
             ok, said = send(sender, to, reply_text, now)
             if ok:
-                return (f"[hearthkin: your reply spoke to {to}, who had just "
-                        f"written to you, so it was sent to {to}. {said}]")
-        return ""
-    bits = []
+                return (_prompt("kin_message_answer_sent", sender)
+                        .replace("{to}", to), 1)
+        return "", 0
+    bits, sent = [], 0
     for name, body in found:
-        ok, said = send(sender, name, body, now)
+        ok, said = send(sender, name, body, now, prompted=prompted)
+        sent += 1 if ok else 0
         who = resolve_kin(name, sender) or str(name).strip()
         bits.append(f"to {who}: " + ("sent; " if ok else "NOT sent; ") + said)
-    return "[hearthkin: from your reply, " + " | ".join(bits) + "]"
+    return (_prompt("kin_message_receipt", sender)
+            .replace("{results}", " | ".join(bits)), sent)
 
 
 def addressed_kin(text, sender):
