@@ -3397,12 +3397,12 @@ class TelegramBot:
             if arg.strip().lower() != "confirm":
                 self._send_chunked(
                     chat_id,
-                    f"⚠️ Your conversation with {self.agent_name} is "
-                    f"shared with the Hearthkin desktop. /clear here "
-                    f"will wipe the conversation file the desktop "
-                    f"reads + writes too. Memory.md stays.\n\n"
-                    f"To confirm, send: /clear confirm\n"
-                    f"To archive instead of wiping, send: /new\n"
+                    f"⚠️ This chat with {self.agent_name} is the same "
+                    f"conversation as on the Hearthkin desktop. /clear "
+                    f"empties it everywhere, not just here. A copy is kept "
+                    f"on the computer, and {self.agent_name}'s memory "
+                    f"stays.\n\n"
+                    f"To go ahead, send: /clear confirm\n"
                     f"To cancel, send any other message."
                 )
                 return
@@ -3419,19 +3419,45 @@ class TelegramBot:
                     self.agent_name, [], len(current),
                 )
             except Exception:
-                pass
+                # Includes a copy that couldn't be kept: then nothing was
+                # emptied (keep_copy_before_big_rewrite), and saying it
+                # was would be false.
+                self._send_chunked(
+                    chat_id,
+                    f"Couldn't clear the conversation with "
+                    f"{self.agent_name}: a copy couldn't be kept first, so "
+                    f"nothing was emptied."
+                )
+                return
             self._last_thinking.pop(user_id, None)
             self._send_chunked(
                 chat_id,
-                f"Cleared the shared conversation with {self.agent_name}. "
-                f"The desktop and any other sharing user will see an "
-                f"empty conversation now. Memory file is untouched."
+                f"Cleared the conversation with {self.agent_name}, here "
+                f"and on the desktop. A copy is kept on the computer, in "
+                f"{self.agent_name}'s backups, in the cleared folder. "
+                f"Memory is untouched."
             )
             return
 
-        # Non-share path: just the per-user slice. _histories_lock so
-        # an inference worker writing a new turn simultaneously can't
-        # be lost (audit T1). Key via _hkey (audit DH1).
+        # Non-share path: just the per-user slice. It's archived first, as
+        # /new does (23 Nov 2026: no clear loses a conversation); if the
+        # archive can't be written, nothing is cleared. _histories_lock so
+        # an inference worker writing a new turn simultaneously can't be
+        # lost (audit T1). Key via _hkey (audit DH1).
+        with self._histories_lock:
+            history = list(self._histories.get(_hkey(user_id)) or [])
+        if history:
+            try:
+                if not self._archive_telegram_history(user_id, history):
+                    raise OSError("archive not written")
+            except Exception:
+                self._send_chunked(
+                    chat_id,
+                    f"Couldn't clear your conversation with "
+                    f"{self.agent_name}: a copy couldn't be kept first, so "
+                    f"nothing was emptied."
+                )
+                return
         with self._histories_lock:
             self._histories.pop(_hkey(user_id), None)
             try:
@@ -3443,7 +3469,7 @@ class TelegramBot:
             chat_id,
             f"Cleared your conversation history with {self.agent_name}. "
             "They won't remember anything from before this message. "
-            "Memory file is untouched."
+            "A copy is kept on the computer. Memory is untouched."
         )
 
     def _cmd_new(self, user_id, chat_id):

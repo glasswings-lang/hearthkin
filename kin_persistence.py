@@ -6440,7 +6440,75 @@ def save_agent_conversation(name, conversation):
             except (TypeError, ValueError):
                 continue
         text = "\n".join(lines) + ("\n" if lines else "")
+        keep_copy_before_big_rewrite(name, path, len(lines))
         atomic_write_text(path, text)
+
+
+# NO CLEAR LOSES A CONVERSATION (23 Nov 2026). Only Telegram's /new saved a
+# copy before emptying a kin's conversation; the desktop's Clear, /clear on
+# Telegram and Discord, and a reset kept nothing. A scare over a kin's whole
+# March-to-November history (it turned out /new had saved it) made the gap
+# plain. Now every full rewrite that would take away a lot (more than
+# CLEAR_COPY_MIN messages, or more than half of them) copies the file into
+# the kin's backups/cleared/ first, whichever button or command asked for it.
+# Undo and regenerate take away one or two and copy nothing. The copies are
+# never trimmed automatically: they are someone's history.
+CLEAR_COPY_MIN = 10
+
+
+def cleared_copies_dir(name):
+    return agent_dir(name) / "backups" / "cleared"
+
+
+def keep_copy_before_big_rewrite(name, path, new_count):
+    """Copy `path` (a conversation.jsonl) aside before a rewrite down to
+    `new_count` messages, if that takes away a lot. Returns the copy's path,
+    or None when no copy was needed. If a needed copy can't be made it
+    RAISES, so the rewrite doesn't happen: nothing is destroyed that wasn't
+    kept."""
+    if not path.exists() or path.stat().st_size == 0:
+        return None
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        old_count = sum(1 for ln in f if ln.strip())
+    dropped = old_count - max(0, int(new_count))
+    if dropped <= 0 or (dropped <= CLEAR_COPY_MIN and dropped * 2 <= old_count):
+        return None
+    try:
+        d = cleared_copies_dir(name)
+        d.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        dest = d / f"conversation-{stamp}-{old_count}-messages.jsonl"
+        n = 1
+        while dest.exists():
+            n += 1
+            dest = d / f"conversation-{stamp}-{old_count}-messages-{n}.jsonl"
+        shutil.copy2(path, dest)
+        return dest
+    except Exception as e:
+        try:
+            append_failure_log("save_failures.log", name,
+                               "keep_copy_before_big_rewrite", e)
+        except Exception:
+            pass
+        raise
+
+
+def keep_cleared_copy(name, label, messages):
+    """Write `messages` (what a clear is about to take away) to the kin's
+    backups/cleared/ as JSON, named with `label` and the time. Returns the
+    path. Raises if it can't, so the caller can refuse to clear."""
+    d = cleared_copies_dir(name)
+    d.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(label))[:60] or "cleared"
+    dest = d / f"{safe}-{stamp}-{len(messages)}-messages.json"
+    n = 1
+    while dest.exists():
+        n += 1
+        dest = d / f"{safe}-{stamp}-{len(messages)}-messages-{n}.json"
+    atomic_write_json(dest, {"agent_name": name, "cleared_at": now_iso(),
+                             "label": str(label), "messages": messages})
+    return dest
 
 
 def append_agent_conversation_turn(name, msg, raise_on_failure=False):

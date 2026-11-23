@@ -1143,26 +1143,34 @@ class DiscordBot:
 
     def _clear_channel(self, channel_id, share):
         """Wipe this channel's conversation. Returns how many messages went."""
+        # What it takes away is copied first (23 Nov 2026: no clear loses a
+        # conversation). If the copy can't be written this raises and
+        # nothing is cleared.
         from kin_persistence import (
             _get_conversation_lock, load_agent_conversation,
             save_agent_conversation, load_discord_history,
-            save_discord_history)
+            save_discord_history, keep_cleared_copy)
         with _get_conversation_lock(self.agent_name):
             if share:
                 src = f"discord:{channel_id}"
                 conv = list(load_agent_conversation(self.agent_name) or [])
-                kept = [m for m in conv
-                        if not (isinstance(m, dict)
-                                and m.get("source") == src)]
-                gone = len(conv) - len(kept)
-                if gone:
+                kept, going = [], []
+                for m in conv:
+                    (going if isinstance(m, dict) and m.get("source") == src
+                     else kept).append(m)
+                if going:
+                    keep_cleared_copy(self.agent_name,
+                                      f"discord-{channel_id}", going)
                     save_agent_conversation(self.agent_name, kept)
-                return gone
+                return len(going)
             data = load_discord_history(self.agent_name) or {}
-            gone = len(data.pop(str(channel_id), None) or [])
-            if gone:
+            going = list(data.get(str(channel_id)) or [])
+            if going:
+                keep_cleared_copy(self.agent_name,
+                                  f"discord-{channel_id}", going)
+                data.pop(str(channel_id), None)
                 save_discord_history(self.agent_name, data)
-            return gone
+            return len(going)
 
     # /compact, as on Telegram and the desktop (12 Nov 2026): the kin writes
     # itself a note, the person reads it here, "/compact confirm" puts a
@@ -1401,14 +1409,23 @@ class DiscordBot:
                     ch,
                     "This conversation is shared with the Hearthkin desktop, "
                     "so clearing it takes these messages away there too. "
+                    "A copy is kept on the computer, and "
                     f"{self.agent_name}'s memory stays.\n"
                     "To go ahead, send: /clear confirm")
                 return
-            self._clear_channel(ch.id, share)
+            try:
+                self._clear_channel(ch.id, share)
+            except Exception:
+                await self._send_chunked(
+                    ch,
+                    "Couldn't clear: a copy couldn't be kept first, so "
+                    "nothing was taken away.")
+                return
             await self._send_chunked(
                 ch,
                 f"Cleared. {self.agent_name} won't remember anything said "
-                "here before this. Its memory is untouched.")
+                "here before this. A copy is kept on the computer. Its "
+                "memory is untouched.")
         elif name == "compact":
             await self._cmd_compact(message, arg, share)
         elif name in ("regen", "regenerate", "retry"):

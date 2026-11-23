@@ -6,6 +6,7 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Added
 
+- **No clear loses a conversation any more.** Only Telegram's `/new` used to save a copy before emptying a kin's conversation. The desktop's Clear, `/clear` on Telegram and Discord, and anything else that took most of a conversation away kept nothing. Now every one of them copies what it takes into the kin's `backups/cleared/` folder first, and says so. If the copy can't be written, nothing is cleared. Undo and regenerate, which take one or two messages, make no copy. The Telegram warning before a shared `/clear` is in plain words now: it empties the conversation everywhere, not just in Telegram.
 - **Changing a kin's settings file by hand while Hearthkin is open no longer gets undone.** The app wrote its whole copy of the settings back on every save, so an edit made meanwhile, by hand, by a coding helper or by a wake-up, vanished at the next save. Now a save writes only what it changed itself and keeps the rest of the file as it is. The open app may still use its old value until you switch to that kin again or restart; wake-ups and heartbeats read the file fresh.
 - **"Cron" is now "wake-up" everywhere you or a kin see it:** the Wake-ups tab in a kin's settings, its buttons and test messages, the usage window, prompt names, journal headings, the kin manual and the shipped base prompt. Names inside the code, and the Windows scheduled tasks, are unchanged so existing wake-ups keep running.
 

@@ -1748,4 +1748,7 @@ class ChatStreamMixin:
         self.current_convo_file = None
         self._persist_current_conversation()
         self._update_token_display()
-        self._set_status("Conversation cleared.")
+        # The save above copies the old conversation into the kin's
+        # backups/cleared/ first (keep_copy_before_big_rewrite).
+        self._set_status("Conversation cleared. A copy is kept in the "
+                         "kin's backups, in the cleared folder.")
