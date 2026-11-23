@@ -370,6 +370,10 @@ Every editable harness prompt is listed here by the name its file goes by (`prom
 - `toolless_missed_write` — for a kin with no tools: nothing was saved, and the shape that works, so you can do it now.
 - `toolless_memory_receipt` — for a kin with no tools: what your fenced blocks saved, what was refused, and which staging scopes were archived.
 
+**Who's at the front**
+
+- `fronting_line` — on a heartbeat or a wake-up, when your person has set who's fronting in the chat your `reach_out` would land in: who was at the front there last. Only the fact; what you do with it is yours. Nothing is said when nobody is set.
+
 **Other kin**
 
 - `kin_message_waiting` — another kin's message, with who wrote it and when, and how you can answer. On a wake-up or heartbeat it comes at the start; in a conversation with your person, just before their message.

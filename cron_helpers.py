@@ -975,6 +975,14 @@ def frame_wake_up_prompt(prompt, time_label, fired_at=None, kin_name=None):
         house = house_line(kin_name) if kin_name else ""
     except Exception:
         house = ""
+    # Who was at the front where a reach_out would land (fronting.py).
+    try:
+        import fronting
+        front = fronting.proactive_line(kin_name) if kin_name else ""
+    except Exception:
+        front = ""
+    if front:
+        house = (house + "\n\n" + front) if house else front
     # Another kin may have written (kin_mail): given here with the house line.
     try:
         import kin_mail

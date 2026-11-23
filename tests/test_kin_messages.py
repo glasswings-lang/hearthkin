@@ -198,9 +198,18 @@ check("in the person's own chat, the kin can write to another kin",
 pschema = present[0]["function"]["parameters"]["properties"]
 check("...and whether it counts is the framework's, never the model's",
       "kin_mail_prompted" not in pschema)
+# Counted by what the tool actually adds, not by whether today happens to be free:
+# day2 above IS 23 Nov 2026, and on that real date the earlier test message filled
+# today's one (found 23 Nov 2026, when the suite ran on that day).
+def _ash_sent_today():
+    st = kin_mail._load_state().get(kin_mail._pair_key("Ash", "Opal")) or {}
+    if st.get("day") != kin_mail._today(datetime.datetime.now()):
+        return 0
+    return sum(1 for s in st.get("sent_by") or [] if s.casefold() == "ash")
+_before_tool = _ash_sent_today()
 ex["message_kin"]({"to": "Opal", "message": "From the desktop."})
 check("...and what it writes there isn't counted",
-      kin_mail.can_send("Ash", "Opal", datetime.datetime.now())[0])
+      _ash_sent_today() == _before_tool)
 fence_note = kin_mail.send_fences("Ash", "```to:Opal\nhi from chat\n```", day4,
                                   prompted=True)
 check("a to: block in the person's chat is sent, uncounted",

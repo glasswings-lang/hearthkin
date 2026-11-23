@@ -112,3 +112,32 @@ def stamp(row, kin, place):
     except Exception:
         pass
     return row
+
+
+def proactive_line(kin):
+    """For a heartbeat or a wake-up: who was last at the front in the chat a
+    reach_out from this kin would land in, as the editable fronting_line says it.
+    "" when nobody is set there (23 Nov 2026). Only the fact; what the kin does
+    with it is its own."""
+    try:
+        from kin_persistence import (load_agent_config, load_app_prompt,
+                                     DEFAULT_FRONTING_LINE)
+        cfg = load_agent_config(kin) or {}
+        dest = (cfg.get("heartbeat") or {}).get("destination") or {"surface": "desktop"}
+        surface = str(dest.get("surface") or "desktop")
+        # A reach_out place is "telegram_dm" / "telegram_group" / "discord_dm" /
+        # "discord_channel" with the chat's id; fronting keys a chat as
+        # "telegram:<chat id>" or "discord:<channel id>". A Telegram DM's chat id IS
+        # the person's id, so those meet. A Discord DM's reach_out id is the person
+        # and not the DM channel, so there it stays unsaid rather than guessed.
+        app = surface.split("_")[0]
+        place = "desktop" if app == "desktop" else f"{app}:{dest.get('id', '')}"
+        who = get(kin, place)
+        if not who:
+            return ""
+        where = {"telegram": "on Telegram", "discord": "on Discord"}.get(
+            app, "in the desktop chat")
+        line = load_app_prompt("fronting_line", kin) or DEFAULT_FRONTING_LINE
+        return line.replace("{where}", where).replace("{who}", who)
+    except Exception:
+        return ""

@@ -4153,6 +4153,17 @@ DEFAULT_HEARTBEAT_FRAME = (
     'Saying nothing is complete in itself and leaves no trace.'
 )
 
+# Who was at the front where a heartbeat or wake-up would reach out (23 Nov 2026).
+# A heartbeat said "reach out to your person" and never who that was, so a kin wrote
+# to its person by name about "a little one" of theirs, and the little one, reading
+# it, felt talked about while standing right there. The person wanted it open: the
+# fact only, nothing about what to do with it (fronting.proactive_line). Absent when
+# nobody is set.
+DEFAULT_FRONTING_LINE = (
+    "The last time you talked with your person {where}, the one at the front "
+    "was: {who}."
+)
+
 # The park hint for a shared space (a room, a Telegram group, a Discord
 # channel), where one move runs per reply and there's no going on after it.
 # The private-chat hint promises "as many times as you like", which was wrong
@@ -5160,6 +5171,19 @@ APP_PROMPT_REGISTRY = {
                 "becomes the inbox's full path. v3 (22 Nov 2026): names "
                 "message_kin and the ```to: block for writing to another "
                 "kin, and that reach_out never goes to one.",
+    },
+    "fronting_line": {
+        "default": DEFAULT_FRONTING_LINE,
+        "version": 1,
+        "placeholders": ["{where}", "{who}"],
+        "title": "Who was fronting (heartbeats and wake-ups)",
+        "desc": "Given at the start of a heartbeat or a wake-up when the person "
+                "has set who's fronting in the chat a reach_out would land in "
+                "(/front, or Chat, Who's fronting). Only the fact: who was at the "
+                "front there last, so a plural person isn't written to as someone "
+                "else. {where} is 'on Telegram', 'on Discord' or 'in the desktop "
+                "chat'; {who} is exactly what they typed. Nothing is said when "
+                "nobody is set. 23 Nov 2026.",
     },
     "park_chat_hint_shared": {
         "default": DEFAULT_PARK_CHAT_HINT_SHARED,

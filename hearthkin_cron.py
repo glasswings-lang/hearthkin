@@ -1833,6 +1833,14 @@ def run_heartbeat(kin, cfg, should_stop=None):
                                 str(_ad(kin).parent / "inbox.md"))
         from kin_persistence import house_line
         _house = house_line(kin)
+        # Who was at the front where a reach_out would land (fronting.py).
+        try:
+            import fronting
+            _front = fronting.proactive_line(kin)
+        except Exception:
+            _front = ""
+        if _front:
+            _house = (_house + "\n\n" + _front) if _house else _front
         # Another kin may have written (kin_mail). Given here, at the start,
         # with the house line, and recorded in the kin's own conversation.
         try:

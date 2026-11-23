@@ -192,6 +192,30 @@ check("a room is a conversation of its own",
       fronting.get("Den", "room") == "Juniper"
       and fronting.get("Wren", "desktop") != "Juniper")
 
+# --- heartbeats and wake-ups know who was at the front (23 Nov 2026) ---------
+# A heartbeat said "your person" and never who, so a kin wrote to its person by
+# name about one of them who was, in fact, the one reading it. Only the fact is given.
+from kin_persistence import create_agent, load_agent_config, save_agent_config  # noqa: E402
+fronting.set_everywhere(False)
+create_agent("Moss", blank_soul=True)
+_c = load_agent_config("Moss") or {}
+_c.setdefault("heartbeat", {})["destination"] = {"surface": "telegram_dm", "id": "4242"}   # as reach_places stores it
+save_agent_config("Moss", _c)
+check("nobody set where it would reach out: nothing is said",
+      fronting.proactive_line("Moss") == "")
+fronting.set("Moss", "telegram:4242", "Fern")
+_line = fronting.proactive_line("Moss")
+check("set there: the heartbeat hears who, and where",
+      "Fern" in _line and "on Telegram" in _line)
+check("...only the fact, nothing about what to do with it",
+      not any(w in _line.lower() for w in ("write to", "don't", "should")))
+fronting.set("Moss", "desktop", "Juniper")
+check("a different chat's fronting is not mixed in",
+      "Juniper" not in fronting.proactive_line("Moss"))
+import cron_helpers  # noqa: E402
+_w = cron_helpers.frame_wake_up_prompt("check the garden", "09:00", kin_name="Moss")
+check("a wake-up carries the same line", "Fern" in _w)
+
 if _fails:
     print(f"{len(_fails)} FAILED: " + "; ".join(_fails))
     sys.exit(1)
