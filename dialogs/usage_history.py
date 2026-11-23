@@ -62,7 +62,7 @@ class UsageHistoryDialog(wx.Dialog):
             value=(
                 "Usage history is a per-call log of every model "
                 "invocation Hearthkin made — desktop chat, rooms, "
-                "Telegram, distillation, cron, all of it. The cost "
+                "Telegram, distillation, wake-ups, all of it. The cost "
                 "column is an OpenRouter-pricing-times-tokens "
                 "estimate; the OpenRouter dashboard remains the "
                 "authoritative billing record. Filter by date range "
@@ -159,7 +159,7 @@ class UsageHistoryDialog(wx.Dialog):
         outer.Add(self.bymodel_display, proportion=1,
                   flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
 
-        bysurface_label = wx.StaticText(self, label="By &surface (desktop / room / telegram / distill / cron):")
+        bysurface_label = wx.StaticText(self, label="By &surface (desktop / room / telegram / distill / wake-up):")
         bysurface_label.SetFont(font)
         self.bysurface_display = wx.TextCtrl(
             self,
@@ -170,7 +170,7 @@ class UsageHistoryDialog(wx.Dialog):
         # own name), so name it with them or a listening user never learns what
         # counts as a surface here.
         self.bysurface_display.SetName(
-            "Breakdown by surface (desktop / room / telegram / distill / cron)")
+            "Breakdown by surface (desktop / room / telegram / distill / wake-up)")
         outer.Add(bysurface_label, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         outer.Add(self.bysurface_display, proportion=1,
                   flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)

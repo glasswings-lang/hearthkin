@@ -36,6 +36,15 @@ rooms, Telegram, Discord, cron.
 
 ## Mandatory conventions
 
+### Editing a kin's settings files while Hearthkin is open
+Saves used to write the whole of `config.json` back from memory, silently
+losing hand edits (found by the owner, 23 Nov 2026). They now merge: a save
+writes only what its own copy changed, so a hand edit survives. But the open
+app may keep using its old value until the kin is reloaded or Hearthkin
+restarts (wake-ups and heartbeats read the disk fresh). Prefer changing it in
+the app; check for `pythonw.exe` and say which applies. `tools.json` is not
+merged: don't hand-edit it while the Tools window is open.
+
 ### Accessibility is not optional
 The primary user is blind and screen-reader-primary (NVDA). Accessibility
 regressions are correctness bugs.

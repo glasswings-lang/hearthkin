@@ -1037,6 +1037,12 @@ DEFAULT_AGENT_CONFIG = {
     # `remote_unattended_exec` — that one governs exec APPROVAL, this one
     # governs file PATHS; neither implies the other.
     "remote_unconfined_files": False,
+    # The same for scheduled wake-ups, and for heartbeats, which run with
+    # nobody watching (23 Nov 2026). Their own settings, one each, side by
+    # side: chat over Telegram may want direct paths while a kin acting on
+    # its own should not reach out.
+    "wakeup_unconfined_files": False,
+    "heartbeat_unconfined_files": False,
     # Scheduled wake-ups. Each entry: {"time": "HH:MM", "prompt": str,
     # "enabled": bool}. An empty list (the default) means no scheduling
     # configured. The Settings Cron section reads and writes this list;
@@ -1899,7 +1905,7 @@ Before you talk about something from before this conversation, or about a person
 
 The discipline:
 
-- **You are the arbiter of what becomes canonical memory.** The summarizer is your assistant, not your author. Read its notes during your tending ritual (your nightly cron entry, if you have one — or whenever you choose to tend), decide what's worth keeping, then write what you want into your logs and your index. Things you don't want to keep: skip them. Call `archive_staging` for each surface you've finished tending so the file moves out of the way.
+- **You are the arbiter of what becomes canonical memory.** The summarizer is your assistant, not your author. Read its notes during your tending ritual (your nightly wake-up, if you have one — or whenever you choose to tend), decide what's worth keeping, then write what you want into your logs and your index. Things you don't want to keep: skip them. Call `archive_staging` for each surface you've finished tending so the file moves out of the way.
 
 - **If the notes feel flattened or wrong, read the raw conversation.** The summarizer is small and fast, and sometimes it strips context that mattered or merges things that shouldn't be merged. You can pull the raw turns with `read_file` on `conversation.jsonl` and verify before you commit anything to your real memory. Trust your sense of "this got compressed wrong."
 
@@ -3138,7 +3144,7 @@ def _quarantine_corrupt_config(path, label, action, exc):
         pass
 
 
-def load_agent_config(name):
+def _load_agent_config_raw(name):
     path = agent_dir(name) / "config.json"
     if path.exists():
         # Read and parse are handled separately: an unreadable file
@@ -3261,10 +3267,87 @@ def think_effort_of(cfg):
     return "medium" if (cfg or {}).get("think", False) else "off"
 
 
+# SAVES KEEP WHAT SOMEONE ELSE CHANGED (23 Nov 2026). The running app holds a
+# kin's settings in memory and used to write the WHOLE file back on its next
+# save, so anything changed on disk meanwhile (a hand edit, a coding helper,
+# a wake-up in its own process) was silently lost. The owner caught it.
+#
+# Now every loaded config remembers what the disk said when it was read (its
+# base). A save writes only what THIS copy changed since then, on top of what
+# the disk says now: a key this copy changed takes this copy's value; a key it
+# didn't touch keeps the disk's, so the other change survives. Nested blocks
+# (telegram, discord, voice...) are merged the same way, key by key. If both
+# changed the same key, this save wins, as before. A copy with no base (built
+# by hand, or `dict(cfg)`) falls back to the last base this process saw for
+# that kin, and with none at all it writes as it always did.
+class _LoadedConfig(dict):
+    """A kin's config as loaded, carrying the disk's version it came from."""
+    __slots__ = ("_hk_base",)
+
+
+_CFG_SEEN = {}
+_CFG_SAVE_LOCK = threading.Lock()
+_MISSING = object()
+
+
+def _merge3(base, mine, theirs):
+    out = {}
+    for k in set(mine) | set(theirs) | set(base):
+        b = base.get(k, _MISSING)
+        m = mine.get(k, _MISSING)
+        t = theirs.get(k, _MISSING)
+        if isinstance(b, dict) and isinstance(m, dict) and isinstance(t, dict):
+            out[k] = _merge3(b, m, t)
+            continue
+        if m is not _MISSING and (b is _MISSING or m != b):
+            out[k] = m            # this copy changed it
+        elif m is _MISSING and b is not _MISSING:
+            continue              # this copy removed it
+        elif t is not _MISSING:
+            out[k] = t            # untouched here: the disk's value stands
+        elif m is not _MISSING and b is _MISSING:
+            out[k] = m
+    return out
+
+
+def load_agent_config(name):
+    cfg = _load_agent_config_raw(name)
+    base = copy.deepcopy(cfg)
+    _CFG_SEEN[name] = base
+    out = _LoadedConfig(cfg)
+    out._hk_base = base
+    return out
+
+
 def save_agent_config(name, cfg):
     agent_dir(name).mkdir(parents=True, exist_ok=True)
     cfg_path = agent_dir(name) / "config.json"
-    atomic_write_json(cfg_path, cfg)
+    with _CFG_SAVE_LOCK:
+        base = getattr(cfg, "_hk_base", None)
+        if base is None:
+            base = _CFG_SEEN.get(name)
+        to_write = cfg
+        if base is not None and cfg_path.exists():
+            try:
+                disk = _load_agent_config_raw(name)
+                to_write = _merge3(base, dict(cfg), disk)
+                # The holder of this copy sees the other change too, so the
+                # running app agrees with the file it just wrote.
+                for k, v in to_write.items():
+                    if cfg.get(k, _MISSING) != v:
+                        cfg[k] = copy.deepcopy(v)
+            except Exception as e:
+                to_write = cfg
+                try:
+                    append_failure_log("save_failures.log", name,
+                                       "save_agent_config merge", e)
+                except Exception:
+                    pass
+        atomic_write_json(cfg_path, dict(to_write))
+        seen = copy.deepcopy(dict(to_write))
+        _CFG_SEEN[name] = seen
+        if isinstance(cfg, _LoadedConfig):
+            cfg._hk_base = copy.deepcopy(seen)
     # config.json holds the Telegram and Discord bot tokens in cleartext. It
     # already lands at 0600 on POSIX because atomic_write_text writes through
     # a tempfile.mkstemp temp (0600) and os.replace carries that mode over —
@@ -4896,7 +4979,7 @@ APP_PROMPT_REGISTRY = {
         "version": 1,
         "placeholders": [],
         "title": "Staging status — nothing pending",
-        "desc": "Injected into a cron wake-up when staging is empty, so the "
+        "desc": "Injected into a wake-up when staging is empty, so the "
                 "kin knows without calling read_staging. Telling it not to "
                 "call or narrate a read is what breaks the 'pretend to tend "
                 "empty staging' loop.",
@@ -4906,7 +4989,7 @@ APP_PROMPT_REGISTRY = {
         "version": 1,
         "placeholders": ["{n}", "{plural}", "{scopes}"],
         "title": "Staging status — notes pending",
-        "desc": "Injected into a cron wake-up listing how many staging files "
+        "desc": "Injected into a wake-up listing how many staging files "
                 "are pending and for which surfaces, plus the tend sequence "
                 "(read_staging → write → archive_staging). {plural} is the "
                 "'s' for 'file(s)' and is supplied by code.",
@@ -5146,8 +5229,8 @@ APP_PROMPT_REGISTRY = {
         "default": DEFAULT_WAKE_UP_FRAME,
         "version": 1,
         "placeholders": ["{time}", "{day}", "{prompt}"],
-        "title": "Cron wake-up framing",
-        "desc": "Wraps a scheduled cron prompt so the kin reads it as its own "
+        "title": "Wake-up framing",
+        "desc": "Wraps a scheduled wake-up prompt so the kin reads it as its own "
                 "scheduler firing (with the time/date anchor), not a user "
                 "message.",
     },
@@ -5322,9 +5405,9 @@ APP_PROMPT_REGISTRY = {
         "version": 1,
         "placeholders": [],
         "title": "Tending retry (no tool fired)",
-        "desc": "Injected on a cron tend retry when staging had pending notes "
+        "desc": "Injected on a wake-up tend retry when staging had pending notes "
                 "but the kin called no tools. Outcome-based, no gesture "
-                "patterns. Fires only if the cron entry's retry count > 0.",
+                "patterns. Fires only if the wake-up's retry count > 0.",
     },
     "gesture_messages": {
         "default": DEFAULT_GESTURE_MESSAGES,
@@ -7300,7 +7383,7 @@ def clone_agent(src, dst):
             cfg["discord"] = {**DEFAULT_DISCORD_CONFIG}
         # Cron entries
         if cfg.get("cron_entries"):
-            reset_items.append(f"Cron entries ({len(cfg.get('cron_entries') or [])} entry/entries)")
+            reset_items.append(f"Scheduled wake-ups ({len(cfg.get('cron_entries') or [])} entry/entries)")
         cfg["cron_entries"] = []
         try:
             atomic_write_json(cfg_path, cfg)

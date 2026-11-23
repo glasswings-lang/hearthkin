@@ -1615,7 +1615,7 @@ class EditKinDialog(wx.Dialog):
         cron_header = wx.TextCtrl(
             host,
             value=(
-                "Cron / scheduled wake-ups. Each entry fires the kin at "
+                "Scheduled wake-ups. Each entry fires the kin at "
                 "a daily time via Windows Task Scheduler. Add multiple "
                 "entries for separate wake-ups (e.g. 8 AM 'what do I "
                 "want to do today' plus midnight 'what happened today'). "
@@ -1627,12 +1627,12 @@ class EditKinDialog(wx.Dialog):
             ),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP,
         )
-        cron_header.SetName("Cron section overview")
+        cron_header.SetName("Wake-ups section overview")
         cron_header.SetMinSize((-1, 120))
 
         self.cron_inject_check = wx.CheckBox(
             host,
-            label="&Inject cron wake-ups into the active conversation when Hearthkin is open",
+            label="&Inject wake-ups into the active conversation when Hearthkin is open",
         )
         self.cron_inject_check.SetValue(
             bool(self.cfg.get("cron_inject_when_running", True))
@@ -1704,7 +1704,7 @@ class EditKinDialog(wx.Dialog):
         self._refresh_heartbeat_note()
         host.SetSizer(cron_sizer)
         host.SetupScrolling(scroll_x=False, scroll_y=True)
-        self.notebook.AddPage(cron_panel, "Cron")
+        self.notebook.AddPage(cron_panel, "Wake-ups")
 
         # ─── Voice tab ───────────────────────────────────────────────
         voice_panel = scrolled.ScrolledPanel(self.notebook)
@@ -4748,7 +4748,7 @@ class EditKinDialog(wx.Dialog):
         if idx < 0 or idx >= len(entries):
             wx.MessageBox(
                 "Select an entry to edit.",
-                "Edit cron entry",
+                "Edit wake-up",
                 wx.OK | wx.ICON_INFORMATION,
                 self,
             )
@@ -4768,13 +4768,13 @@ class EditKinDialog(wx.Dialog):
         if idx < 0 or idx >= len(entries):
             wx.MessageBox(
                 "Select an entry to remove.",
-                "Remove cron entry",
+                "Remove wake-up",
                 wx.OK | wx.ICON_INFORMATION,
                 self,
             )
             return
         confirm = wx.MessageBox(
-            f"Remove cron entry {idx + 1}?\n\nThis also removes its "
+            f"Remove wake-up {idx + 1}?\n\nThis also removes its "
             f"Windows Task Scheduler entry. The entry can be re-added later.",
             "Confirm remove",
             wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT | wx.ICON_QUESTION,
@@ -4862,7 +4862,7 @@ class EditKinDialog(wx.Dialog):
         if idx < 0 or idx >= len(entries):
             wx.MessageBox(
                 "Select an entry to test.",
-                "Test cron entry",
+                "Test wake-up",
                 wx.OK | wx.ICON_INFORMATION,
                 self,
             )
@@ -4876,10 +4876,10 @@ class EditKinDialog(wx.Dialog):
         # _no_window_kwargs suppresses the console-window flash.
         self.cron_test_btn.Disable()
         self.frame._set_status(
-            f"Testing cron entry {idx + 1} for {self.kin}…")
+            f"Testing wake-up {idx + 1} for {self.kin}…")
         try:
             from audio import nvda_speak
-            nvda_speak("Testing cron entry. Running in the background — "
+            nvda_speak("Testing wake-up. Running in the background — "
                        "a dialog will report the result.")
         except Exception:
             pass
@@ -4915,18 +4915,18 @@ class EditKinDialog(wx.Dialog):
         parent = self if alive else None
         if kind == "timeout":
             wx.MessageBox(
-                "Cron subprocess took longer than 120 seconds. The wake-up "
+                "The wake-up took longer than 120 seconds. The wake-up "
                 "may have hit the model's own timeout or stalled on a "
                 "network call. Check ~/.hearthkin/logs/cron_errors.log.",
-                "Test cron — timeout",
+                "Test wake-up — timeout",
                 wx.OK | wx.ICON_WARNING,
                 parent,
             )
             return
         if kind == "launch":
             wx.MessageBox(
-                f"Could not launch cron subprocess:\n\n{payload}",
-                "Test cron — launch failed",
+                f"Could not start the wake-up:\n\n{payload}",
+                "Test wake-up — couldn't start",
                 wx.OK | wx.ICON_ERROR,
                 parent,
             )
@@ -4934,13 +4934,13 @@ class EditKinDialog(wx.Dialog):
         result = payload
         if result.returncode == 0:
             wx.MessageBox(
-                f"Cron wake-up fired. The reply was appended to:\n"
+                f"The wake-up ran. The reply was appended to:\n"
                 f"  • {self.kin}'s conversation\n"
                 f"  • the journal at memory/journal/<today>.md\n"
                 f"  • Telegram (if configured)\n\n"
                 f"If Hearthkin was already open for this kin, the wake-up "
                 f"was routed through the running app instead.",
-                "Test cron — fired",
+                "Test wake-up — ran",
                 wx.OK | wx.ICON_INFORMATION,
                 parent,
             )
@@ -4949,10 +4949,10 @@ class EditKinDialog(wx.Dialog):
             if len(tail) > 400:
                 tail = tail[:400] + "..."
             wx.MessageBox(
-                f"Cron returned exit {result.returncode}.\n\n"
+                f"The wake-up ended with error code {result.returncode}.\n\n"
                 f"Details in ~/.hearthkin/logs/cron_errors.log.\n\n"
                 f"{tail or '(no subprocess output)'}",
-                "Test cron — failed",
+                "Test wake-up — failed",
                 wx.OK | wx.ICON_ERROR,
                 parent,
             )

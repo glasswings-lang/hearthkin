@@ -59,7 +59,7 @@ Core ideas:
   via Windows Task Scheduler. A detector nudges a kin that *describes* a
   tool action instead of calling it.
 - **Multiple surfaces.** Desktop chat, multi-kin rooms, Telegram bot and
-  Discord bot (both with per-user tool gating), cron wake-ups that work
+  Discord bot (both with per-user tool gating), wake-ups that work
   whether the app is open or closed.
 - **Speak instead of typing.** Dictation puts what you say into the
   message box. By default it is free and offline: a Whisper model on
@@ -85,7 +85,7 @@ currently-intentional quirks — see [`ROADMAP.md`](ROADMAP.md).
 
 ## Requirements
 
-- Windows 10 or later (Linux/macOS will run the chat path; cron and
+- Windows 10 or later (Linux/macOS will run the chat path; wake-ups and
   some Windows-specific niceties won't)
 - Python 3.10 or later
 - [Ollama](https://ollama.ai) installed and running, with at least one

@@ -69,6 +69,8 @@ Migrated automatically from older `~/.ollama_chat/` if present.
 
 **The test runner writes only to a directory it just created, and REFUSES an inherited `HEARTHKIN_HOME`** (announced, not silent). `--keep` preserves and prints the sandbox. **The legacy `~/.ollama_chat` migration is skipped under the override.** Redirect a test with `HEARTHKIN_HOME`, never by patching `pathlib.Path.home`. Pinned by `tests/test_state_isolation.py`. → `docs/lessons.md`
 
+**Editing a kin's `config.json` while Hearthkin is open: saves now merge, but the open app may not USE the edit yet.** The owner caught saves silently writing over hand edits (23 Nov 2026). Since then `save_agent_config` writes only what its own copy changed since it was loaded, on top of the disk as it is now (`_merge3`; a config from `load_agent_config` carries its base), so a hand edit survives. But the running app still holds its copy in memory: wake-ups and heartbeats read the disk fresh, the desktop chat and the bots may keep the old value until the kin is reloaded or Hearthkin restarts. Prefer the app's own window; check `tasklist` for `pythonw.exe` and say which applies. `tools.json` has no merge: it's written whole when the Tools window saves, so never hand-edit it while that window is open. Pinned by `tests/test_config_save_merge.py`.
+
 - `kin/<KinName>/`
   - `soul.md` — persona prompt.
   - `memory.md` — kin-curated index. **Only the kin (via file tools) or the person (via Settings → Memory editor) writes this.** Nothing automatic touches it.

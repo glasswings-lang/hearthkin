@@ -521,7 +521,7 @@ def append_journal(agent_name, time_label, prompt, reply, fired_at=None):
     if fired_at is None:
         fired_at = datetime.datetime.now()
     block = (
-        f"\n## {time_label} — Cron wake-up\n\n"
+        f"\n## {time_label} — Wake-up\n\n"
         f"**Prompt:** {prompt}\n\n"
         f"**Reply:** {reply}\n\n---\n"
     )
@@ -950,7 +950,7 @@ def frame_wake_up_prompt(prompt, time_label, fired_at=None, kin_name=None):
 
     The framing is intentionally neutral about the *intent* of the cron
     (self-check-in vs research task vs maintenance) — that lives in the
-    prompt itself, written by the human in Settings → Cron. The harness
+    prompt itself, written by the human in Settings → Wake-ups. The harness
     only contributes the things only the harness knows: this is
     scheduled, not user input, and here's when it fired."""
     if fired_at is None:
@@ -1056,7 +1056,7 @@ def append_journal_error_marker(agent_name, time_label, prompt, error_summary, f
     if fired_at is None:
         fired_at = datetime.datetime.now()
     block = (
-        f"\n## {time_label} — Cron wake-up FAILED\n\n"
+        f"\n## {time_label} — Wake-up FAILED\n\n"
         f"**Prompt:** {prompt}\n\n"
         f"**Error:** {error_summary}\n\n"
         f"(Full details in `~/.hearthkin/logs/cron_errors.log`.)\n\n---\n"

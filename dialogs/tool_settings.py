@@ -138,6 +138,43 @@ class ToolSettingsDialog(wx.Dialog):
              "file and posting the contents back. Turn this ON when the "
              "remote surface is really just you.")
 
+        # Wake-ups and heartbeats: a box each, side by side (23 Nov 2026).
+        # The person uses direct paths in chat, but a kin "shouldn't be
+        # reaching on its own", so the remote box above doesn't decide these;
+        # never one setting for two surfaces.
+        self.wakeup_files_check = wx.CheckBox(
+            panel,
+            label="Let file tools on wa&ke-ups reach outside the kin folder")
+        self.wakeup_files_check.SetValue(
+            bool(cfg.get("wakeup_unconfined_files", False)))
+        self.wakeup_files_check.Bind(
+            wx.EVT_CHECKBOX,
+            lambda e: self._save_param("wakeup_unconfined_files",
+                                       e.IsChecked()))
+        sizer.Add(self.wakeup_files_check,
+                  flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+        self.heartbeat_files_check = wx.CheckBox(
+            panel,
+            label="Let file tools on heart&beats reach outside the kin folder")
+        self.heartbeat_files_check.SetValue(
+            bool(cfg.get("heartbeat_unconfined_files", False)))
+        self.heartbeat_files_check.Bind(
+            wx.EVT_CHECKBOX,
+            lambda e: self._save_param("heartbeat_unconfined_files",
+                                       e.IsChecked()))
+        sizer.Add(self.heartbeat_files_check,
+                  flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+        help("The two boxes above are for the times the kin acts on its own, "
+             "with nobody watching: scheduled wake-ups, and heartbeats. OFF "
+             "(default): its file "
+             "tools, and files it writes out in a reply, stay inside its own "
+             "folder; the kin inbox is the one shared file it can always use. "
+             "To give it something to read, put it in its folder. ON: it "
+             "reaches anywhere on this machine, as in desktop chat. A wake-up "
+             "can read web pages while nobody watches, which is why this is "
+             "off. Commands are separate: a wake-up's commands are turned off "
+             "with \"Leave these tools out of scheduled wake-ups\", below.")
+
         self.toolhist_field = row(
             "Tool &history kept:",
             lambda: _IntField(

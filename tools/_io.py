@@ -84,6 +84,31 @@ def atomic_write_text(path, content):
         raise
 
 
+def shared_inbox(agent_name):
+    """The one file outside a kin's own folder that every kin may use: the kin
+    inbox (~/.hearthkin/kin/inbox.md), where kin leave each other notes and
+    Hearthkin news is posted. The heartbeat and the base prompt both point
+    kin at it by its full path, so a fenced kin (Telegram, Discord, wake-ups,
+    heartbeats) was refused the very file it was told to read (23 Nov 2026,
+    found while fencing wake-ups). Returns the resolved path, or None."""
+    if not agent_name:
+        return None
+    try:
+        return (kin_dir(agent_name).parent / "inbox.md").resolve()
+    except Exception:
+        return None
+
+
+def _is_shared_inbox(path, agent_name):
+    box = shared_inbox(agent_name)
+    if box is None:
+        return False
+    try:
+        return Path(path).expanduser().resolve() == box
+    except Exception:
+        return False
+
+
 def path_within_kin(path, agent_name):
     """True iff `path` resolves inside the kin's own directory.
 
@@ -95,6 +120,8 @@ def path_within_kin(path, agent_name):
     if not agent_name:
         return False
     try:
+        if _is_shared_inbox(path, agent_name):
+            return True
         kin_root = kin_dir(agent_name).resolve()
         Path(path).resolve().relative_to(kin_root)
         return True
@@ -146,15 +173,20 @@ def resolve_kin_path(path_str, agent_name, confine=False):
         return None, "path was empty."
     p = Path(path_str).expanduser()
     if p.is_absolute():
+        if confine and _is_shared_inbox(p, agent_name):
+            return shared_inbox(agent_name), None
         if confine:
             return None, (
-                "absolute paths aren't allowed here — this surface "
-                "(Telegram/Discord) is restricted to your own kin folder. "
+                "absolute paths aren't allowed here — on Telegram, Discord, "
+                "wake-ups and heartbeats your file tools stay inside your own "
+                "kin folder (the kin inbox is the one exception). "
                 "Use a relative path like 'memory.md' or 'notes/today.md'. "
                 "If you need to reach outside the folder from here, the "
                 "operator can turn it on in Settings → Tools → Tool "
-                "settings → \"Let remote (Telegram/Discord) file tools "
-                "reach outside the kin folder\" — it is off by default. "
+                "settings: \"Let remote (Telegram/Discord) file tools "
+                "reach outside the kin folder\" for chats there, \"Let "
+                "file tools on wake-ups (or heartbeats) reach outside the "
+                "kin folder\" for those. All are off by default. "
                 "(The desktop chat is not restricted.)"
             )
         return p, None
@@ -166,6 +198,8 @@ def resolve_kin_path(path_str, agent_name, confine=False):
     if not kin_root.exists():
         return None, f"no kin directory for {agent_name!r}."
     target = (kin_root / p).resolve()
+    if _is_shared_inbox(target, agent_name):   # "../inbox.md"
+        return target, None
     try:
         target.relative_to(kin_root)
     except ValueError:

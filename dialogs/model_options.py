@@ -227,7 +227,7 @@ class MoreModelOptionsDialog(wx.Dialog):
                    "If a reply makes no progress for this long, it's declared "
                    "hung and cut loose instead of leaving the kin stuck at "
                    "“typing” forever. Covers every path — streaming "
-                   "chats, tool-using chats, and scheduled (cron) wake-ups. "
+                   "chats, tool-using chats, and scheduled wake-ups. "
                    "0 (auto) picks it from the model: OpenRouter 5 min; Ollama "
                    "scales with context (8k=5, 32k=8, 131k=20, capped 30). "
                    "Override only if your hardware consistently needs longer.")

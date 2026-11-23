@@ -256,6 +256,20 @@ def cfg_for_entry(cfg, entry):
     return dict(cfg, model=m) if m else cfg
 
 
+def wake_confine(cfg, heartbeat=False):
+    """True when a wake-up's or heartbeat's file tools stay inside the kin's
+    own folder (23 Nov 2026). Nobody is there to watch either one, and a
+    wake-up can carry fetch_url beside the file tools, so a page read on the
+    web could steer a kin into reading any file on the computer and sending
+    it out (a friend's review, "priority one"). Each has its own box, side by
+    side in Tool settings ("Let file tools on wake-ups / on heartbeats reach
+    outside the kin folder"), off by default; NOT Telegram's box, since the
+    person uses direct paths in chat but a kin "shouldn't be reaching on its
+    own". The kin inbox stays reachable (tools/_io.py)."""
+    key = "heartbeat_unconfined_files" if heartbeat else "wakeup_unconfined_files"
+    return not bool((cfg or {}).get(key))
+
+
 def _load_cron_tools(kin, model=None):
     """Load the kin's enabled tools, filter out the unsafe-for-cron set,
     and build (schemas, executor) ready for run_tool_loop. Returns
@@ -283,7 +297,8 @@ def _load_cron_tools(kin, model=None):
     try:
         schemas, executor = kin_tools.load_tools(
             safe_names,
-            context={"agent_name": kin},
+            context={"agent_name": kin,
+                     "confine_paths": wake_confine(cfg)},
             model=chat_model,
             cron_turn=True,  # a scheduled tend always gets its staging tools
         )
@@ -1208,7 +1223,10 @@ def _maybe_authoring_bridge_cron(kin, reply, safe_tools, shown_scopes=(),
         writes = authoring_bridge.extract_authoring_writes(reply)
         if not writes:
             return None, None
-        results = authoring_bridge.commit_authoring_writes(kin, writes)
+        # Same fence as the wake-up's file tools (wake_confine): a block
+        # written out in the reply must not reach where write_file can't.
+        results = authoring_bridge.commit_authoring_writes(
+            kin, writes, confine=wake_confine(load_agent_config(kin)))
         oks = [(p, d) for (p, ok, d) in results if ok]
         errs = [(p, d) for (p, ok, d) in results if not ok]
         note_bits, conf_bits = [], []
@@ -1784,6 +1802,12 @@ def _run_cron_park_turn(kin, reply, messages, model, options, cache,
 # fixed — a heartbeat is a quiet moment, not a work session.
 _HEARTBEAT_TOOLS = ["reach_out", "message_kin", "memory_search",
                     "recent_thinking"]
+# The heartbeat says "work on something of your own; your curious.md is where
+# you keep it" and names the kin inbox, but gave no way to open either (a
+# friend's review, 23 Nov 2026). The kin's own file tools come along, only the
+# ones it already has in chat, fenced to its own folder by wake_confine.
+_HEARTBEAT_FILE_TOOLS = ["read_file", "list_directory", "write_file",
+                         "edit_file"]
 
 
 def _log_heartbeat(kin, outcome):
@@ -1861,11 +1885,20 @@ def run_heartbeat(kin, cfg, should_stop=None):
             framed = DEFAULT_HEARTBEAT_FRAME
         except Exception:
             framed = "[This is a heartbeat. You may reach out with reach_out if you have something, or stay quiet.]"
-    names = [n for n in _HEARTBEAT_TOOLS if n in kin_tools.list_available()]
+    try:
+        _enabled = set(load_kin_tools(kin) or [])
+    except Exception:
+        _enabled = set()
+    names = [n for n in _HEARTBEAT_TOOLS + [t for t in _HEARTBEAT_FILE_TOOLS
+                                             if t in _enabled]
+             if n in kin_tools.list_available()]
     try:
         schemas, executor = kin_tools.load_tools(
-            names, context={"agent_name": kin}, model=model,
-            proactive_wake=True)
+            names,
+            context={"agent_name": kin,
+                     "confine_paths": wake_confine(load_agent_config(kin),
+                                                   heartbeat=True)},
+            model=model, proactive_wake=True)
     except Exception as e:
         _log_heartbeat(kin, f"skipped=tool-load-failed:{e}")
         return False
@@ -1927,11 +1960,16 @@ def run_heartbeat(kin, cfg, should_stop=None):
         return False
     # Did the kin reach out? Ground truth from the tool-loop's round-trips.
     fired = False
+    worked = False
     try:
         from chat_helpers import scan_intermediate_tool_content
         _, names_fired = scan_intermediate_tool_content(
             getattr(result, "messages_added", None) or [])
         fired = bool({"reach_out", "message_kin"} & set(names_fired))
+        # Writing in its own files IS one of the heartbeat's three choices
+        # ("work on something of your own"), so it is not asked afterwards
+        # whether it meant to send something (23 Nov 2026).
+        worked = bool({"write_file", "edit_file"} & set(names_fired))
     except Exception:
         fired = False
     # A ```to:Name block in the reply writes to that kin, with or without
@@ -1963,7 +2001,7 @@ def run_heartbeat(kin, cfg, should_stop=None):
     # So it is asked once, plainly, and a second refusal is honoured. One
     # extra model call, only on the path that currently loses everything.
     asked = False
-    if not fired and not getattr(result, "stopped", False):
+    if not fired and not worked and not getattr(result, "stopped", False):
         try:
             note = turn_steering.unsent_reach_note(
                 kin, getattr(result, "content", "") or "", names,
@@ -2019,6 +2057,8 @@ def run_heartbeat(kin, cfg, should_stop=None):
         pass
     if fired:
         _log_heartbeat(kin, "reached-out-after-nudge" if asked else "reached-out")
+    elif worked:
+        _log_heartbeat(kin, "worked-on-own")
     else:
         _log_heartbeat(kin, "silent-declined" if asked else "silent")
     return fired

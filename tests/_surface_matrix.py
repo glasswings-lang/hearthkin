@@ -991,9 +991,7 @@ CAPABILITIES = [
                 "confined either, so there's no rule for a fence to escape."),
             "telegram": Present(),
             "discord": Present(),
-            "cron": NotHere(
-                "The kin acting for itself on its own machine, like the "
-                "desktop; its file tools aren't confined there either."),
+            "cron": Present(),
         },
     ),
 

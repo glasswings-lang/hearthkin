@@ -22,7 +22,7 @@ class CronEntryDialog(wx.Dialog):
     def __init__(self, parent, kin, entry=None):
         super().__init__(
             parent,
-            title=f"Cron entry — {kin}",
+            title=f"Wake-up — {kin}",
             size=(560, 580),
             style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
         )
@@ -355,7 +355,7 @@ class CronEntryDialog(wx.Dialog):
         if not prompt:
             wx.MessageBox(
                 "Prompt can't be empty. The model needs something to "
-                "respond to when the cron fires.",
+                "respond to when the wake-up fires.",
                 "Missing prompt",
                 wx.OK | wx.ICON_ERROR,
                 self,
@@ -380,7 +380,7 @@ class CronEntryDialog(wx.Dialog):
             if clashes_by_time and self._overlap_ack_time != ack_key:
                 self._overlap_ack_time = ack_key
                 bits = [
-                    f"{t} overlaps {', '.join(ks)}'s cron"
+                    f"{t} overlaps {', '.join(ks)}'s wake-up"
                     for t, ks in sorted(clashes_by_time.items())
                 ]
                 msg = (
