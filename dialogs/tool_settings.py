@@ -274,7 +274,9 @@ class ToolSettingsDialog(wx.Dialog):
             enabled = list(load_kin_tools(kin_name) or []) if kin_name else []
         except Exception:
             enabled = []
-        self._wake_tool_names = sorted(set(enabled) | set(off_now))
+        from kin_persistence import wake_off_choices, proactive_on_for
+        self._wake_tool_names = wake_off_choices(
+            enabled, off_now, proactive_on_for(cfg))
         lbl = wx.StaticText(panel, label="&Leave these tools out of scheduled wake-ups:")
         sizer.Add(lbl, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
         self.wake_tools_off = TickList(panel, "Tools left out of wake-ups",

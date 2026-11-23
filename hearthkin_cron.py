@@ -301,6 +301,9 @@ def _load_cron_tools(kin, model=None):
                      "confine_paths": wake_confine(cfg)},
             model=chat_model,
             cron_turn=True,  # a scheduled tend always gets its staging tools
+            # The leave-out list also reaches reach_out and message_kin,
+            # which the wake-up grants itself (23 Nov 2026).
+            exclude=off,
         )
     except Exception as e:
         cron_helpers.log_cron_error(
@@ -1889,9 +1892,14 @@ def run_heartbeat(kin, cfg, should_stop=None):
         _enabled = set(load_kin_tools(kin) or [])
     except Exception:
         _enabled = set()
-    names = [n for n in _HEARTBEAT_TOOLS + [t for t in _HEARTBEAT_FILE_TOOLS
-                                             if t in _enabled]
-             if n in kin_tools.list_available()]
+    # memory_search and recent_thinking follow the kin's own Tools tab like
+    # the file tools (23 Nov 2026): they reached every heartbeat whether the
+    # kin had them or not, with no switch anywhere. reach_out and message_kin
+    # come from the heartbeat itself, minus any the kin has switched off
+    # (tools.load_tools).
+    names = [n for n in _HEARTBEAT_TOOLS + _HEARTBEAT_FILE_TOOLS
+             if n in kin_tools.list_available()
+             and (n in kin_tools._PROACTIVE_TOOLS or n in _enabled)]
     try:
         schemas, executor = kin_tools.load_tools(
             names,

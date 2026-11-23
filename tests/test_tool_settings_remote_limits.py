@@ -95,7 +95,9 @@ def main():
     check("the wake-up tools list is there", wake is not None)
     if wake is not None:
         names = [wake.GetString(i) for i in range(wake.GetCount())]
-        check("...listing the kin's switched-on tools", names == ["edit_file", "exec", "read_file"])
+        check("...listing the kin's switched-on tools, and reach_out and "
+              "message_kin, which every wake-up is given (23 Nov 2026)",
+              names == ["edit_file", "exec", "message_kin", "reach_out", "read_file"])
         check("...with exec ticked, as saved", [n for i, n in enumerate(names) if wake.IsChecked(i)] == ["exec"])
         panel = dlg.GetChildren()[0]
         check("...and it's a tab stop",

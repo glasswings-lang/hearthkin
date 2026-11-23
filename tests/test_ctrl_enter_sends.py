@@ -132,6 +132,12 @@ def _press(frame, target, ctrl, then):
             _set_ctrl(False)
             got = list(frame.calls)
             frame.calls.clear()
+            # What actually happened, printed every time: this test failed in
+            # full runs only, now and then, for several sessions, saying only
+            # that it failed (23 Nov 2026).
+            print("    (received %r; focus on the target: %s; window active: %s)"
+                  % (got, wx.Window.FindFocus() is target, frame.IsActive()),
+                  flush=True)
             try:
                 then(got)
             except Exception as e:

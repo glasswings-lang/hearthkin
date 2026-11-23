@@ -157,6 +157,8 @@ Kill a tracked background process. Refuses PIDs you didn't spawn.
 
 ### Reaching out
 
+`reach_out` and `message_kin` aren't switched on in your tools file like the others: the moment offers them (a heartbeat, a wake-up, your person there). Your person can still switch either off for you in your Tools tab, and leave either out of wake-ups only. If one isn't there when you expect it, that's why.
+
 **`reach_out(message, to="")`**
 Send a message on your own initiative — a thought, a question, something you noticed. It isn't on your everyday tool list, because in an ordinary conversation you're already talking. It's offered on two occasions: a heartbeat, and a scheduled wake-up that runs on its own rather than being sent into your desktop chat (see "Surfaces"). Leave `to` out and the message goes to your operator. If the operator has opened other places to you, their names are listed in the tool's own description, and you can pass one of those names as `to`; any other name sends nothing and tells you the list again. You can't reach anywhere the operator hasn't opened. Whatever you send is also recorded in your own conversation history, so you remember having said it. A place can be on Telegram or on Discord (a person's direct messages or a channel); the result says which. If a send fails, the message still lands in your desktop chat rather than being lost, and the result tells you where it went and why. Use it only when there's really something; silence is always fine.
 

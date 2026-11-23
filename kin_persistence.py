@@ -1043,6 +1043,11 @@ DEFAULT_AGENT_CONFIG = {
     # side: chat over Telegram may want direct paths while a kin acting on
     # its own should not reach out.
     "wakeup_unconfined_files": False,
+    # reach_out and message_kin, switched off in the kin's Tools tab (23 Nov
+    # 2026). They're granted by the moment (a heartbeat, a wake-up, the
+    # person there), not by tools.json, so being off is what's stored, and a
+    # kin that never touched them keeps them as before.
+    "proactive_tools_off": [],
     "heartbeat_unconfined_files": False,
     # Scheduled wake-ups. Each entry: {"time": "HH:MM", "prompt": str,
     # "enabled": bool}. An empty list (the default) means no scheduling
@@ -6969,6 +6974,29 @@ def _restash_telegram_user_remainder(name, user_id, remainder, bot=None):
             f"restash_telegram (LOST {len(remainder)} msgs)", e,
         )
 
+
+
+def wake_off_choices(enabled, off, proactive_on=()):
+    """The names offered in "Leave these tools out of scheduled wake-ups":
+    every tool a wake-up would be given (the kin's tools, and reach_out and
+    message_kin unless switched off for the kin), plus anything already left
+    out. One function so the window and tests/test_every_tool_has_a_switch.py
+    read the same rule. The proactive two were missing until 23 Nov 2026:
+    every wake-up got them and nobody could see or untick them."""
+    return sorted(set(enabled or []) | set(proactive_on or [])
+                  | set(off or []))
+
+
+def proactive_on_for(cfg):
+    """reach_out and message_kin as switched on for a kin (its config's
+    "proactive_tools_off" names the ones it has turned off)."""
+    try:
+        from tools import _PROACTIVE_TOOLS, list_available
+        have = set(list_available())
+    except Exception:
+        return []
+    off = set((cfg or {}).get("proactive_tools_off") or [])
+    return sorted(t for t in _PROACTIVE_TOOLS if t in have and t not in off)
 
 def load_kin_tools(name):
     """Load the kin's enabled-tools list from

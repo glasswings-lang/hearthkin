@@ -124,7 +124,9 @@ lst = getattr(dlg, "tool_list", None)
 names = getattr(dlg, "_tool_names", [])
 check("the Tools tab has one tick list of tools", isinstance(lst, TickList))
 everyday = [t for t in kin_tools.list_available() if t not in kin_tools._PROACTIVE_TOOLS]
-check("it lists every everyday tool, in order", names == everyday and lst.GetCount() == len(everyday))
+proactive = sorted(t for t in kin_tools._PROACTIVE_TOOLS if t in kin_tools.list_available())
+check("it lists every tool, everyday ones first, then reach_out and message_kin",
+      names == everyday + proactive and lst.GetCount() == len(everyday) + len(proactive))
 check("each item starts with the tool's name",
       all(lst.GetString(i).startswith(n) for i, n in enumerate(names)))
 check("no separate checkbox per tool is left",
@@ -137,8 +139,9 @@ on = everyday[:2]
 save_kin_tools(KIN, on)
 dlg = EditKinDialog(_Frame(None), KIN)
 lst, names = dlg.tool_list, dlg._tool_names
-check("ticks match the tools file when the window opens",
-      [names[i] for i in range(lst.GetCount()) if lst.IsChecked(i)] == on)
+check("ticks match the tools file when the window opens (the two kin-messaging "
+      "tools start ticked)",
+      [names[i] for i in range(lst.GetCount()) if lst.IsChecked(i)] == on + proactive)
 
 # A person ticks a third and unticks the first: saved at once.
 lst.CheckItem(2, True)

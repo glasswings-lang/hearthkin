@@ -167,7 +167,7 @@
         <li><a href="#telegram">The Telegram bot</a></li>
         <li><a href="#discord">The Discord bot</a></li>
         <li><a href="#voice">Voice — dictation, and kin speaking aloud</a></li>
-        <li><a href="#cron">Scheduled wake-ups (cron)</a></li>
+        <li><a href="#cron">Scheduled wake-ups</a></li>
         <li><a href="#prefs">Preferences and API keys</a></li>
         <li><a href="#editable-prompts">Editable prompts</a></li>
       </ol>
@@ -195,7 +195,7 @@
 
 <p>Hearthkin is a desktop chat application for talking with locally-running language models. The unit you talk to is a <strong>kin</strong> — a configured persona with its own identity prompt (the "soul"), its own kin-curated memory index, its own depth logs, its own chosen model, and its own optional set of tools. Each kin has a folder under <code>~/.hearthkin/kin/</code> that holds all of its state.</p>
 
-<p>You can chat with a kin one-on-one, or set up a <strong>room</strong> where two or more kin take turns speaking with you and each other. Kin can optionally call <strong>tools</strong> — things like reading and writing files, fetching web pages, running shell commands, or scheduling themselves to wake up at a specific time. Some surfaces are remote: a kin can run a <strong>Telegram bot</strong> so you can talk to it from your phone, and <strong>scheduled cron entries</strong> can fire the kin off on its own at set times.</p>
+<p>You can chat with a kin one-on-one, or set up a <strong>room</strong> where two or more kin take turns speaking with you and each other. Kin can optionally call <strong>tools</strong> — things like reading and writing files, fetching web pages, running shell commands, or scheduling themselves to wake up at a specific time. Some surfaces are remote: a kin can run a <strong>Telegram bot</strong> so you can talk to it from your phone, and <strong>scheduled wake-ups</strong> can fire the kin off on its own at set times.</p>
 
 <p>The default backend is <a href="https://ollama.ai">Ollama</a>, which runs models on your own machine — no conversation data leaves your computer. You can also give a kin a hosted model instead. <a href="https://openrouter.ai">OpenRouter</a> is built in, and you can add other online services yourself (see <a href="#providers">Adding online AI services</a>). When a kin uses a hosted model, its conversation goes over the internet to that service.</p>
 
@@ -204,7 +204,7 @@
 <h3>Requirements</h3>
 
 <ul>
-  <li>Windows 10 or later. (Linux and macOS will run the chat path; some Windows-specific niceties — Task Scheduler integration for cron, the no-window console flag for shell exec — won't apply, but nothing crashes.)</li>
+  <li>Windows 10 or later. (Linux and macOS will run the chat path; some Windows-specific niceties — Task Scheduler integration for wake-ups, the no-window console flag for shell exec — won't apply, but nothing crashes.)</li>
   <li><a href="https://ollama.ai">Ollama</a> installed and running, with at least one model pulled. <code>ollama pull qwen2.5:7b-instruct</code> is a reasonable starting model that runs comfortably on most modern laptops.</li>
   <li>Enough RAM/VRAM for the model you intend to run. 7B–8B models work on most laptops; 70B models need a workstation-class GPU.</li>
   <li>Python 3.10 or later — <strong>only if you install from source</strong> (Option C below). The Windows installer and portable executable bundle Python themselves, so you don't need a separate Python install for those.</li>
@@ -249,7 +249,7 @@ python hearthkin.pyw</code></pre>
 
 <p>You also need to pick a model. Open <strong>Settings → Model &amp; generation</strong> and click <strong>Change model…</strong>. The model browser opens. Pick a provider with the radio buttons in the <strong>Provider</strong> group — <strong>Ollama (local)</strong>, <strong>openrouter (remote)</strong>, and any other service you have added — then pick from the list. See <a href="#models">Choosing a model</a> for guidance.</p>
 
-<p><strong>Kin settings</strong> (the <strong>Kin settings…</strong> button, <kbd>Alt</kbd>+<kbd>E</kbd>) has nine tabs: <strong>Identity</strong>, <strong>Model &amp; generation</strong>, <strong>Memory</strong>, <strong>Tools</strong>, <strong>Telegram</strong>, <strong>Discord</strong>, <strong>Cron</strong>, <strong>Voice</strong> and <strong>Prompts</strong>. The soul is on Identity, which also has <strong>Rename…</strong> for changing the kin's name.</p>
+<p><strong>Kin settings</strong> (the <strong>Kin settings…</strong> button, <kbd>Alt</kbd>+<kbd>E</kbd>) has nine tabs: <strong>Identity</strong>, <strong>Model &amp; generation</strong>, <strong>Memory</strong>, <strong>Tools</strong>, <strong>Telegram</strong>, <strong>Discord</strong>, <strong>Wake-ups</strong>, <strong>Voice</strong> and <strong>Prompts</strong>. The soul is on Identity, which also has <strong>Rename…</strong> for changing the kin's name.</p>
 
 <h2 id="chatting">Chatting one-on-one</h2>
 
@@ -473,14 +473,14 @@ python hearthkin.pyw</code></pre>
       <li><strong>Balances…</strong> — how much is left on every paid service, one line each.</li>
       <li><strong>User guide</strong> — opens this guide in your default browser.</li>
       <li><strong>About Hearthkin</strong> — version + license info.</li>
-      <li><strong>Exit</strong> — fully shuts Hearthkin down (including all running Telegram bots and cron polling). Distillation runs once on the way out, the same as a normal exit.</li>
+      <li><strong>Exit</strong> — fully shuts Hearthkin down (including all running Telegram bots and wake-up polling). Distillation runs once on the way out, the same as a normal exit.</li>
     </ul>
   </dd>
 </dl>
 
 <h3>Close-to-tray (Alt+F4 behavior)</h3>
 
-<p>Open <strong>Preferences</strong> and look for <strong>Minimize to system tray on close (Alt+F4)</strong>. When this is on (the default), pressing Alt+F4 or closing the window with the X button hides the window into the tray rather than exiting Hearthkin. Hearthkin says "Hearthkin is in the system tray. Open it from there to bring the window back." and shows a Windows notification too. Telegram bots, cron polling, distillation cadence, and the kin's loaded state all keep running. To fully exit, use the tray menu's <strong>Exit</strong> entry, or <strong>File → Exit</strong> (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) from inside the main window.</p>
+<p>Open <strong>Preferences</strong> and look for <strong>Minimize to system tray on close (Alt+F4)</strong>. When this is on (the default), pressing Alt+F4 or closing the window with the X button hides the window into the tray rather than exiting Hearthkin. Hearthkin says "Hearthkin is in the system tray. Open it from there to bring the window back." and shows a Windows notification too. Telegram bots, wake-up polling, distillation cadence, and the kin's loaded state all keep running. To fully exit, use the tray menu's <strong>Exit</strong> entry, or <strong>File → Exit</strong> (<kbd>Ctrl</kbd>+<kbd>Q</kbd>) from inside the main window.</p>
 
 <p>When the toggle is off, Alt+F4 / X behaves the traditional way — full shutdown.</p>
 
@@ -555,9 +555,9 @@ python hearthkin.pyw</code></pre>
 
 <h4>The tending ritual: when it happens</h4>
 
-<p>You decide. Under <strong>Settings → Cron</strong> there's a pre-populated tending entry — disabled by default — set for 3am. Edit the time (something around when you're asleep but Hearthkin is running), edit the prompt if you want, then enable it. Hearthkin registers the schedule via Windows Task Scheduler. The kin will wake up at that time, tend their notes, write what they want to keep, and exit.</p>
+<p>You decide. Under <strong>Settings → Wake-ups</strong> there's a pre-populated tending entry — disabled by default — set for 3am. Edit the time (something around when you're asleep but Hearthkin is running), edit the prompt if you want, then enable it. Hearthkin registers the schedule via Windows Task Scheduler. The kin will wake up at that time, tend their notes, write what they want to keep, and exit.</p>
 
-<p>You can also tend manually at any time, just by asking the kin in conversation: <em>"Would you tend your staging notes? Use read_staging."</em> They have the tools; the ritual works whether it's nightly cron or spontaneous request.</p>
+<p>You can also tend manually at any time, just by asking the kin in conversation: <em>"Would you tend your staging notes? Use read_staging."</em> They have the tools; the ritual works whether it's a nightly wake-up or a spontaneous request.</p>
 
 <h4>Kin with no tools enabled</h4>
 
@@ -567,7 +567,7 @@ python hearthkin.pyw</code></pre>
 
 <p><strong>The kin doesn't have to say it exactly right.</strong> A scheme like this rests on the kin producing one precise shape, and smaller models often don't — so the near-misses are accepted too: the filename mentioned in the sentence above the block, the filename on the first line inside it, a bare <code>speakerfifteen.md</code>. What can't be accepted is <em>told</em>: if a kin describes saving something and nothing landed, it gets a plain note in the same turn saying so, and its notes stay pending so it can try again immediately. That matters more than it sounds — a kin that believes it saved something and didn't will build on it, and without the note nobody would ever find out. A kin just talking, or showing example code, still writes nothing and isn't nagged.</p>
 
-<p><strong>Nightly tending works too, and it's the part that matters most</strong> — tending is supposed to happen while you're asleep, which is exactly when a kin can't ask you for anything. The tending prompt under <strong>Settings → Cron</strong> tells the kin to call <code>read_staging</code> and <code>archive_staging</code>. A kin without them now gets its notes in the wake-up itself, plus a plain note saying that part of the instruction doesn't apply and what to do instead. You don't have to rewrite the prompt; leaving it as shipped is fine.</p>
+<p><strong>Nightly tending works too, and it's the part that matters most</strong> — tending is supposed to happen while you're asleep, which is exactly when a kin can't ask you for anything. The tending prompt under <strong>Settings → Wake-ups</strong> tells the kin to call <code>read_staging</code> and <code>archive_staging</code>. A kin without them now gets its notes in the wake-up itself, plus a plain note saying that part of the instruction doesn't apply and what to do instead. You don't have to rewrite the prompt; leaving it as shipped is fine.</p>
 
 <p>Two limits worth knowing. Such a kin may only write <code>memory.md</code> and files under <code>memory/</code> — a fenced block naming anything else is refused, so a kin discussing code can't write code by mentioning a filename. And none of this changes anything for a kin that <em>does</em> have tools; it engages only where there was no other way. There is nothing to switch on.</p>
 
@@ -691,7 +691,7 @@ recalling old memories tends to help a drifting kin.</p>
 
 <h4>The kin manual</h4>
 
-<p>For the kin's own reference, Hearthkin ships a kin-facing document at <code>~/.hearthkin/kin_manual.md</code> (copied from the bundled <code>docs/kin_manual.md</code>). It explains the architecture from the kin's first-person perspective: where files live, every tool in detail, what each surface (desktop / Telegram DM / Telegram group / cron / rooms) means, how costs and truncation work, and what's safe for the kin to modify themselves vs. what should be a conversation with the operator first. The base prompt mentions it so the kin knows to pull it via <code>read_file</code> when something feels unclear. It is reference material that has to match the version you're running, so it is not yours to customise: each time Hearthkin starts, it replaces that copy with the bundled one whenever they differ. That is how a new release's corrections reach your kin without you doing anything. If you change the copy in <code>~/.hearthkin</code>, your change is lost at the next launch.</p>
+<p>For the kin's own reference, Hearthkin ships a kin-facing document at <code>~/.hearthkin/kin_manual.md</code> (copied from the bundled <code>docs/kin_manual.md</code>). It explains the architecture from the kin's first-person perspective: where files live, every tool in detail, what each surface (desktop / Telegram DM / Telegram group / wake-ups / rooms) means, how costs and truncation work, and what's safe for the kin to modify themselves vs. what should be a conversation with the operator first. The base prompt mentions it so the kin knows to pull it via <code>read_file</code> when something feels unclear. It is reference material that has to match the version you're running, so it is not yours to customise: each time Hearthkin starts, it replaces that copy with the bundled one whenever they differ. That is how a new release's corrections reach your kin without you doing anything. If you change the copy in <code>~/.hearthkin</code>, your change is lost at the next launch.</p>
 
 <h3>Conversation transcripts</h3>
 
@@ -1001,7 +1001,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>Cache TTL on Anthropic kin.</strong> Hearthkin requests prompt caching by default (the kin's identity prefix is reused turn to turn at ~10% of normal cost). Anthropic silently dropped the default cache lifetime from 1 hour to 5 minutes in March 2026. If a kin has gaps over 5 minutes between turns (most Telegram conversations do), every gap costs a full re-cache. Set <strong>Cache TTL</strong> to "1 hour (Anthropic + Google only)" under <strong>Settings → Model &amp; generation → More model options…</strong> for any Anthropic kin that gets multiple turns per hour but with gaps between them. Costs 2x more on the cache-write turn, but saves the re-cache cost on every subsequent gap. Other providers (OpenAI, DeepSeek, etc.) cache automatically with no TTL control; they ignore the setting.</li>
   <li><strong>Distillation runs in the background.</strong> Memory distillation produces staging notes for the kin to review during tending. It's a small model call (a few thousand tokens in, a few hundred out) and runs on the kin's <strong>Distillation model</strong> — set it to something cheap under <strong>Settings → Memory</strong> rather than letting it fall back to an expensive chat model. Cost per pass is typically pennies.</li>
   <li><strong>Consolidation only runs when you ask for it.</strong> The auto-consolidation that used to fire when <code>memory.md</code> crossed a size threshold has been removed (it was the source of a runaway-consolidation cost incident). Now consolidation only fires when you press the <strong>Consolidate</strong> button in Settings → Memory. A kin cannot start it. You decide when to pay for it.</li>
-  <li><strong>Nightly tending uses the chat model.</strong> When the kin tends their staging notes via the cron entry, they run AS themselves — the chat model, not the cheaper summarizer. Tending is a deliberate session of "the kin reading what happened and writing what they want to keep," so it should be on the model that <em>is</em> the kin. A typical tending pass runs a few cents on Haiku-class models, more on Sonnet. Disable the tending cron entry if you don't want this cost; tend manually or let the staging pile up.</li>
+  <li><strong>Nightly tending uses the chat model.</strong> When the kin tends their staging notes via the wake-up, they run AS themselves — the chat model, not the cheaper summarizer. Tending is a deliberate session of "the kin reading what happened and writing what they want to keep," so it should be on the model that <em>is</em> the kin. A typical tending pass runs a few cents on Haiku-class models, more on Sonnet. Disable the tending wake-up if you don't want this cost; tend manually or let the staging pile up.</li>
   <li><strong>Telegram group "always" policy.</strong> A group set to <strong>always</strong> makes a full model call for <em>every message in the group</em> — including the ones the kin reads and decides not to answer. On a paid model that adds up fast. Prefer <strong>mention-only</strong> unless you specifically want the kin processing every line.</li>
   <li><strong>Tool loops.</strong> A turn in which the kin calls tools makes one model call per tool round-trip, each one re-sending the context. More tools used per turn means more calls billed.</li>
   <li><strong>"Price unknown" means paid.</strong> Only a model running on your own hardware is free: this computer, or another machine of yours that runs Ollama. When a model is paid but Hearthkin can't price it — an Ollama cloud model, or any model from a service you added — the distillation status line and the catch-up and redistill estimates say <strong>price unknown</strong> rather than "no charge". The number of calls is still given, so you can work out the cost from the service's own price list.</li>
@@ -1011,7 +1011,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 <p>Two places to watch the numbers:</p>
 
 <ul>
-  <li><strong>Tools → Usage history…</strong> opens a breakdown of every model call by kin, by model, and by surface (desktop, room, Telegram, distillation, cron), with date filters. It is the fastest way to see <em>where</em> the spend is going. The cost figures are estimates from OpenRouter's catalogue pricing — close, but your OpenRouter dashboard remains the authoritative bill. Replies from a service you added, including Ollama's cloud, are counted too, with real token numbers, but their cost reads "—", because those services don't publish prices Hearthkin can read.</li>
+  <li><strong>Tools → Usage history…</strong> opens a breakdown of every model call by kin, by model, and by surface (desktop, room, Telegram, distillation, wake-up), with date filters. It is the fastest way to see <em>where</em> the spend is going. The cost figures are estimates from OpenRouter's catalogue pricing — close, but your OpenRouter dashboard remains the authoritative bill. Replies from a service you added, including Ollama's cloud, are counted too, with real token numbers, but their cost reads "—", because those services don't publish prices Hearthkin can read.</li>
   <li><strong>Tools → Balances…</strong> says how much is left on every paid service at once, one line each: OpenRouter's remaining credit, and for Ollama's cloud (added in Manage providers) the plan credit with its renewal date and any credit you bought. Every service you've added gets a line, and one with no balance check says so. The answers are in the <strong>Balances</strong> field (<kbd>Alt</kbd>+<kbd>B</kbd>), and focus moves there when they arrive. After it come <strong>Check in the background every half hour, and warn me when one is low</strong> (<kbd>Alt</kbd>+<kbd>K</kbd>, on by default) and <strong>Warn me below this many dollars</strong> (<kbd>Alt</kbd>+<kbd>W</kbd>, one dollar to start with), then <strong>Check again</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>), <strong>Copy</strong> (<kbd>Alt</kbd>+<kbd>Y</kbd>) and <strong>Close</strong>. With the background check on, Hearthkin looks on its own and says once, aloud and on the Activity line, when a service drops under the warning amount. It says it again only after the balance has been topped up and dropped back. Running out completely is always said, even with the warning amount at zero. If a reply from an online service fails, Hearthkin checks straight away, so an empty account is named as the reason instead of leaving you with an error.</li>
 </ul>
 
@@ -1082,7 +1082,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>To truly share one warm copy, give the same-model kin the <em>same</em> context window too.</strong> Ollama bakes the context size into the loaded model (it reserves memory for it up front), so the same model at two different window sizes counts as two separate things — switching between those kin forces a reload, or holds two copies and uses double the memory. Same model + same window = genuinely one shared, warm copy.</li>
 </ul>
 
-<p>This matters most for <a href="#cron">scheduled wake-ups</a>: a cron that fires on a model nothing else has kept warm will sit through the full cold-load (which on a big model can be a couple of minutes) before it does anything. Setting that kin — and its same-model siblings — to "keep loaded" means the morning wake-up hits a warm model instead.</p>
+<p>This matters most for <a href="#cron">scheduled wake-ups</a>: a wake-up that fires on a model nothing else has kept warm will sit through the full cold-load (which on a big model can be a couple of minutes) before it does anything. Setting that kin — and its same-model siblings — to "keep loaded" means the morning wake-up hits a warm model instead.</p>
 
 <p>You can also raise Ollama's <code>OLLAMA_MAX_LOADED_MODELS</code> environment variable (default 3) to let Ollama hold more models in memory simultaneously. That's a daemon-side setting outside Hearthkin; useful on a machine with lots of RAM and many kin sharing distinct models.</p>
 
@@ -1336,6 +1336,12 @@ Willow would end up with 1200 turns in all.</code></pre>
   <dd>Ears and eyes for a kin whose own model can't hear or see. The kin names a sound file or a picture, and another model, one that can take sound and pictures in, tells it what's there. The kin's own model still does the thinking and the feeling; the other model only reports. You choose those models on the kin's <strong>Tools</strong> tab, from the same model list as everywhere else. There are two, because the best ear isn't always the best or cheapest eye: <strong>Change listening model…</strong> (<kbd>Alt</kbd>+<kbd>H</kbd>) and <strong>Change looking model…</strong> (<kbd>Alt</kbd>+<kbd>G</kbd>). Leave the looking model unset and it uses the listening one; <strong>Use the listening model for looking</strong> (<kbd>Alt</kbd>+<kbd>S</kbd>) sets it back to that. Either can be a hosted model or one on your own machines. Until one is chosen, the tool tells the kin to ask you.
     <br>A long piece of music isn't sent whole. The listener hears four short stretches from across it, each labelled with where it starts, so a two-hour soundscape costs a few cents. The kin can also ask to hear one part, up to four minutes long.
     <br>Honest expectations: no model hears music the way a person does yet. In a test on 13 November 2026, the best listener caught the textures, the instruments, a gliding lead line, the mood and roughly the key, but models are much weaker on exact notes and can't follow one melody among others. That's why <code>analyze_sound</code> stays: the listener gives the impression, the measuring tool gives the facts. Each listen or look is a paid call to the chosen model, shown in <strong>Usage history</strong> as <em>listen</em> or <em>look</em>. In the Read tool bucket, with the same file rules as <code>read_file</code>.</dd>
+
+  <dt><code>reach_out</code></dt>
+  <dd>Message you on its own, on Telegram, Discord or the desktop, wherever you've opened to it. It isn't an everyday tool: it's offered on heartbeats and on wake-ups that run on their own. It's listed at the end of the kin's Tools tab like the others, ticked to start with; untick it and the kin can't reach out at all.</dd>
+
+  <dt><code>message_kin</code></dt>
+  <dd>Write to another kin who lives in the house. Offered on heartbeats, on wake-ups, and when you're talking with the kin yourself (on the desktop or in your own direct message, never in a group, channel or room). The other kin gets it the next time it wakes or talks with you. How many a kin may write to each other kin a day is in its heartbeat settings; everything kin write to each other can be read under Kin, Messages between kin. Also at the end of the Tools tab, ticked to start with; untick it and the kin can't write to other kin.</dd>
 </dl>
 
 <h3>Trust levels for <code>exec</code></h3>
@@ -1416,8 +1422,8 @@ Willow would end up with 1200 turns in all.</code></pre>
 <p>There are three ways it gets played:</p>
 
 <ul>
-  <li><strong>The kin plays it itself.</strong> If the <code>tff</code> tool is on the kin's allowlist (Settings → Tools), the kin can take turns on its own — often during a cron wake-up, or just because it wants to.</li>
-  <li><strong>You tend it from the desktop.</strong> <strong>Tools → Tend a kin's park…</strong> (<code>Ctrl+Shift+P</code>) opens a plain text prompt that acts on the selected kin's <em>own</em> save. Type a command, read the reply. A shared cross-process lock keeps your turn from colliding with the kin's own turn or a cron firing at the same moment, so co-tending is safe.</li>
+  <li><strong>The kin plays it itself.</strong> If the <code>tff</code> tool is on the kin's allowlist (Settings → Tools), the kin can take turns on its own — often during a wake-up, or just because it wants to.</li>
+  <li><strong>You tend it from the desktop.</strong> <strong>Tools → Tend a kin's park…</strong> (<code>Ctrl+Shift+P</code>) opens a plain text prompt that acts on the selected kin's <em>own</em> save. Type a command, read the reply. A shared cross-process lock keeps your turn from colliding with the kin's own turn or a wake-up firing at the same moment, so co-tending is safe.</li>
   <li><strong>From Telegram.</strong> In a DM, <code>/play tff &lt;command&gt;</code> takes a single turn (see <a href="#telegram">Bot commands</a>). Or send the word <code>park</code> on its own, with no slash, to turn on <em>park mode</em>: while it's on, the kin's own action-emotes (<em>*cares for the cats*</em>, <em>*digs for materials*</em>) are run as real game moves instead of treated as roleplay, and the kin is told what actually happened. To leave, send <code>leave</code> (or <code>leave park</code>, <code>exit park</code>, or <code>done tending</code>). Sending <code>park</code> again does not leave; it just says park mode is on. Park mode is for DMs only.</li>
 </ul>
 
@@ -1572,7 +1578,7 @@ understood, exactly as it does for you at the console.</p>
 
 <p>Off by default. Only flip it on for users where the cross-surface continuity is what you want — typically just your own Telegram user_id.</p>
 
-<p><strong>Live sync.</strong> When share is on for a user and Hearthkin desktop is open with that kin loaded, Telegram messages arriving while you're at the desktop get picked up automatically — a 5-second background poller checks <code>conversation.jsonl</code>'s mtime every tick and reloads the in-memory conversation if an external write happened (Telegram bot in shared mode, cron subprocess). So if you're chatting with the kin from your phone and then switch to the desktop, you'll see the new turns within ~5 seconds without having to switch kins.</p>
+<p><strong>Live sync.</strong> When share is on for a user and Hearthkin desktop is open with that kin loaded, Telegram messages arriving while you're at the desktop get picked up automatically — a 5-second background poller checks <code>conversation.jsonl</code>'s mtime every tick and reloads the in-memory conversation if an external write happened (Telegram bot in shared mode, a wake-up). So if you're chatting with the kin from your phone and then switch to the desktop, you'll see the new turns within ~5 seconds without having to switch kins.</p>
 
 <p><strong>Mirror desktop messages to Telegram.</strong> A separate per-user opt-in checkbox in the same dialog: <strong>Mirror desktop messages to my Telegram chat (carry desktop conversation to phone)</strong>. When on (independent of share), every desktop send + kin reply for this kin gets pushed to your Telegram chat with a "💻 (desktop)" prefix. Useful with share-with-desktop above if you want to actually see the desktop conversation reflected in Telegram, not just have the kin remember it. Off by default — pushing every desktop reply is intrusive and not what everyone wants. Trade-off: your phone gets a notification ding for each round-trip you do on the desktop.</p>
 
@@ -1924,9 +1930,9 @@ understood, exactly as it does for you at the console.</p>
 
 <p>Text-to-speech is different: with a kin's voice enabled, the text of its replies goes to ElevenLabs to be spoken. ElevenLabs does not restrict companion or character use, but if you are talking through anything sensitive, either leave the paid voice off (your screen reader can read replies for free) or accept that those replies are leaving the machine.</p>
 
-<h2 id="cron">Scheduled wake-ups (cron)</h2>
+<h2 id="cron">Scheduled wake-ups</h2>
 
-<p>A cron entry fires the kin at a specific time of day with a prompt you write. Common uses:</p>
+<p>A wake-up fires the kin at a specific time of day with a prompt you write. Common uses:</p>
 
 <ul>
   <li>"Good morning — what do I want to do today?" at 8 AM.</li>
@@ -1934,11 +1940,11 @@ understood, exactly as it does for you at the console.</p>
   <li>"Check the weather and post it to Telegram" at 7 AM.</li>
 </ul>
 
-<p>On Windows, each enabled cron entry becomes a Windows Task Scheduler task. The Task Scheduler triggers <code>hearthkin_cron.py</code> as a subprocess at the configured time.</p>
+<p>On Windows, each enabled wake-up becomes a Windows Task Scheduler task. The Task Scheduler triggers <code>hearthkin_cron.py</code> as a subprocess at the configured time.</p>
 
 <h3>How a wake-up runs</h3>
 
-<p>The Cron tab has a tick-box, <strong>Inject cron wake-ups into the active conversation when Hearthkin is open</strong>, on by default. What happens depends on it, and on whether Hearthkin is open.</p>
+<p>The Wake-ups tab has a tick-box, <strong>Inject wake-ups into the active conversation when Hearthkin is open</strong>, on by default. What happens depends on it, and on whether Hearthkin is open.</p>
 
 <dl>
   <dt><strong>Hearthkin is open, and the tick-box is on</strong> (default)</dt>
@@ -1957,7 +1963,7 @@ understood, exactly as it does for you at the console.</p>
 
 <h3>Configuring entries</h3>
 
-<p>Open <strong>Settings → Cron</strong>. Use <strong>Add entry</strong> to set the time(s) and prompt; <strong>Edit entry</strong> and <strong>Remove entry</strong> manage existing ones. Each entry has an enabled checkbox so you can toggle without deleting.</p>
+<p>Open <strong>Settings → Wake-ups</strong>. Use <strong>Add entry</strong> to set the time(s) and prompt; <strong>Edit entry</strong> and <strong>Remove entry</strong> manage existing ones. Each entry has an enabled checkbox so you can toggle without deleting.</p>
 
 <p><strong>One entry can fire at several times.</strong> The <strong>Times</strong> field takes one time (<code>09:00</code>) or several, comma-separated (<code>09:00, 15:00, 21:00</code>). So a routine that happens a few times a day — tending the park morning, midday, and evening — is <em>one</em> entry with three times, not three separate ones. Edit the prompt once and it applies to every firing; each time still becomes its own Task Scheduler task under the hood, but you manage them together.</p>
 
@@ -1991,26 +1997,26 @@ understood, exactly as it does for you at the console.</p>
 
 <p><strong>Test now</strong> fires the selected entry immediately, bypassing both the schedule and the enabled flag. Use it to verify the pipeline end-to-end before relying on it.</p>
 
-<h3 id="cron-tools">Which tools work in cron</h3>
+<h3 id="cron-tools">Which tools work at wake-ups</h3>
 
-<p>The cron-fired kin can use almost all of its enabled tools — read_file, write_file, edit_file, note, read_staging, archive_staging, memory_search, context_status, fetch_url, web_search, recent_thinking, and shell commands (exec) are all available. This is what makes nightly tending actually work: the kin reads staging notes, updates depth logs, and archives finished scopes via tool calls, the same way it would in a live conversation.</p>
+<p>A kin at a wake-up can use almost all of its enabled tools — read_file, write_file, edit_file, note, read_staging, archive_staging, memory_search, context_status, fetch_url, web_search, recent_thinking, and shell commands (exec) are all available. This is what makes nightly tending actually work: the kin reads staging notes, updates depth logs, and archives finished scopes via tool calls, the same way it would in a live conversation.</p>
 
-<p>A small set of tools is intentionally <em>excluded</em> in cron context, even if they're on the kin's allowlist:</p>
+<p>A small set of tools is intentionally <em>excluded</em> at wake-ups, even if they're on the kin's allowlist:</p>
 
 <ul>
-  <li><code>kill_process</code> and <code>list_processes</code> — process tracking lives on the running Hearthkin frame, not the cron worker.</li>
+  <li><code>kill_process</code> and <code>list_processes</code> — process tracking lives on the running Hearthkin frame, not the separate wake-up process.</li>
   <li><code>use_webcam</code> — never appropriate unattended.</li>
 </ul>
 
 <p>Shell commands on a wake-up follow the desktop's rule, without the asking, because nobody is there to ask. A command runs if the kin is trusted or full, or if you told it to remember that command. Otherwise it doesn't run, and the kin is told nobody was there to ask, so it won't claim you refused. The never-run list always applies, and background commands can't run on a wake-up, because the wake-up ends and nothing would be left to stop them. (Before 12 November 2026, a wake-up that ran on its own had no shell commands at all, while one delivered into the open chat did.)</p>
 
-<p>If a kin's cron prompt assumes one of the excluded tools, the tool simply won't be in scope for that call — the model can't see it, can't call it, and will need to find another approach or report what it would have done. The denylist is a safety floor, not configurable per-kin.</p>
+<p>If a kin's wake-up prompt assumes one of the excluded tools, the tool simply won't be in scope for that call — the model can't see it, can't call it, and will need to find another approach or report what it would have done. The denylist is a safety floor, not configurable per-kin.</p>
 
 <h3 id="heartbeat">Proactive heartbeat (the kin reaches out on its own)</h3>
 
-<p>A cron entry fires a <em>directed</em> prompt at a set time. A <strong>proactive heartbeat</strong> is different: it gives a kin a quiet moment, on a timer, to reach out to <em>you</em> on its own initiative — but only if it genuinely has something to say. Most of the time it stays silent, and <strong>silence sends nothing</strong> (no journal entry, no message, no "still here" ping). That anti-spam design is the whole point — a heartbeat with nothing to say costs you nothing to read.</p>
+<p>A wake-up fires a <em>directed</em> prompt at a set time. A <strong>proactive heartbeat</strong> is different: it gives a kin a quiet moment, on a timer, to reach out to <em>you</em> on its own initiative — but only if it genuinely has something to say. Most of the time it stays silent, and <strong>silence sends nothing</strong> (no journal entry, no message, no "still here" ping). That anti-spam design is the whole point — a heartbeat with nothing to say costs you nothing to read.</p>
 
-<p>Turn it on under <strong>Settings → Cron → "Proactive heartbeat…"</strong>. The dialog has:</p>
+<p>Turn it on under <strong>Settings → Wake-ups → "Proactive heartbeat…"</strong>. The dialog has:</p>
 <ul>
   <li><strong>Enable proactive heartbeat for this kin</strong> — off by default.</li>
   <li><strong>Give it a moment every (minutes)</strong> — how often the kin gets a quiet moment. Default 120; anything from 5 to 1440.</li>
@@ -2021,7 +2027,7 @@ understood, exactly as it does for you at the console.</p>
 
 <p><strong>Think before ticking a place under Other places it may write to.</strong> Ticking a DM or a group lets the kin start a conversation there on its own, without anyone speaking to it first. In a group, everyone in that group will see it. So only tick groups you're in yourself. Messages only reach Telegram if the kin's Telegram bot is switched on; otherwise they stay in the desktop chat.</p>
 
-<p>It only runs while Hearthkin is open. You don't need to enable any tool for this — during a heartbeat the kin always has <code>reach_out</code>, <code>memory_search</code> and <code>recent_thinking</code>, whatever its own tool list says. If Hearthkin is busy with other work on the model when a heartbeat is due, the heartbeat waits and tries again rather than losing its turn; that is noted in <code>logs\heartbeat.log</code>.</p>
+<p>It only runs while Hearthkin is open. During a heartbeat the kin has <code>reach_out</code> and <code>message_kin</code>, unless you've unticked them in its Tools tab, plus whichever of <code>memory_search</code>, <code>recent_thinking</code> and its file tools it has on in that tab, kept inside its own folder. If Hearthkin is busy with other work on the model when a heartbeat is due, the heartbeat waits and tries again rather than losing its turn; that is noted in <code>logs\heartbeat.log</code>.</p>
 
 <p class="note"><strong>If a kin used to reach out and stopped, this is the first thing to check.</strong> A heartbeat has no reader: the kin's reply goes nowhere, and the <code>reach_out</code> tool is the only way anything actually reaches you. Some models answer &ldquo;is there something you'd like to say?&rdquo; by <em>writing the message</em> rather than by calling the tool &mdash; and that message used to be thrown away with no record anywhere, which looks exactly like a kin that has gone quiet on you. Hearthkin now asks the kin once, plainly, whether it meant that for you; if it says no, that is taken as a real answer. Anything that still doesn't get through is written to <code>logs/heartbeat_unsent.log</code>, so a lost message is something you can find rather than something that never existed. Changing a kin's model is the usual reason this starts happening, and nothing about the kin has changed when it does.</p>
 <p><strong>Cost:</strong> each heartbeat runs the model at least once, even when the kin decides to stay quiet — that's the price of giving it a genuine chance to speak. Sometimes it runs twice: if the kin wrote 120 characters or more without calling <code>reach_out</code>, it is asked once more whether it meant that for you. On a model running on your own hardware that's just compute; on a paid model, including Ollama's cloud models, keep the interval long so quiet check-ins don't add up.</p>
@@ -2170,7 +2176,7 @@ understood, exactly as it does for you at the console.</p>
   <li>Streaming chunks are buffered and painted at turn-end as a single text update, instead of one event per chunk. This avoids flooding NVDA's announce queue (which, at high chunk rates, was destabilizing other UIA consumers system-wide).</li>
   <li>Activity field is persistent and tab-reachable — transient notifications flash there and revert after a few seconds to a default summary line (kin / model / context-usage percent) so it always reads as "something useful" when idle, not stale.</li>
   <li>Numeric inputs are plain text fields with comma-tolerant parsing, not <code>SpinCtrl</code> (whose Win32 backing rejects pasted commas before the input ever reaches the app).</li>
-  <li>The Settings dialog's tabbed notebook (Identity, Model &amp; generation, Memory, Tools, Telegram, Discord, Cron, Voice, Prompts) properly hides inactive pages so Tab navigation only walks the active page. The main window itself has no notebook — chat content fills it directly, and Preferences and Usage are menu-triggered dialogs (no extra tab navigation to thread through to reach the chat).</li>
+  <li>The Settings dialog's tabbed notebook (Identity, Model &amp; generation, Memory, Tools, Telegram, Discord, Wake-ups, Voice, Prompts) properly hides inactive pages so Tab navigation only walks the active page. The main window itself has no notebook — chat content fills it directly, and Preferences and Usage are menu-triggered dialogs (no extra tab navigation to thread through to reach the chat).</li>
   <li>Dialog labels include explicit mnemonics and use visible-label-as-accessible-name to keep wxMSW + NVDA happy.</li>
 </ul>
 
@@ -2204,7 +2210,7 @@ understood, exactly as it does for you at the console.</p>
   <dd>Always-on. Logs Telegram send failures (network errors, rate limits, etc.).</dd>
 
   <dt><code>cron_errors.log</code></dt>
-  <dd>Always-on. One line per failed cron subprocess.</dd>
+  <dd>Always-on. One line per failed wake-up.</dd>
 
   <dt><code>approvals.log</code></dt>
   <dd>Always-on. One line per remote tool-approval event — asked, allowed, denied, timed out, undelivered, superseded — with the kin, the command, and the timeout. The record to check when a kin says it was denied something and you don't remember answering. See <a href="#approval-alert">Knowing when a kin is waiting on you</a>.</dd>
@@ -2278,8 +2284,8 @@ understood, exactly as it does for you at the console.</p>
   <dt>Hearthkin can't reach my remote Ollama machine</dt>
   <dd>If a kin is pointed at a remote daemon: open <strong>Change model… → Manage machines…</strong>, select the machine, and use <strong>Test connection</strong> to see the specific failure reason. Common causes: (1) the remote Ollama is bound only to <code>127.0.0.1</code> — set <code>OLLAMA_HOST=0.0.0.0</code> on the remote machine before starting Ollama, then restart the daemon. (2) Firewall blocking port 11434 — open it on the remote machine. (3) Remote machine is asleep or off — wake it (a kin on a sleeping box won't reply until it's awake). (4) Wrong address — check the remote's actual name/IP. The startup advisory dialog also adapts its message when the active kin's machine is remote, so it points at the right cause space rather than telling you to install Ollama locally.</dd>
 
-  <dt>Cron doesn't fire</dt>
-  <dd>Open Task Scheduler and look for tasks named <code>Hearthkin-&lt;KinName&gt;-Cron-N</code>. If they're missing, re-save the cron entry to re-register. Check <code>cron_errors.log</code> for subprocess failures. <strong>Test now</strong> in the Cron tab fires a single entry without waiting for the schedule.</dd>
+  <dt>Wake-ups don't fire</dt>
+  <dd>Open Task Scheduler and look for tasks named <code>Hearthkin-&lt;KinName&gt;-Cron-N</code>. If they're missing, re-save the wake-up to re-register. Check <code>cron_errors.log</code> for subprocess failures. <strong>Test now</strong> in the Cron tab fires a single entry without waiting for the schedule.</dd>
 
   <dt>Telegram bot stops responding</dt>
   <dd>Open <strong>Settings → Telegram</strong> and check the status. If it says "Error", the message includes the cause (network, bad token, rate limit). Toggle <strong>Run Telegram bot for this kin</strong> off and on to restart.</dd>
@@ -2317,7 +2323,7 @@ understood, exactly as it does for you at the console.</p>
 │   └── &lt;KinName&gt;/
 │       ├── soul.md               # persona prompt (purely kin/operator-curated)
 │       ├── memory.md             # kin-curated index (no automation rewrites this)
-│       ├── config.json           # model, sampling, telegram, cron, tool trust
+│       ├── config.json           # model, sampling, telegram, wake-ups, tool trust
 │       ├── conversation.jsonl    # append-only chat transcript
 │       ├── tools.json            # per-kin tool allowlist
 │       ├── exec_allowlist.json   # remembered exec approvals
@@ -2337,12 +2343,12 @@ understood, exactly as it does for you at the console.</p>
 │       └── memory/
 │           ├── &lt;topic&gt;.md        # kin-written depth logs (one per topic)
 │           └── journal/
-│               └── YYYY-MM-DD.md # daily journal entries from cron
+│               └── YYYY-MM-DD.md # daily journal entries from wake-ups
 ├── rooms/
 │   └── &lt;RoomName&gt;/
 │       └── config.json           # members, room context, turn settings
 ├── conversations/                # conversations filed away by New conversation and shared /new
-├── cron_requests/                # one-shot files from cron subprocess
+├── cron_requests/                # one-shot files from wake-ups
 ├── logs/                         # see Troubleshooting above
 └── .running.lock                 # exists while Hearthkin is up
 </code></pre>

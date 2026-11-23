@@ -141,6 +141,17 @@ def _write_group_sharing(tg, chat_id, private_sees, sees_private):
             m[chat_id] = bool(val)
         tg[key] = m
 
+
+# What the Tools tab says for the two tools a kin is given by the moment
+# rather than by its tools file (23 Nov 2026).
+PROACTIVE_TOOL_WHEN = {
+    "reach_out": ("Message you on its own: offered on heartbeats and on "
+                  "wake-ups that run on their own."),
+    "message_kin": ("Write to another kin in the house: offered on "
+                    "heartbeats, wake-ups, and when you're talking with it "
+                    "yourself."),
+}
+
 class EditKinDialog(wx.Dialog):
     """Edit a kin's settings: soul, generation parameters, memory, Telegram bot.
 
@@ -1166,15 +1177,20 @@ class EditKinDialog(wx.Dialog):
         _tool_widgets.append(self.tool_probe_btn)
 
         enabled_set = set(load_kin_tools(self.kin))
-        # reach_out (and any other proactive-only tool) is NOT an everyday
-        # allowlist tool — it belongs to the Proactive-heartbeat feature on the
-        # Cron tab, which grants it itself. Keeping it out of this list is the
-        # de-weirding: no more lone "Enable reach_out" checkbox disconnected
-        # from the thing it's part of.
+        # reach_out and message_kin are granted by the moment (a heartbeat, a
+        # wake-up, the person there), not by tools.json. They used to be left
+        # out of this list, so they had no switch anywhere the person could
+        # see: "I can't fix what I can't see" (23 Nov 2026). They're listed
+        # now, at the end, each saying when it's offered; unticking one adds
+        # it to the config's "proactive_tools_off", and it's gone everywhere.
         available = [
             t for t in kin_tools.list_available()
             if t not in kin_tools._PROACTIVE_TOOLS
-        ]
+        ] + sorted(t for t in kin_tools._PROACTIVE_TOOLS
+                   if t in kin_tools.list_available())
+        _pro_off = set(self.cfg.get("proactive_tools_off") or [])
+        enabled_set |= {t for t in kin_tools._PROACTIVE_TOOLS
+                        if t not in _pro_off}
         # One tick list, not a checkbox per tool: one Tab stop, arrows move
         # through the tools, Space ticks, and NVDA says checked or not
         # checked on each (a column of checkboxes was a Tab stop per tool).
@@ -1190,6 +1206,8 @@ class EditKinDialog(wx.Dialog):
                     _doc = fn.__doc__.strip().split("\n\n", 1)[0]
                     _doc = " ".join(_doc.split())
                     first_line = (_doc.split(". ", 1)[0] + ".") if ". " in _doc else _doc
+                if tname in kin_tools._PROACTIVE_TOOLS:
+                    first_line = PROACTIVE_TOOL_WHEN.get(tname, first_line)
                 items.append(f"{tname} — {first_line}" if first_line else tname)
             tools_lbl = wx.StaticText(host, label="T&ools this kin can use (Space ticks or unticks; saves at once):")
             self.tool_list = TickList(host, "Tools this kin can use", items)
@@ -5033,10 +5051,15 @@ class EditKinDialog(wx.Dialog):
         or telegram settings."""
         if self._loading:
             return
-        enabled = [
+        ticked = [
             tname for i, tname in enumerate(self._tool_names)
             if self.tool_list is not None and self.tool_list.IsChecked(i)
         ]
+        enabled = [t for t in ticked if t not in kin_tools._PROACTIVE_TOOLS]
+        pro_off = sorted(t for t in self._tool_names
+                         if t in kin_tools._PROACTIVE_TOOLS and t not in ticked)
+        if pro_off != sorted(self.cfg.get("proactive_tools_off") or []):
+            self._save_param("proactive_tools_off", pro_off)
         try:
             save_kin_tools(self.kin, enabled)
         except Exception as e:

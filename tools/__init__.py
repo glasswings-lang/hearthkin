@@ -195,7 +195,7 @@ _FRAMEWORK_HIDDEN_PARAMS = frozenset({"agent_name", "confine_paths",
 
 
 def load_tools(allowed_names, *, context=None, model=None, cron_turn=False,
-               proactive_wake=False, person_present=False):
+               proactive_wake=False, person_present=False, exclude=()):
     """Build the (schemas, executor_dict) pair for the named tools.
 
     `allowed_names` is typically the result of `load_agent_tools_file` —
@@ -271,6 +271,23 @@ def load_tools(allowed_names, *, context=None, model=None, cron_turn=False,
         if "message_kin" in _REGISTRY and "message_kin" not in allowed_names:
             allowed_names = allowed_names + ["message_kin"]
         context["kin_mail_prompted"] = True
+    # A proactive tool the kin has switched off in its Tools tab
+    # ("proactive_tools_off", 23 Nov 2026), and anything the caller leaves
+    # out (a wake-up's "Leave these tools out" list), go AFTER the grants
+    # above, or the grants would put them straight back. Until then neither
+    # reach_out nor message_kin had a switch anywhere the person could see.
+    _off = set(exclude or ())
+    _kin = (context or {}).get("agent_name")
+    if _kin:
+        try:
+            from kin_persistence import load_agent_config as _lac
+            _off |= set((_lac(_kin) or {}).get("proactive_tools_off") or [])
+        except Exception:
+            pass
+    if _off:
+        allowed_names = [n for n in allowed_names
+                         if not (n in _off and (n in _PROACTIVE_TOOLS
+                                                or n in set(exclude or ())))]
     schemas = []
     executor = {}
     for name in allowed_names:
