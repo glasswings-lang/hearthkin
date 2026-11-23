@@ -7330,9 +7330,10 @@ def build_system_prompt(soul, memory, room_block=None, enabled_tools=None,
 
     The base prompt (load_base_prompt) leads — it's shared infrastructure
     (memory discipline, etc.), distinct from soul.md which is identity.
-    Distillation/consolidation build their own prompts and don't call
-    this, so the summarizer never sees the base prompt — correct, it
-    runs out of character.
+    Distillation and consolidation call this too, through
+    frame_shared.kin_self_prompt (23 Nov 2026): they run AS the kin and are
+    given what it's given here, so anything added to this prompt reaches
+    them as well. (They used to build their own, soul-only or less.)
 
     `enabled_tools` is the tool set actually available to the kin THIS
     turn (a list/set of tool names, possibly empty). When provided, the

@@ -230,6 +230,37 @@ def _progress_collector(on_progress):
     return _delta
 
 
+def kin_self_prompt(kin_name):
+    """Everything the kin is given in chat, for the jobs that run AS it:
+    distillation and memory consolidation (23 Nov 2026).
+
+    The person's principle: "if you're going to be distilling something, then
+    you should be given what you're given when the thing took place." Until
+    now distillation got only the soul, and consolidation not even that, so a
+    kin whose identity.md had grown past its soul was summarised by an older,
+    thinner version of itself, and the base prompt never reached either. This
+    is built by the very function chat uses (build_system_prompt): base
+    prompt, soul, identity, voice anchor, with the kin's own tools named as in
+    chat. Anything added to the chat prompt later reaches these jobs too,
+    without anyone having to remember. Memory is left out here only because
+    both jobs already show it, as the thing they work on.
+
+    The past can't be recreated exactly (no record is kept of what a prompt
+    said in March), so this is the closest true version: the same self,
+    whole, looking back."""
+    from kin_persistence import build_system_prompt, load_kin_tools
+    soul = load_soul(kin_name) or ""
+    try:
+        tools = list(load_kin_tools(kin_name) or [])
+    except Exception:
+        tools = []
+    try:
+        return build_system_prompt(soul, "", enabled_tools=tools,
+                                   kin_name=kin_name) or ""
+    except Exception:
+        return soul.strip()
+
+
 def consolidate_memory_blocking(memory_text, model, options=None, kin_name=None,
                                 on_progress=None):
     """Tighten an already-distilled memory file. Returns the consolidated text.
@@ -250,6 +281,11 @@ def consolidate_memory_blocking(memory_text, model, options=None, kin_name=None,
         load_app_prompt("consolidate", kin_name)
         .replace("{word_cap}", str(consolidate_word_cap))
     )
+    # Runs as the kin, whole (kin_self_prompt), not as an outside tidier.
+    if kin_name:
+        _self = kin_self_prompt(kin_name).strip()
+        if _self:
+            sys_prompt = _self + "\n\n---\n\n" + sys_prompt
     user_prompt = f"Memory to consolidate:\n\n{memory_text.strip()}\n\nConsolidated memory:"
     messages = [
         {"role": "system", "content": sys_prompt},
@@ -470,9 +506,11 @@ def distill_memory_blocking(kin_name, conversation, existing_memory, model,
     # model paints over with its house style; the soul supplies the actual
     # register to anchor to. Prepended, matching the proven layout (soul, then
     # the reflection task). Empty/missing soul -> just the task prompt.
-    soul = (load_soul(kin_name) or "").strip()
-    if soul:
-        sys_prompt = soul + "\n\n---\n\n" + sys_prompt
+    # The kin whole, as in chat (kin_self_prompt): base prompt, soul,
+    # identity, voice anchor. It was the soul alone until 23 Nov 2026.
+    _self = kin_self_prompt(kin_name).strip()
+    if _self:
+        sys_prompt = _self + "\n\n---\n\n" + sys_prompt
 
     # The user turn is an editable app prompt (slug "distill_reflection"), so an
     # operator can retune the framing in Notepad without a code change — the

@@ -1191,7 +1191,11 @@ class MemoryMixin:
         # reserve under-counted — a big-souled kin (~3k tok of soul)
         # overshot the summarizer's window by roughly a soul's worth. Charging
         # them here shrinks the bite to fit instead.
-        soul_tokens = estimate_tokens(load_soul(agent_name) or "")
+        # Since 23 Nov 2026 the run carries the whole kin, as in chat
+        # (frame_shared.kin_self_prompt: base prompt, soul, identity,
+        # voice anchor), so all of that is what's measured.
+        from frame_shared import kin_self_prompt
+        soul_tokens = estimate_tokens(kin_self_prompt(agent_name) or "")
         memory_tokens = estimate_tokens(load_memory(agent_name) or "")
         reserve = _DISTILL_RESERVE_TOKENS + soul_tokens + memory_tokens
         budget = max(2048, budget_ctx - reserve)
