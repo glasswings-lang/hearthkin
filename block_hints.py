@@ -4,7 +4,8 @@ for Hearthkin to act on (22 Nov 2026).
 
 Hearthkin acts on several shapes in a kin's reply: a fenced block that saves
 a file (authoring_bridge), a fenced block that saves memory for a kin with no
-tools (toolless_memory), a "> " line that makes a park move (park_keeper), a
+tools (toolless_memory), a ```park block that makes a park move (park_keeper;
+a "> " line until 23 Nov 2026, which collided with quoting), a
 ```to:Name block that writes to another kin (kin_mail), and a ```manual
 block that asks for part of the kin manual (manual_request). A shape nobody
 was told about is no use to anyone, and an audit found most surfaces acting

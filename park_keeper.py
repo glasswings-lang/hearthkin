@@ -51,12 +51,14 @@ MECHANISM = (
     "You can stand somewhere: 'go to <room>' steps in, and then a plain "
     "'care' tends just that room. Tending the whole park in one command is "
     "retired -- step into a room instead.\n"
-    "The way you DO a thing is a command on its own FINAL line starting with "
-    "'> '. Say your warm sentence or two first, then the command.\n"
+    "The way you DO a thing is a park block at the end of your reply: a "
+    "fenced block labelled park, with the command inside. Say your warm "
+    "sentence or two first, then the block.\n"
     "Commands: look | go to <room> | leave | dig <n> | build <roomtype> | "
     "adopt <species> | care for <room> | pet <name> | things | "
     "give <thing> to <name> | move <name> to <room> | breed <room> | "
-    "expand <room> | memorial. One command per turn. Example:\n> breed Glade 4\n"
+    "expand <room> | memorial. One command per turn. Example:\n"
+    "```park\nbreed Glade 4\n```\n"
     "IMPORTANT: don't repeat a command the park just refused. If a pair is "
     "resting or a room is full, do a DIFFERENT job -- expand a full room, "
     "welcome someone new, give someone a thing you dug up, or tend the ones "
@@ -66,7 +68,7 @@ MECHANISM = (
 # The per-turn ask that follows the park state. Kept terse and directive — the
 # kin already sees the whole park, so "make a real move, not another look."
 TURN_INSTRUCTION = (
-    "\n\nA sentence or two, then ONE action on a '>' line. You already see the "
+    "\n\nA sentence or two, then ONE action in a park block. You already see the "
     "whole park here, so make it a real move -- breed / adopt / expand / care "
     "for / pet / give / move / dig / build -- NOT another 'look'."
 )
@@ -204,8 +206,76 @@ def extract_commands(reply_text, limit=PARK_COMMANDS_PER_REPLY_MAX):
     return cmds
 
 
+# THE PARK BLOCK (23 Nov 2026). A move used to be a line starting with '> ',
+# and '>' is also how anyone quotes something in writing: a kin quoting a line
+# of a poem, or describing an action, sent it to the park ("the park isn't
+# reachable" with the game closed), and the hint itself ("put what you want to
+# DO on a '> ' line") taught one kin to write tool calls that way. Now a move
+# goes in a fenced block labelled park, one move per line, the same shape as
+# the to: and manual blocks. The old '> ' line still works ONLY while the
+# park prompts still teach it (old_marker_taught), so a saved copy of the old
+# wording never leaves a kin taught one thing and heard as another; adopting
+# the new wording (Tools, Prompt updates) turns '>' back into a plain quote.
+_PARK_BLOCK_RE = re.compile(
+    r"^[ \t]*" + "`" * 3 + r"[ \t]*park[ \t]*\n(.*?)^[ \t]*" + "`" * 3,
+    re.IGNORECASE | re.MULTILINE | re.DOTALL)
+
+_TEACHING_SLUGS = ("park_chat_hint", "park_chat_hint_shared",
+                   "park_mechanism", "park_turn_instruction")
+_taught_cache = {"at": 0.0, "old": True}
+_OLD_TEACHING = ("starting with '> '", "on a '>' line", "'> ' line", "\n> ")
+
+
+def old_marker_taught():
+    """True while any park prompt in use still teaches the '> ' line. Read
+    from the prompts themselves, never assumed, and re-read every few seconds
+    so adopting the new wording takes effect without a restart."""
+    import time
+    now = time.monotonic()
+    if now - _taught_cache["at"] < 5:
+        return _taught_cache["old"]
+    old = False
+    try:
+        from kin_persistence import load_app_prompt
+        for slug in _TEACHING_SLUGS:
+            t = load_app_prompt(slug) or ""
+            # The old wording's own phrases. The new wording says "a line
+            # starting with '>' is an ordinary quote", which must NOT count.
+            if any(m in t for m in _OLD_TEACHING):
+                old = True
+                break
+    except Exception:
+        old = True     # can't tell: keep what worked before
+    _taught_cache.update(at=now, old=old)
+    return old
+
+
+def park_block_moves(reply_text):
+    """The moves in the LAST park block of a reply, one per non-blank line,
+    or [] when there's none. The last block wins, as the last '>' run did: a
+    kin that changed its mind settles on its final word."""
+    blocks = _PARK_BLOCK_RE.findall(reply_text or "")
+    if not blocks:
+        return []
+    return [ln.strip() for ln in blocks[-1].splitlines() if ln.strip()]
+
+
 def extract_command_run(reply_text, limit=PARK_COMMANDS_PER_REPLY_MAX):
-    """`(commands, quote_reason)`. When the run is a markdown quote rather
+    """`(commands, quote_reason)`. A park block always counts; a '> ' line
+    only while old_marker_taught() (see THE PARK BLOCK above)."""
+    block = park_block_moves(reply_text)
+    if block:
+        if limit and limit > 0:
+            block = block[:limit]
+        return block, ""
+    if not old_marker_taught():
+        return [], ""
+    return _extract_old_marker_run(reply_text, limit)
+
+
+def _extract_old_marker_run(reply_text, limit=PARK_COMMANDS_PER_REPLY_MAX):
+    """The old '> ' line rule, kept for a park whose prompts still teach it.
+    `(commands, quote_reason)`. When the run is a markdown quote rather
     than a batch of moves, commands is empty and quote_reason says why.
 
     Callers that can speak should REPORT the reason rather than dropping it:
@@ -781,7 +851,7 @@ def route_reply(reply_text, run, known_verbs=None):
     parts = []
     for cmd in cmds:
         res = (_one(cmd) or "").strip()
-        parts.append("> %s" % cmd + chr(10) + res)
+        parts.append("park: %s" % cmd + chr(10) + res)
     if len(all_lines) > len(cmds):
         # Never truncate in silence: a dropped move that nobody mentions is
         # exactly the failure this whole change is fixing.

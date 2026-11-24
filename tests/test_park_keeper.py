@@ -9,6 +9,13 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Moves here are written as '> ' lines, the park's old shape (23 Nov 2026:
+# the park block replaced it, because '>' is also how anyone quotes). The old
+# line still runs while a person's saved park prompts teach it, so these
+# tests run with the old wording in place; tests/test_park_block.py covers
+# the block. What happens after a move is read is the same either way.
+import park_keeper as _park_old_wording  # noqa: E402
+_park_old_wording.old_marker_taught = lambda: True
 
 import park_keeper as PK
 
@@ -148,7 +155,7 @@ check(PK.looks_refused("There's no room called 'x'. Did you mean Glade 4?"),
 # --- build_turn_message: note + park + hint + ask, in order ---
 msg = PK.build_turn_message("PARK STATE", hint="\n\nHINT", note="NOTE\n\n")
 check(msg.startswith("NOTE") and "PARK STATE" in msg and "HINT" in msg
-      and "'>' line" in msg,
+      and "park block" in msg,
       "build_turn_message assembles note + park + hint + the ask")
 
 # --- hint_line degrades to '' when the game carer isn't importable ---
@@ -404,7 +411,10 @@ _cmd, _res = PK.route_reply(_batch, _fake)
 check(_ran == ["edit stellar-owl", "babies word: clutch",
                "reactions: pulses; chimes", "birth anomalies: Nova-Sight"],
       "route_reply runs all four, in order")
-check(all(("> " + c) in _res for c in _ran),
+# Labelled "park: <move>", never as a '> ' line: the kin reads these back
+# and would copy that shape (23 Nov 2026).
+check(all(("park: " + c) in _res for c in _ran)
+      and not any(l.startswith("> ") for l in _res.splitlines()),
       "every result is labelled with the command that caused it")
 
 # One command is unchanged in shape: bare command, bare result. The single-move

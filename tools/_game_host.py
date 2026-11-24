@@ -854,7 +854,7 @@ class GameHost:
             # the player's own words, the move, then what actually happened.
             said = (say or "").strip()
             body = ("%s\n> %s\n%s" % (said, command, reply) if said
-                    else "> %s\n%s" % (command, reply))
+                    else "park: %s\n%s" % (command, reply))
             feed.append(save, who, body)
         except Exception:
             pass

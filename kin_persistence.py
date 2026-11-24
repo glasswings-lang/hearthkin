@@ -4209,28 +4209,29 @@ DEFAULT_PARK_CHAT_HINT = (
     "--- Your park ---\n"
     "You have your own creature park, and you can tend it right here as we "
     "talk — there's no separate mode to enter and no tool to call. When you "
-    "actually want to DO something in it, put that one action on its own FINAL "
-    "line, starting with '> ', after whatever you've said. One action at a "
-    "time. For example:\n"
-    "> pet Luna\n"
+    "actually want to DO something in it, write it in a park block at the end "
+    "of your reply, after whatever you've said: a fenced block labelled park, "
+    "one action per line. For example:\n"
+    "```park\npet Luna\n```\n"
     "You are not down to one move, though: after it runs you'll see what "
     "happened and can go straight on to the next thing, as many times as you "
     "like, without waiting to be asked. So if you look at a room and it tells "
     "you someone wants fussing and the water needs topping up — go and do "
     "those, right then. Looking isn't a turn spent; it's how you find the "
-    "work. Stop whenever you're done: a reply with no '> ' line just means "
+    "work. Stop whenever you're done: a reply with no park block just means "
     "you've finished for now.\n"
-    "Other things you can do: `> adopt rabbit`, `> breed Glade 4`, `> care for "
-    "the pond`, `> dig 30`, `> build a glade`, `> move Bisker to the Meadow`. "
-    "You can even invent a kind of creature that isn't in the park yet — "
-    "`> make a new animal`. The park will ask you about it, one thing at a "
-    "time; answer in your own words on a '> ' line, or `> you pick`. Whatever "
-    "you make is really there afterward.\n"
+    "Other things you can do: `adopt rabbit`, `breed Glade 4`, `care for the "
+    "pond`, `dig 30`, `build a glade`, `move Bisker to the Meadow`. You can "
+    "even invent a kind of creature that isn't in the park yet — `make a new "
+    "animal`. The park will ask you about it, one thing at a time; answer in "
+    "your own words in a park block, or with `you pick`. Whatever you make is "
+    "really there afterward.\n"
     "The move runs for real, and you'll be told right afterward what actually "
     "happened — so respond to that, not to what you imagined would happen. "
-    "Only the '> ' line acts; everything above it is just you, in your own "
-    "voice, exactly as always. There's no right amount to do and nothing you "
-    "have to tend — it's yours, so be in it however you like."
+    "Only the park block acts; everything else is just you, in your own "
+    "voice, exactly as always. A line starting with '>' is an ordinary quote, "
+    "not a move. There's no right amount to do and nothing you have to tend — "
+    "it's yours, so be in it however you like."
 )
 
 # The framing for a heartbeat wake. The anti-spam constraint here is real —
@@ -4281,18 +4282,18 @@ DEFAULT_PARK_CHAT_HINT_SHARED = (
     "--- Your park ---\n"
     "You have your own creature park, and you can tend it right here — "
     "there's no separate mode to enter and no tool to call. When you actually "
-    "want to DO something in it, put that one action on its own FINAL line, "
-    "starting with '> ', after whatever you've said. For example:\n"
-    "> pet Luna\n"
+    "want to DO something in it, write that one action in a park block at the "
+    "end of your reply: a fenced block labelled park. For example:\n"
+    "```park\npet Luna\n```\n"
     "Here, with other people in the conversation, one move runs per reply: "
     "you'll see what happened, and can make the next one in a later reply. "
-    "A reply with no '> ' line just means you're not doing anything in the "
+    "A reply with no park block just means you're not doing anything in the "
     "park right now.\n"
-    "Other things you can do: `> adopt rabbit`, `> care for the pond`, "
-    "`> dig 30`, `> build a glade`, `> move Bisker to the Meadow`, or "
-    "`> make a new animal`.\n"
-    "Only the '> ' line acts; everything above it is just you, in your own "
-    "voice, exactly as always."
+    "Other things you can do: `adopt rabbit`, `care for the pond`, `dig 30`, "
+    "`build a glade`, `move Bisker to the Meadow`, or `make a new animal`.\n"
+    "Only the park block acts; everything else is just you, in your own "
+    "voice, exactly as always. A line starting with '>' is an ordinary quote, "
+    "not a move."
 )
 
 # In the person's own chat, how to write to another kin (block_hints.py).
@@ -5145,13 +5146,15 @@ APP_PROMPT_REGISTRY = {
     },
     "park_mechanism": {
         "default": DEFAULT_PARK_MECHANISM,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Park keeping — the keeper's framing",
         "desc": "The full keeping framing a `park` = keeper kin gets on a "
                 "scheduled wake-up, where the wake-up IS a park turn. Reframes "
                 "petting into KEEPING (pair / welcome / expand / give), and "
-                "states the '> ' command convention. Registered because it "
+                "states the park-block convention (v2, 23 Nov 2026: a "
+                "fenced park block, not a '> ' line, which collided with "
+                "quoting). Registered because it "
                 "holds the pacing — how much a kin may do in one turn — and "
                 "that was a Python constant nobody but a coder could reach, "
                 "which is exactly the kind of limit this registry exists to "
@@ -5159,7 +5162,7 @@ APP_PROMPT_REGISTRY = {
     },
     "park_turn_instruction": {
         "default": DEFAULT_PARK_TURN_INSTRUCTION,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Park keeping — the per-turn ask",
         "desc": "The short directive appended after the park state on a keeper "
@@ -5171,7 +5174,7 @@ APP_PROMPT_REGISTRY = {
     },
     "park_chat_hint": {
         "default": DEFAULT_PARK_CHAT_HINT,
-        "version": 4,
+        "version": 5,
         "placeholders": [],
         "title": "Park tending — chat clue-in",
         "desc": "Appended to the system prompt for a kin whose `park` setting "
@@ -5296,11 +5299,12 @@ APP_PROMPT_REGISTRY = {
     },
     "park_chat_hint_shared": {
         "default": DEFAULT_PARK_CHAT_HINT_SHARED,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Park tending — in a shared space",
         "desc": "The park hint for a room, a Telegram group or a Discord "
-                "channel, where one '> ' move runs per reply. The private-chat "
+                "channel, where one park-block move runs per reply (v2: the "
+                "block replaced the '> ' line). The private-chat "
                 "hint says a kin can keep going, which isn't so there.",
     },
     "kin_message_chat_hint": {

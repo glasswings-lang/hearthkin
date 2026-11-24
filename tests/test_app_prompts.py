@@ -244,13 +244,25 @@ check(
 # park_chat_hint: the chat clue-in for a `park` = chat|keeper kin — routing
 # must be lossless, and the text must actually teach the `>` convention it
 # exists to teach (an empty or malformed default would silently un-teach it).
+def _pk_old_teaching():
+    import park_keeper
+    return park_keeper._OLD_TEACHING
+
+
 check(
     "park_chat_hint routing is lossless (file == constant)",
     k.load_app_prompt("park_chat_hint") == k.DEFAULT_PARK_CHAT_HINT,
 )
+# The park block replaced the '> ' line (23 Nov 2026): '>' is how anyone
+# quotes in writing, and quotes were being run as moves.
 check(
-    "park_chat_hint actually states the '>' convention",
-    "> " in k.DEFAULT_PARK_CHAT_HINT and "final line" in k.DEFAULT_PARK_CHAT_HINT.lower(),
+    "park_chat_hint actually states the park-block convention",
+    "```park" in k.DEFAULT_PARK_CHAT_HINT
+    and "park block" in k.DEFAULT_PARK_CHAT_HINT,
+)
+check(
+    "park_chat_hint no longer teaches a '> ' line as a move",
+    not any(m in k.DEFAULT_PARK_CHAT_HINT for m in _pk_old_teaching()),
 )
 # ...and tells the kin it can keep going. Without this the kin plays as though
 # it gets one move, and spends it looking instead of acting on what it saw —
@@ -259,7 +271,7 @@ check(
 check(
     "park_chat_hint says a kin may take more than one move",
     "next thing" in k.DEFAULT_PARK_CHAT_HINT
-    and "no '> ' line" in k.DEFAULT_PARK_CHAT_HINT,
+    and "no park block" in k.DEFAULT_PARK_CHAT_HINT,
 )
 
 # park_mechanism / park_turn_instruction: the keeper's framing and its per-turn
@@ -279,8 +291,14 @@ check(
     k.load_app_prompt("park_turn_instruction") == _pk_mod.TURN_INSTRUCTION,
 )
 check(
-    "park_mechanism still states the '>' convention it exists to teach",
-    "> " in _pk_mod.MECHANISM,
+    "park_mechanism states the park-block convention it exists to teach",
+    "```park" in _pk_mod.MECHANISM
+    and not any(m in _pk_mod.MECHANISM for m in _pk_mod._OLD_TEACHING),
+)
+check(
+    "park_turn_instruction asks for a park block, not a '>' line",
+    "park block" in _pk_mod.TURN_INSTRUCTION
+    and not any(m in _pk_mod.TURN_INSTRUCTION for m in _pk_mod._OLD_TEACHING),
 )
 
 # tend_missed_call: editable, and names the tool it wants issued.

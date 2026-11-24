@@ -1241,7 +1241,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li>A kin's tool calls in a room are shown in the chat as they happen, and kept for that kin's next turn (since 12 November 2026). Only that kin reads its tool results back; the others hear what it says. Reopening the room shows the conversation without the raw tool results.</li>
   <li>A kin in a room can save a file by writing it out in its reply, as on the desktop, and the room shows what was saved.</li>
   <li><strong>Regenerate</strong> (<kbd>Alt</kbd>+<kbd>G</kbd>, or <kbd>Ctrl</kbd>+<kbd>R</kbd>) has the last kin to speak write its turn again. Only that kin's reply, its tool steps and Hearthkin's notes to it are taken out; nobody else's words change, and it doesn't count as a new round. Not while a round is running, or with Auto-continue on.</li>
-  <li>A kin that plays its park from chat can make <strong>one</strong> park move per reply in a room, with a <code>&gt;</code> line, as in a Telegram group. The room sees what happened, and the next kin waits for it.</li>
+  <li>A kin that plays its park from chat can make <strong>one</strong> park move per reply in a room, with a park block, as in a Telegram group. The room sees what happened, and the next kin waits for it.</li>
   <li><strong>Share a document</strong> works in a room: each kin gets the file's text for the round that answers your message.</li>
   <li><strong>Attach image</strong> works in a room. Each kin whose model can see pictures gets it; a kin whose model can't is told a picture was shared, so it doesn't pretend to see it. (Take photo is for one-on-one chats only.)</li>
   <li>The Activity line says which kin last drew on its memories and how many, as it does in a one-on-one chat.</li>
@@ -1413,7 +1413,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li>A kin that can't open files asks for one part at a time, by writing a block that opens <code>```manual</code> and the part's name, for example <code>```manual Surfaces</code>. That part is put in front of it the next time it's spoken to or wakes, on any surface. It's told every turn what the parts are called. A long part with smaller parts (like "Your tools") comes as its opening and a list of those, each of which can be asked for.</li>
 </ul>
 
-<p>The shapes a kin can write for Hearthkin to act on are each taught to it, on every turn and surface where they work, so a kin is never left guessing: a fenced block that saves a file, a fenced block that saves memory for a kin with no tools, a <code>&gt; </code> line that makes a park move, a <code>```to:</code> block that writes to another kin, and the <code>```manual</code> block above. What a kin is told about each is an editable prompt on the <strong>Prompts</strong> tab.</p>
+<p>The shapes a kin can write for Hearthkin to act on are each taught to it, on every turn and surface where they work, so a kin is never left guessing: a fenced block that saves a file, a fenced block that saves memory for a kin with no tools, a <code>```park</code> block that makes a park move, a <code>```to:</code> block that writes to another kin, and the <code>```manual</code> block above. What a kin is told about each is an editable prompt on the <strong>Prompts</strong> tab.</p>
 
 <h2 id="games">The creature park — a game your kin can play</h2>
 
@@ -1482,14 +1482,22 @@ dialog.</p>
 <ul>
   <li><strong>Off (default).</strong> The park is reached only through the <code>tff</code> tool, if
   that tool is on the kin's allowlist.</li>
-  <li><strong>Chat.</strong> The kin may act mid-conversation by putting one action on its own final
-  line, starting with <code>&gt;&nbsp;</code> — for example <code>&gt; pet Luna</code>. It says whatever
-  it wants to say, then the move goes on the last line, and Hearthkin runs it and posts what
+  <li><strong>Chat.</strong> The kin may act mid-conversation by ending its reply with a
+  <strong>park block</strong>: a fenced block labelled <code>park</code>, one move per line, for
+  example <code>pet Luna</code>. It says whatever it wants to say, then the block, and Hearthkin runs
+  it and posts what
   happened — and then it's asked what it wants to do next, so one message can be a whole visit
   rather than a single move.</li>
   <li><strong>Keeper.</strong> As chat, and its scheduled wake-ups become park turns: the kin is
   shown the park as it stands, what anyone else has done since, and one concrete thing worth doing
-  right now, and it answers in its own voice with a <code>&gt;</code> line.</li>
+  right now, and it answers in its own voice with a park block.</li>
+  <li><strong>Why a block, and not a line starting with <code>&gt;</code>.</strong> Moves used to go
+  on a <code>&gt;</code> line, but that's also how anyone quotes something in writing, so a kin
+  quoting a line it loved, or describing something it did, was heard as a park move, and with the
+  game closed you'd get "the park isn't reachable". Since 23 November 2026 a <code>&gt;</code> line
+  is just a quote. If you'd saved the park prompts before then, Hearthkin keeps reading the old
+  line until you adopt the new wording under <strong>Tools → Prompt updates</strong>, so nothing
+  stops working in between.</li>
 </ul>
 
 <p>That last part — <em>one concrete thing worth doing</em> — matters more than it sounds. Faced
@@ -1511,7 +1519,7 @@ ceiling. After each move the kin is shown what actually happened and asked what 
 next, until it stops asking or reaches this number. This happens on the desktop, in Telegram private
 chats, in Discord direct messages and on a keeper's wake-ups. In a Telegram group or a Discord server
 channel the kin gets one reply's worth of moves, since several people are reading there. In practice it usually stops well before —
-a reply with no <code>&gt;</code> line in it is the kin saying it's finished for now, and that is a
+a reply with no park block in it is the kin saying it's finished for now, and that is a
 complete answer rather than a failure to continue. Set it to <strong>0</strong> for no limit at
 all.</p>
 
@@ -1520,9 +1528,9 @@ room, say — doesn't use up those moves, so a kin can finish a walkthrough. A s
 <strong>Most moves of any kind in one turn</strong> (default 60, 0 for no cap), is the last-resort
 stop, and it counts everything, answers included.</p>
 
-<p>Two more limits. A kin can't start its park over: <code>reset</code> on a kin's <code>&gt;</code>
-line is refused, and the kin is told that one is yours to do. And in a Telegram group or on Discord,
-where everyone reads the same feed, a kin's reply runs its <code>&gt;</code> lines once and it isn't
+<p>Two more limits. A kin can't start its park over: <code>reset</code> in a kin's park block
+is refused, and the kin is told that one is yours to do. And in a Telegram group or on Discord,
+where everyone reads the same feed, a kin's reply runs its park block once and it isn't
 asked to carry on.</p>
 
 <p>Bear in mind that every move is a fresh call to that kin's model, so on a slow local model a

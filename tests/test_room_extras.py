@@ -28,6 +28,13 @@ HOME = tempfile.mkdtemp(prefix="roomextras-")
 os.environ["HEARTHKIN_HOME"] = HOME
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+# Moves here are written as '> ' lines, the park's old shape (23 Nov 2026:
+# the park block replaced it, because '>' is also how anyone quotes). The old
+# line still runs while a person's saved park prompts teach it, so these
+# tests run with the old wording in place; tests/test_park_block.py covers
+# the block. What happens after a move is read is the same either way.
+import park_keeper as _park_old_wording  # noqa: E402
+_park_old_wording.old_marker_taught = lambda: True
 
 _fails = []
 

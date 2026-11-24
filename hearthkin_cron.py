@@ -1831,7 +1831,7 @@ def _run_cron_park_turn(kin, reply, messages, model, options, cache,
                          awaiting=lambda: host.awaiting_answer(kin))
     if moves:
         reply = reply + "\n\n🌳 " + "\n\n".join(
-            res if len(moves) == 1 else "> %s\n%s" % (cmd, res)
+            res if len(moves) == 1 else "park: %s\n%s" % (cmd, res)
             for cmd, res in moves)
     return reply, turn
 
