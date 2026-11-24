@@ -3389,8 +3389,8 @@ class TelegramBot:
 
     def _cmd_clear(self, user_id, chat_id, arg=""):
         """Wipe this Telegram user's history with the kin. Memory.md
-        stays. Destructive: there's no archive — see /new for the
-        archive-then-start-fresh variant.
+        stays. A copy is kept first (23 Nov 2026), and if it can't be,
+        nothing is cleared.
 
         For share-with-desktop users, /clear wipes the kin's main
         conversation.jsonl — affecting the desktop and any other
@@ -3484,9 +3484,14 @@ class TelegramBot:
         and only the per-user slice is wiped.
 
         Share users: snapshot the kin's main conversation.jsonl into
-        ~/.hearthkin/kin/<kin>/conversations/<ts>.json (the
-        existing desktop snapshots dir), then wipe conversation.jsonl.
-        Affects the desktop and any other sharing user; ack says so."""
+        ~/.hearthkin/conversations/<kin>_telegram_new_<ts>.json (the
+        Hearthkin-wide conversations folder, NOT the kin's own folder;
+        until 24 Nov 2026 the message said "the kin's conversations
+        folder" and the person looked there and found nothing), then
+        wipe conversation.jsonl, which also keeps a copy in the kin's
+        backups/cleared. If no snapshot can be written, nothing is
+        wiped. Affects the desktop and any other sharing user; ack
+        says so, and names only places that were really written."""
         if self._user_shares_desktop(user_id):
             from kin_persistence import (
                 load_agent_conversation,
@@ -3520,31 +3525,44 @@ class TelegramBot:
                     archived_to = snapshot_path
                 except Exception:
                     archived_to = None
+                if archived_to is None:
+                    self._send_chunked(
+                        chat_id,
+                        f"Couldn't start a new conversation with "
+                        f"{self.agent_name}: the old one couldn't be saved "
+                        f"first, so nothing was emptied."
+                    )
+                    return
             try:
                 save_agent_conversation(self.agent_name, [])
             except Exception:
-                pass
+                self._send_chunked(
+                    chat_id,
+                    f"Couldn't start a new conversation with "
+                    f"{self.agent_name}: the conversation file couldn't be "
+                    f"emptied, so it's still going. The old one was saved "
+                    f"anyway, as {archived_to.name} in the conversations "
+                    f"folder inside your Hearthkin folder."
+                    if archived_to else
+                    f"Couldn't start a new conversation with "
+                    f"{self.agent_name}: the conversation file couldn't be "
+                    f"emptied, so it's still going."
+                )
+                return
             self._last_thinking.pop(user_id, None)
             if archived_to:
                 ack = (
-                    f"Started a new conversation. Previous one (shared "
-                    f"with desktop) was snapshotted to {archived_to.name} "
-                    f"in the kin's conversations folder. The desktop and "
-                    f"any other sharing user will now see an empty "
-                    f"conversation. {self.agent_name}'s memory file is "
-                    f"untouched."
-                )
-            elif current:
-                ack = (
-                    f"Started a new conversation. (Couldn't snapshot "
-                    f"the previous one to disk.) The desktop and any "
-                    f"other sharing user will see an empty conversation. "
-                    f"{self.agent_name}'s memory file is untouched."
+                    f"Started a new conversation. The old one (shared with "
+                    f"the desktop) is saved as {archived_to.name}, in the "
+                    f"conversations folder inside your Hearthkin folder, "
+                    f"not in {self.agent_name}'s own folder. The desktop "
+                    f"and anyone else sharing it now see an empty "
+                    f"conversation. {self.agent_name}'s memory is untouched."
                 )
             else:
                 ack = (
                     f"Started a new conversation with {self.agent_name}. "
-                    f"(Nothing to archive.)"
+                    f"(Nothing to save.)"
                 )
             self._send_chunked(chat_id, ack)
             return
@@ -3561,12 +3579,18 @@ class TelegramBot:
             try:
                 archived_to = self._archive_telegram_history(user_id, history)
             except Exception:
-                # If archiving failed, treat /new as /clear rather
-                # than refusing — user explicitly asked to start
-                # fresh and the worst case (no archive) is recoverable
-                # because we still have telegram_history.json's
-                # backup-on-write semantics.
                 archived_to = None
+            if archived_to is None:
+                # 24 Nov 2026: this used to wipe anyway and say the old
+                # conversation "isn't recoverable". Same rule as /clear
+                # now: no copy, no wipe.
+                self._send_chunked(
+                    chat_id,
+                    f"Couldn't start a new conversation with "
+                    f"{self.agent_name}: the old one couldn't be saved "
+                    f"first, so nothing was emptied."
+                )
+                return
         # _histories_lock so an inference worker writing a new turn
         # simultaneously can't be lost (audit T1).
         with self._histories_lock:
@@ -3578,17 +3602,10 @@ class TelegramBot:
         self._last_thinking.pop(user_id, None)
         if archived_to:
             ack = (
-                f"Started a new conversation. The previous one was "
-                f"archived to {archived_to.name} on the operator's "
-                f"machine. {self.agent_name}'s long-term memory is "
-                f"untouched."
-            )
-        elif history:
-            ack = (
-                f"Started a new conversation. (Couldn't archive the "
-                f"previous one to disk — memory's untouched, but the "
-                f"old conversation isn't recoverable.) "
-                f"{self.agent_name}'s long-term memory is untouched."
+                f"Started a new conversation. The old one is saved on "
+                f"the computer as {archived_to.name}, in "
+                f"{self.agent_name}'s telegram_archive folder. "
+                f"{self.agent_name}'s memory is untouched."
             )
         else:
             ack = (
