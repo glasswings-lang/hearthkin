@@ -146,7 +146,7 @@ def history_cap(section, default=HISTORY_CAP_DEFAULT):
     return v if v >= 0 else default
 
 
-def trim_front(history, cap):
+def trim_front(history, cap, keep=None):
     """A history kept apart from the desktop's, capped at `cap` messages,
     trimmed in RARE, BIG steps rather than one message per turn. The one
     rule for Telegram's and Discord's own histories (21 Nov 2026; Discord
@@ -160,9 +160,23 @@ def trim_front(history, cap):
     `cap` and, when it overflows, is cut back by a quarter at once. `cap`
     stays a true ceiling, because an oversized context on local Ollama
     returns nothing at all. The compaction note, if any, is kept.
-    `cap` of 0 means no cap."""
+    `cap` of 0 means no cap.
+
+    `keep(rows)`, when given, is handed the rows about to fall off the front
+    and must save them; if it raises, nothing is trimmed (24 Nov 2026: the
+    rows the cap took were gone for good, the one place Hearthkin still
+    dropped conversation without a copy)."""
     if cap <= 0 or len(history) <= cap:
         return history
     step = max(1, cap // 4)
     from chat_helpers import keep_compaction_note
-    return keep_compaction_note(history, history[-max(10, cap - step):])
+    kept = keep_compaction_note(history, history[-max(10, cap - step):])
+    if keep is not None:
+        ids = {id(m) for m in kept}
+        dropped = [m for m in history if id(m) not in ids]
+        if dropped:
+            try:
+                keep(dropped)
+            except Exception:
+                return history
+    return kept

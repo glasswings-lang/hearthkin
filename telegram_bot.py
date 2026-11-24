@@ -925,7 +925,7 @@ class TelegramBot:
             added = (getattr(self, "_rows_added", None) or {}).get(str(key))
             return rows, front_dropped(added, len(rows))
 
-    def _trim_history(self, history, cap):
+    def _trim_history(self, history, cap, key=None):
         """Cap the stored history — but in RARE, BIG steps, not one message
         per turn.
 
@@ -953,7 +953,12 @@ class TelegramBot:
         only memory, not speed, now that the trim is rare.
         """
         from history_rows import trim_front
-        return trim_front(history, cap)
+        keep = None
+        if key is not None:
+            from kin_persistence import keep_trimmed_rows
+            keep = (lambda rows: keep_trimmed_rows(
+                self.agent_name, "telegram_archive", key, rows))
+        return trim_front(history, cap, keep=keep)
 
     def __init__(self, agent_name, get_config, get_soul, get_memory,
                  get_model_options, on_status, on_activity=None,
@@ -4664,7 +4669,7 @@ class TelegramBot:
             history = self._histories.setdefault(_hkey(user_id), [])
             self._count_added(_hkey(user_id), len(history), len(new_turns))
             history.extend(new_turns)
-            history = self._trim_history(history, cap)
+            history = self._trim_history(history, cap, key=_hkey(user_id))
             # Sweep LEADING tool-pair fragments (a cap-cut mid-
             # `assistant tool_calls -> tool` pair leaves the orphan
             # in a shape providers reject — Mistral 400 "Unexpected
@@ -6682,7 +6687,7 @@ class TelegramBot:
                 history = self._histories.setdefault(history_key, [])
                 self._count_added(history_key, len(history), len(new_turns))
                 history.extend(new_turns)
-                history = self._trim_history(history, cap)
+                history = self._trim_history(history, cap, key=history_key)
                 # Sweep leading tool-pair fragments only. Trailing-
                 # sweep is OFF here for the same reason as the DM
                 # path (see _append_turns_for comment): new_turns

@@ -6740,7 +6740,9 @@ def append_discord_turn(name, channel_id, turn, cap=None, raise_on_failure=False
                     (load_agent_config(name) or {}).get("discord") or {})
             except Exception:
                 cap = history_cap({})
-        data[key] = trim_front(lst, cap)
+        data[key] = trim_front(
+            lst, cap, keep=lambda rows: keep_trimmed_rows(
+                name, "discord_archive", key, rows))
         try:
             agent_dir(name).mkdir(parents=True, exist_ok=True)
             # Atomic, like every other history file: written in place, a
@@ -7797,6 +7799,23 @@ def save_room_conversation(name, conversation):
             "messages": conversation,
         }
         atomic_write_json(room_dir(name) / "conversation.json", data)
+
+
+def keep_trimmed_rows(name, folder, key, rows):
+    """Append rows a history cap is about to drop to
+    <kin>/<folder>/<key>-older.jsonl, one per line, never rewritten.
+    Raises when it can't, so the caller keeps the rows instead (24 Nov 2026:
+    Telegram's and Discord's own histories lost what the cap took)."""
+    if not rows:
+        return None
+    d = agent_dir(name) / folder
+    d.mkdir(parents=True, exist_ok=True)
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(key))
+    path = d / f"{safe}-older.jsonl"
+    with open(path, "a", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+    return path
 
 
 def keep_room_copy(name):
