@@ -53,6 +53,12 @@ installer.
   months got squeezed); Redistill does that when you choose. Clears and new
   conversations say how to bring the old one back. Undated messages at the
   start of a copy now go next to the message they led into, not to the front.
+- **The rules file for anyone working on Hearthkin is shorter.** CLAUDE.md,
+  which loads at the start of every coding session, went from about 86,000
+  characters to about 50,000. Every rule stayed, each with the test that
+  enforces it; the stories of how each rule was learned moved to
+  docs/lessons.md. A checklist of all 318 rules and where each now lives was
+  checked before the swap.
 - **A nightly backup script, and tending wake-ups that skip when there's
   nothing to tend.** `scripts/backup_kin.py` zips every kin's folder into
   kin-backups in your Hearthkin folder and keeps the newest 14; it's meant to
