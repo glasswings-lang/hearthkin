@@ -822,6 +822,23 @@ class KinMgmtMixin:
             logged = False
             wx.MessageBox(f"Couldn't write model_history.md: {e}",
                           "Warning", wx.OK | wx.ICON_WARNING)
+        # Tell the kin, in its conversation (24 Nov 2026): a swap is the
+        # usual reason a kin seems to have changed, and it used to find out
+        # only by feeling it.
+        try:
+            from kin_persistence import load_app_prompt, now_iso
+            user = ((self.config.get("user_name", "") or "").strip()
+                    or "your person")
+            note = (load_app_prompt("model_swap_note", self.current_agent)
+                    .replace("{user}", user)
+                    .replace("{old}", current or "(none)")
+                    .replace("{new}", new_clean))
+            if self.current_room is None and note.strip():
+                self.conversation.append(
+                    {"role": "system", "content": note, "ts": now_iso()})
+                self._persist_current_conversation()
+        except Exception:
+            pass
         # Update config + active-model tracker. The dialog widget that
         # invoked us is responsible for refreshing its own display based
         # on the return value (True = committed); no widget touching here.

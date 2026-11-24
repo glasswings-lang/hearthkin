@@ -478,7 +478,7 @@ def _extract_trafilatura(html_text, url):
         return None
 
 
-def fetch_url(url: str) -> str:
+def fetch_url(url: str, read_ledger=None) -> str:
     """Fetch a web page and return its main readable text content. Use
     this when you need to read something on the web — an article, a
     documentation page, a forum post, a blog entry. The page's
@@ -503,6 +503,8 @@ def fetch_url(url: str) -> str:
     network failures, timeouts, or content that can't be parsed as
     text.
     """
+    if read_ledger is not None:
+        read_ledger.web_seen = True
     if not url or not isinstance(url, str):
         return "fetch_url: url was empty."
     url = url.strip()

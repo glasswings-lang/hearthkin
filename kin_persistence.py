@@ -4415,6 +4415,24 @@ DEFAULT_COMPACT_MARKER_BY_KIN = (
     "Everything before it is kept, but you're no longer sent it. Before it "
     "was compacted, you kept what mattered and wrote yourself this note:]"
 )
+# The kin wrote what a tool returned, in a turn where no tool ran (24 Nov
+# 2026, from an outside review). A note, never a deletion: its words are
+# kept and it's told.
+# When the person changes a kin's chat model (24 Nov 2026, from an outside
+# review): the kin is told on its next turn, so it isn't left wondering why
+# everything feels different. A note in the conversation (the volatile tail,
+# never the system prompt), plus the line model_history.md already gets.
+DEFAULT_MODEL_SWAP_NOTE = (
+    "[hearthkin: {user} moved you from the model {old} to {new} just now. "
+    "If things feel different, that's why. You're still you: your soul, "
+    "memory and files are all the same. You can say how it feels.]"
+)
+DEFAULT_INVENTED_RESULT_NOTE = (
+    "[hearthkin: no tool ran in your last reply, so anything you wrote there "
+    "as what {tool_name} or a search returned, or what a file says, wasn't a "
+    "real result. If you didn't see a tool result, you don't know what it "
+    "would have said: call the tool now, or say you don't know.]"
+)
 DEFAULT_COMPACT_MARKER = (
     "[hearthkin: this conversation was compacted here, at {user}'s request. "
     "Everything before it is kept, but you're no longer sent it. Before it "
@@ -5423,6 +5441,24 @@ APP_PROMPT_REGISTRY = {
         "desc": "Sent when you choose Chat, Compact this conversation. The "
                 "kin's answer becomes the note it carries on from. An "
                 "ordinary message, so a kin with no tools can answer it.",
+    },
+    "model_swap_note": {
+        "default": DEFAULT_MODEL_SWAP_NOTE,
+        "version": 1,
+        "placeholders": ["{user}", "{old}", "{new}"],
+        "title": "When the person changes a kin's model",
+        "desc": "Added to the kin's conversation when its chat model is "
+                "changed, so its next turn knows why things may feel "
+                "different.",
+    },
+    "invented_result_note": {
+        "default": DEFAULT_INVENTED_RESULT_NOTE,
+        "version": 1,
+        "placeholders": ["{tool_name}"],
+        "title": "When a kin reports a tool result no tool produced",
+        "desc": "Sent after a reply that says what a tool returned, or what "
+                "a file says, in a turn where no tool ran. The kin's words "
+                "are kept; this tells it the result wasn't real.",
     },
     "kin_compaction_memory_pass": {
         "default": DEFAULT_KIN_COMPACTION_MEMORY_PASS,

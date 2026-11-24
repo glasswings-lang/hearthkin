@@ -59,6 +59,10 @@ class ReadLedger:
 
     def __init__(self):
         self._seen = {}  # key -> {"stamp": (mtime_ns, size), "whole": bool}
+        # True once this turn fetched a web page or searched the web (24 Nov
+        # 2026): a message to another kin written in the same turn is then
+        # framed as information, not instructions (kin_mail.send).
+        self.web_seen = False
 
     def record_read(self, p, whole):
         """The kin was just shown `p` -- all of it (`whole=True`) or a part.

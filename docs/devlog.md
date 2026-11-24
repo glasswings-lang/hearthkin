@@ -53,6 +53,18 @@ installer.
   months got squeezed); Redistill does that when you choose. Clears and new
   conversations say how to bring the old one back. Undated messages at the
   start of a copy now go next to the message they led into, not to the front.
+- **A kin is told when a tool result it wrote wasn't real.** If a reply says
+  what a tool returned or what a search found, in a turn where no tool ran,
+  the kin gets a note: that wasn't a real result, so call the tool or say you
+  don't know. Its words are kept. Questions about an earlier search are left
+  alone.
+- **A kin is told when its model changes.** Changing a kin's model puts a
+  short note in its conversation: who moved it, from what to what, and that
+  it's still itself. A swap is the usual reason a kin seems different.
+- **A message from a kin that just read the web is framed.** It reaches the
+  other kin as information from that kin, not instructions, since something
+  read on the web can slip in. The kin manual says the same, about the
+  content, never about the sister.
 - **A kin can compact for itself.** A new switch in the kin's Memory
   settings, off unless you turn it on. Then, at a wake-up when the
   conversation is past the kin's compaction mark, the kin keeps what matters

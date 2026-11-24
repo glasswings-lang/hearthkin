@@ -1379,6 +1379,30 @@ def detect_tool_roleplay(content, tool_names):
             best_tool = next(iter(tool_set.values()), "(unknown)")
         return "asterisk-action", best_tool
 
+    # 6. Invented result (24 Nov 2026, from an outside review): the kin
+    # reports what a tool RETURNED, in a turn where no tool ran (callers only
+    # ask when nothing fired). Models that can't call tools were measured
+    # writing a fake call, inventing its result and reasoning from it.
+    # Narrow on purpose: a tool the kin has, named, then a word of returning;
+    # or "the search/lookup/tool returned". Checked before narrative intent,
+    # which it would otherwise be mistaken for.
+    import re as _re
+    # Questions are left alone: "you said the search came back empty?" is
+    # asking about something, not reporting a result.
+    _said = " ".join(seg for seg in _re.split(r"(?<=[.!?\n])", content)
+                       if not seg.rstrip().endswith("?"))
+    for low_name, real_name in tool_set.items():
+        if _re.search(r"\b" + _re.escape(low_name) + r"\b[^.\n]{0,40}?\b"
+                      r"(returned|came back( with)?|gave me|shows|showed|"
+                      r"says|said|found)\b", _said, _re.IGNORECASE):
+            return "invented-result", real_name
+    if _re.search(r"\bthe (search|lookup|tool( call)?) (returned|came back"
+                  r"( with)?|gave me|found)\b", _said, _re.IGNORECASE):
+        guess = next((n for k, n in tool_set.items()
+                      if k in ("memory_search", "web_search")),
+                     next(iter(tool_set.values()), "(unknown)"))
+        return "invented-result", guess
+
     # 5. Narrative intent at end of content. Scoped to the tail so
     # mid-paragraph mentions don't false-positive.
     tail = content[-200:]
@@ -1425,6 +1449,10 @@ def build_tool_roleplay_corrective_note(variant, tool_name, kin_name=None):
     than feel accused of an error they didn't make."""
     if variant == "narrative-intent":
         return ""
+    if variant == "invented-result":
+        from kin_persistence import load_app_prompt
+        return load_app_prompt("invented_result_note", kin_name).replace(
+            "{tool_name}", tool_name)
     shape_hint = {
         "whole-content": f"just the literal name {tool_name!r}",
         "trailing-call-prefix": f"the token 'call_{tool_name}' as text",

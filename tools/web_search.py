@@ -26,7 +26,8 @@ def web_search(query: str,
                language: str = "",
                date_after: str = "",
                date_before: str = "",
-               provider: str = "brave") -> str:
+               provider: str = "brave",
+               read_ledger=None) -> str:
     """Run a web search and return the top results as a numbered list.
     Use this when you need to find current information — news, recent
     docs, anything that isn't in your training data or in your kin
@@ -64,6 +65,8 @@ def web_search(query: str,
     (no exception). When the user has not set the provider's API key,
     the error explicitly says where to configure it.
     """
+    if read_ledger is not None:
+        read_ledger.web_seen = True
     if not isinstance(query, str) or not query.strip():
         return "web_search: query was empty."
 
