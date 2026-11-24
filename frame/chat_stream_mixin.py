@@ -776,13 +776,18 @@ class ChatStreamMixin:
         if self.current_agent:
             try:
                 import reply_actions
+                _lines = []
                 _notes, _ = reply_actions.after_reply(
                     self.current_agent, reply_to_save, kin_mail_ok=True,
-                    prompted=not _is_cron_user_text(user_text))
+                    prompted=not _is_cron_user_text(user_text), shown=_lines)
                 for _mail_note in _notes:
-                    self.chat_display.AppendText("\n" + _mail_note + "\n")
                     self.conversation.append(
                         {"role": "system", "content": _mail_note, "ts": ts})
+                # The person reads plain lines (the same as Telegram and
+                # Discord), not the note written for the kin (23 Nov 2026).
+                if _lines and self._desktop_shows("block_actions"):
+                    self.chat_display.AppendText(
+                        "\n" + "\n".join(_lines) + "\n")
             except Exception as e:
                 append_failure_log("kin_messages.log", self.current_agent,
                                    "wake-up in chat", e)

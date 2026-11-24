@@ -205,6 +205,43 @@ for surface in SURFACE_ORDER:
     if named:
         print(f"  {SURFACE_NAMES[surface]}: " + ", ".join(sorted(named)))
 
+# --- every setting a surface has is answered for (23 Nov 2026) ---
+# The map above can only hold surfaces to what's written on it. This goes
+# looking: every setting in every surface's own defaults must be answered in
+# _surface_settings.py, so a new switch on one surface fails here until
+# someone decides whether the others need it too. See that file.
+print()
+print("--- every setting a surface has is answered for ---")
+import _surface_settings as _ss  # noqa: E402
+
+_caps = {c.key for c in CAPABILITIES}
+_have = _ss.defaults()
+_unanswered, _bad_cap, _gone, _questions = [], [], [], []
+for _surf, _keys in _have.items():
+    _answers = _ss.SETTINGS.get(_surf, {})
+    for _k in sorted(_keys):
+        _a = _answers.get(_k)
+        if _a is None:
+            _unanswered.append(f"{_surf}: {_k}")
+        elif isinstance(_a, _ss.EVERY) and _a.capability not in _caps:
+            _bad_cap.append(f"{_surf}: {_k} -> {_a.capability}")
+        elif isinstance(_a, _ss.QUESTION):
+            _questions.append(f"{_surf}: {_k} -- {_a.text}")
+    for _k in _answers:
+        if _k not in _keys:
+            _gone.append(f"{_surf}: {_k}")
+check("the check can see the settings at all",
+      len(_have["telegram"]) > 10 and len(_have["discord"]) > 10)
+check("every setting on every surface is answered for: "
+      + "; ".join(_unanswered), not _unanswered)
+check("every 'same on every surface' answer is a row on the map: "
+      + "; ".join(_bad_cap), not _bad_cap)
+check("no answer is kept for a setting that's gone: " + "; ".join(_gone),
+      not _gone)
+print(f"{len(_questions)} open question(s) about settings:")
+for _q in _questions:
+    print("  " + _q)
+
 print()
 if _fails:
     print(f"test_surface_parity: {len(_fails)} FAILED")

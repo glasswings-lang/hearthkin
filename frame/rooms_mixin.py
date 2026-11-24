@@ -199,6 +199,17 @@ class RoomsMixin:
             )
         return ", ".join(sorted(models)), reason
 
+    def _room_shows(self, what):
+        """This room's "Show tool calls" / "Show what reply blocks did"
+        (23 Nov 2026), `what` "tool_calls" or "block_actions": the room's
+        own config, show_<what>; on unless switched off."""
+        try:
+            from kin_persistence import load_room_config
+            cfg = load_room_config(self.current_room) if self.current_room else {}
+            return bool((cfg or {}).get("show_" + what, True))
+        except Exception:
+            return True
+
     def _render_room_conversation(self):
         """Repaint chat_display from self.room_conversation.
 
@@ -297,6 +308,8 @@ class RoomsMixin:
                 cfg["auto_inactivity_min"] = res["auto_inactivity_min"]
                 cfg["per_turn_token_cap"] = res["per_turn_token_cap"]
                 cfg["distill_to_memory"] = res["distill_to_memory"]
+                cfg["show_tool_calls"] = bool(res.get("show_tool_calls", True))
+                cfg["show_block_actions"] = bool(res.get("show_block_actions", True))
                 if create_room(name, cfg["members"]):
                     save_room_config(name, cfg)
                     self._refresh_room_list(select=name)
@@ -359,6 +372,8 @@ class RoomsMixin:
                 new_cfg["distill_to_memory"] = res["distill_to_memory"]
                 new_cfg["private_sees"] = bool(res.get("private_sees"))
                 new_cfg["sees_private"] = bool(res.get("sees_private"))
+                new_cfg["show_tool_calls"] = bool(res.get("show_tool_calls", True))
+                new_cfg["show_block_actions"] = bool(res.get("show_block_actions", True))
                 save_room_config(target, new_cfg)
                 self._room_write_sharing(target, normalized,
                                          new_cfg["private_sees"],
@@ -1441,8 +1456,10 @@ class RoomsMixin:
             self._speak_status_phase("Typing")
         wx.CallAfter(_announce_typing)
 
+        _show_tools = self._room_shows("tool_calls")  # this room's switch
+
         def on_tool_call(name, args, result, is_error):
-            if my_gen != self._stream_id:
+            if my_gen != self._stream_id or not _show_tools:
                 return
             wx.CallAfter(self._on_tool_call_display, my_gen, name, args, result)
 
@@ -1736,7 +1753,7 @@ class RoomsMixin:
                     _speaker, reply_to_save, _tools)
                 if kin_note:
                     _notes.append(kin_note)
-                if human_note:
+                if human_note and self._room_shows("block_actions"):
                     self.chat_display.AppendText(human_note + "\n")
                 _read = turn_steering.read_gesture_note(
                     _speaker, reply_to_save, _tools, _turn_steps,
@@ -1748,8 +1765,13 @@ class RoomsMixin:
                 # (reply_actions). No ```to: here: a room isn't where kin
                 # write to each other.
                 import reply_actions
-                _more, _ = reply_actions.after_reply(_speaker, reply_to_save)
+                _lines = []
+                _more, _ = reply_actions.after_reply(_speaker, reply_to_save,
+                                                     shown=_lines)
                 _notes.extend(_more)
+                # Told to the person too, as on every surface (23 Nov 2026).
+                if _lines and self._room_shows("block_actions"):
+                    self.chat_display.AppendText("\n".join(_lines) + "\n")
             for _n in _notes:
                 self.room_conversation.append({
                     "role": "system", "content": _n, "ts": ts,
@@ -1866,7 +1888,7 @@ class RoomsMixin:
             return
         # Stopped meanwhile: show and keep what happened, but don't carry on.
         stopped = not getattr(self, "_room_active", False)
-        if shown:
+        if shown and self._room_shows("block_actions"):
             self.chat_display.AppendText(shown + "\n")
         if note:
             # The kin's own copy of what happened, read back to it alone.

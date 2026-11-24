@@ -162,6 +162,64 @@ check("...while a heartbeat still offers it (that list is for wake-ups only)",
       "reach_out" in offered(proactive_wake=True))
 tsd.Destroy()
 
+# --- "Show what reply blocks did", beside "Show tool calls" (23 Nov 2026) ---
+from dialogs.telegram_settings import TelegramMessageSettingsDialog  # noqa: E402
+
+tg_saved = {}
+tgd = TelegramMessageSettingsDialog(
+    None, load_agent_config(KIN), lambda k, v: None,
+    lambda k, v: tg_saved.__setitem__(k, v), kin_name=KIN)
+blk = getattr(tgd, "show_blocks_check", None)
+check("Telegram's message settings have the reply-blocks switch", blk is not None)
+if blk is not None:
+    check("...starting ticked", blk.GetValue())
+    check("...right after Show tool calls",
+          blk.GetParent() is tgd.show_tool_calls_check.GetParent())
+    blk.SetValue(False)
+    blk.ProcessEvent(wx.CommandEvent(wx.wxEVT_CHECKBOX, blk.GetId()))
+    check("...and unticking it saves", tg_saved.get("show_block_actions") is False)
+tgd.Destroy()
+
+dlg = EditKinDialog(_Frame(None), KIN)
+dcb = getattr(dlg, "dc_blocks_check", None)
+check("the Discord tab has the reply-blocks switch", dcb is not None)
+if dcb is not None:
+    check("...starting ticked", dcb.GetValue())
+    dcb.SetValue(False)
+    dcb.ProcessEvent(wx.CommandEvent(wx.wxEVT_CHECKBOX, dcb.GetId()))
+    check("...and unticking it saves",
+          (load_agent_config(KIN).get("discord") or {}).get("show_block_actions") is False)
+dlg.Destroy()
+
+# --- the main window's two switches, on the kin's Tools tab ---
+dlg = EditKinDialog(_Frame(None), KIN)
+for attr, key in (("desk_tools_check", "desktop_show_tool_calls"),
+                  ("desk_blocks_check", "desktop_show_block_actions")):
+    box = getattr(dlg, attr, None)
+    check(f"the Tools tab has the main window's {key} switch", box is not None)
+    if box is not None:
+        check("...starting ticked", box.GetValue())
+        box.SetValue(False)
+        box.ProcessEvent(wx.CommandEvent(wx.wxEVT_CHECKBOX, box.GetId()))
+        check("...and unticking it saves", load_agent_config(KIN).get(key) is False)
+dlg.Destroy()
+
+# --- a room's two switches, in the room window ---
+from dialogs.room_edit import RoomEditDialog  # noqa: E402
+
+rd = RoomEditDialog(None, title="Edit room", initial_name="Hearth",
+                    initial_cfg={"members": [KIN]}, available_kin=[KIN])
+for attr, key in (("show_tools_check", "show_tool_calls"),
+                  ("show_blocks_check", "show_block_actions")):
+    box = getattr(rd, attr, None)
+    check(f"the room window has its {key} switch", box is not None)
+    if box is not None:
+        check("...starting ticked", box.GetValue())
+        box.SetValue(False)
+        check("...and what it's set to is what gets saved",
+              rd.get_result().get(key) is False)
+rd.Destroy()
+
 print()
 if _fails:
     print(f"{len(_fails)} FAILED")

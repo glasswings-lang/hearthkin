@@ -789,11 +789,12 @@ class DiscordBot:
                 pass
 
     def _message_wait_secs(self):
-        """How long to listen for the rest of a message: the person's pace
-        from the Telegram tab's Message settings ("message_wait_secs"), so
-        it's set once for both surfaces. Junk falls back to 2 seconds."""
+        """How long to listen for the rest of a message: Discord's own
+        "message_wait_secs", on the Discord tab. It read Telegram's until 23
+        Nov 2026, a setting merged across two surfaces. Junk falls back to 2
+        seconds."""
         cfg = self.get_config() or {}
-        raw = (cfg.get("telegram") or {}).get("message_wait_secs", 2)
+        raw = (cfg.get("discord") or {}).get("message_wait_secs", 2)
         try:
             secs = float(raw)
         except (TypeError, ValueError):
@@ -1978,7 +1979,7 @@ class DiscordBot:
                 kin_note, human_note = None, None
             if kin_note:
                 notes.append(kin_note)
-            if human_note:
+            if human_note and self._block_lines_on():
                 self._post_sync(channel, human_note)
             if not kin_note:
                 # Only when the bridge found nothing to commit: a kin whose
@@ -2000,9 +2001,14 @@ class DiscordBot:
             import reply_actions
             _me_dm_here = (getattr(message, "guild", None) is None
                            and self._is_me(getattr(message.author, "id", "")))
+            _block_lines = []
             notes.extend(reply_actions.after_reply(
                 self.agent_name, text, kin_mail_ok=_me_dm_here,
-                prompted=True)[0])
+                prompted=True, shown=_block_lines)[0])
+            # What the blocks did, told to the person too (23 Nov 2026),
+            # under "Show what reply blocks did".
+            if _block_lines and self._block_lines_on():
+                self._post_sync(channel, chr(10).join(_block_lines))
             for note in notes:
                 self._persist_turn(channel_id, "system", note, share)
         except Exception as e:
@@ -2077,10 +2083,11 @@ class DiscordBot:
                 ok, why = host.reachable(self.agent_name)
                 if not ok:
                     host.log_unreachable(self.agent_name, why, "discord")
-                    self._post_sync(
-                        channel,
-                        "🌳 The park isn't reachable right now, so that "
-                        "move didn't run and nothing was changed.")
+                    if self._block_lines_on():
+                        self._post_sync(
+                            channel,
+                            "🌳 The park isn't reachable right now, so that "
+                            "move didn't run and nothing was changed.")
                     return
         except Exception as e:
             append_failure_log("discord_failures.log", self.agent_name,
@@ -2118,13 +2125,25 @@ class DiscordBot:
                 _spent = load_app_prompt(
                     "park_moves_spent", self.agent_name).replace(
                         "{moves}", str(result.moves))
-                self._post_sync(channel, _spent)
+                if self._block_lines_on():
+                    self._post_sync(channel, _spent)
                 # Kept in the kin's history too: what the bot posts isn't
                 # saved, so the kin never learned its moves were spent
                 # (audit, 20 Nov 2026).
                 self._persist_turn(channel_id, "system", _spent, share)
             except Exception:
                 pass
+
+    def _block_lines_on(self):
+        """"Show what reply blocks did" for this kin on Discord (23 Nov
+        2026). Every kind of block follows it: a message to another kin, a
+        manual part, a file saved from the reply, a park move."""
+        try:
+            import reply_actions
+            return reply_actions.block_lines_on(
+                (self.get_config() or {}).get("discord") or {})
+        except Exception:
+            return True
 
     def _route_one_park_move(self, text, channel, channel_id, share, host,
                              on_note=None):
@@ -2138,7 +2157,8 @@ class DiscordBot:
                 text, lambda c, s="": host.run(self.agent_name, c, say=s))
             if not res:
                 return False
-            self._post_sync(channel, "🌳 " + res)
+            if self._block_lines_on():
+                self._post_sync(channel, "🌳 " + res)
             try:
                 kin_res = host.decorate(self.agent_name, cmd, res)
             except Exception:

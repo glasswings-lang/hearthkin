@@ -110,7 +110,7 @@ def _save(kin, items):
     atomic_write_json(_state(kin), items)
 
 
-def note_requests(kin, reply_text):
+def note_requests(kin, reply_text, shown=None):
     """Record the parts a reply asked for. Returns a note for the kin's
     history ("" when it asked for none)."""
     found = FENCE_RE.findall(reply_text or "")
@@ -133,6 +133,13 @@ def note_requests(kin, reply_text):
     except Exception as e:
         _log(kin, "save request", e)
         return ""
+    if shown is not None:
+        if got:
+            shown.append(f"📖 {kin} asked for the manual's part: "
+                         + ", ".join(f'"{g}"' for g in got) + ".")
+        if missing:
+            shown.append(f"📖 {kin} asked for a manual part that doesn't "
+                         "exist: " + ", ".join(f'"{m}"' for m in missing) + ".")
     bits = []
     if got:
         bits.append("you'll be given " + ", ".join(f'"{g}"' for g in got)

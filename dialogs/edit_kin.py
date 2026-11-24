@@ -1172,6 +1172,25 @@ class EditKinDialog(wx.Dialog):
         # directly and reports what came back. A model that fails here
         # leaves a kin looking perfectly well while quietly doing
         # nothing, which is the hardest failure to notice from outside.
+        # What the main window shows you for this kin (23 Nov 2026), as the
+        # Telegram and Discord tabs have their own.
+        self.desk_tools_check = wx.CheckBox(
+            host, label="In the main window, show tool calls")
+        self.desk_tools_check.SetValue(
+            bool(self.cfg.get("desktop_show_tool_calls", True)))
+        self.desk_tools_check.Bind(
+            wx.EVT_CHECKBOX, lambda e: self._save_param(
+                "desktop_show_tool_calls", bool(self.desk_tools_check.GetValue())))
+        _tool_widgets.append(self.desk_tools_check)
+        self.desk_blocks_check = wx.CheckBox(
+            host, label="In the main window, show what reply blocks did")
+        self.desk_blocks_check.SetValue(
+            bool(self.cfg.get("desktop_show_block_actions", True)))
+        self.desk_blocks_check.Bind(
+            wx.EVT_CHECKBOX, lambda e: self._save_param(
+                "desktop_show_block_actions",
+                bool(self.desk_blocks_check.GetValue())))
+        _tool_widgets.append(self.desk_blocks_check)
         self.tool_probe_btn = wx.Button(host, label="Test tool &calling…")
         self.tool_probe_btn.Bind(wx.EVT_BUTTON, self._on_test_tool_calling)
         _tool_widgets.append(self.tool_probe_btn)
@@ -1509,6 +1528,14 @@ class EditKinDialog(wx.Dialog):
             wx.EVT_CHECKBOX,
             lambda e: self._save_discord_param(
                 "show_tool_calls", bool(self.dc_tools_check.GetValue())))
+        # As Telegram's: what reply blocks did, one line each (23 Nov 2026).
+        self.dc_blocks_check = wx.CheckBox(
+            host, label="Show what reply bloc&ks did (a message to another "
+                        "kin, a file saved, a park move)")
+        self.dc_blocks_check.Bind(
+            wx.EVT_CHECKBOX,
+            lambda e: self._save_discord_param(
+                "show_block_actions", bool(self.dc_blocks_check.GetValue())))
         # Telegram's two tool signals, on the Discord tab (21 Nov 2026).
         self.dc_summary_check = wx.CheckBox(
             host, label="Name the tools a reply used, at the end of the "
@@ -1517,6 +1544,20 @@ class EditKinDialog(wx.Dialog):
             wx.EVT_CHECKBOX,
             lambda e: self._save_discord_param(
                 "show_tool_summary", bool(self.dc_summary_check.GetValue())))
+        # Discord's own wait for a message sent in pieces (23 Nov 2026); it
+        # used to share Telegram's.
+        dc_wait_row = wx.BoxSizer(wx.HORIZONTAL)
+        dc_wait_row.Add(wx.StaticText(
+            host, label="Wait for the rest of a message sent in pieces "
+                        "(seconds, 0 = answer at once):"),
+            flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
+        self.dc_wait_field = _IntField(
+            host, value=2, min_val=0, max_val=600, size=(80, -1),
+            name="Wait for the rest of a message sent in pieces, seconds "
+                 "(0 = answer at once)",
+            on_commit=lambda v: self._save_discord_param(
+                "message_wait_secs", int(v)))
+        dc_wait_row.Add(self.dc_wait_field)
         dc_prog_row = wx.BoxSizer(wx.HORIZONTAL)
         dc_prog_row.Add(wx.StaticText(
             host, label="\"Still workin&g\" message every N seconds of a "
@@ -1613,7 +1654,7 @@ class EditKinDialog(wx.Dialog):
                    dc_allow_lbl, self.dc_users_list,
                    dc_users_btn_row,
                    self.dc_share_check, self.dc_tools_check,
-                   self.dc_summary_check, dc_prog_row, dc_cap_row,
+                   self.dc_blocks_check, self.dc_summary_check, dc_wait_row, dc_prog_row, dc_cap_row,
                    dc_hist_row, dc_hist_help,
                    self.dc_enabled_check,
                    self.dc_status_label, dc_help):
@@ -1950,6 +1991,11 @@ class EditKinDialog(wx.Dialog):
         self._refresh_dc_sharing_list()
         self.dc_share_check.SetValue(bool(dc.get("share_desktop", False)))
         self.dc_tools_check.SetValue(bool(dc.get("show_tool_calls", False)))
+        self.dc_blocks_check.SetValue(bool(dc.get("show_block_actions", True)))
+        try:
+            self.dc_wait_field.SetValue(str(int(dc.get("message_wait_secs", 2))))
+        except Exception:
+            pass
         self.dc_summary_check.SetValue(bool(dc.get("show_tool_summary", True)))
         from chat_helpers import discord_reply_cap
         self.dc_reply_cap_field.SetValue(str(discord_reply_cap(self.cfg)))

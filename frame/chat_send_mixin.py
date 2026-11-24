@@ -800,7 +800,8 @@ class ChatSendMixin:
                     bits.append(f"could NOT save {p!r} — {e}")
                 note = load_app_prompt("authoring_bridge_result", kin).replace(
                     "{results}", "; ".join(bits))
-                self.chat_display.AppendText("\n" + note + "\n")
+                if self._desktop_shows("block_actions"):
+                    self.chat_display.AppendText("\n" + note + "\n")
                 self.conversation.append(
                     {"role": "system", "content": note, "ts": ts})
                 self._set_status(
@@ -976,10 +977,11 @@ class ChatSendMixin:
             ok, why = host.reachable(kin)
             if not ok:
                 host.log_unreachable(kin, why, "desktop")
-                self._append_block(
-                    "park",
-                    "The park isn't reachable right now, so that move "
-                    "didn't run and nothing was changed.")
+                if self._desktop_shows("block_actions"):
+                    self._append_block(
+                        "park",
+                        "The park isn't reachable right now, so that move "
+                        "didn't run and nothing was changed.")
                 return
             self._start_park_turn(kin, host, reply_text, ts)
         except Exception as e:
@@ -1147,7 +1149,8 @@ class ChatSendMixin:
         # A BARE header. _append_block wraps whatever it is given in brackets
         # -- "You" paints as [You] -- so handing it "[park] ..." painted
         # "[[park] care for the night sky]".
-        self._append_block(f"park: {cmd}", res)
+        if self._desktop_shows("block_actions"):
+            self._append_block(f"park: {cmd}", res)
         self.conversation.append({"role": "system", "content": note, "ts": ts})
         self._persist_current_conversation()
 
@@ -1197,6 +1200,26 @@ class ChatSendMixin:
         except Exception:
             pass
 
+    def _desktop_shows(self, what):
+        """The main window's "Show tool calls" / "Show what reply blocks
+        did" for the current kin (23 Nov 2026), `what` "tool_calls" or
+        "block_actions". Kept per kin, like Telegram's and Discord's, in its
+        config as desktop_show_<what>; on unless switched off. Before this
+        the main window had no switch at all."""
+        try:
+            from kin_persistence import load_agent_config
+            cfg = load_agent_config(self.current_agent) if self.current_agent else {}
+            return bool((cfg or {}).get("desktop_show_" + what, True))
+        except Exception:
+            return True
+
+    def _shows_here(self, what):
+        """The switch for wherever the person is looking: a room's own, or
+        the current kin's main-window one."""
+        if getattr(self, "current_room", None) is not None:
+            return self._room_shows(what)
+        return self._desktop_shows(what)
+
     def _on_tool_call_display(self, gen, name, args, result):
         """Append a tool-call + result block to chat_display. Runs on the
         UI thread via wx.CallAfter from the tool-loop worker. Args are
@@ -1206,6 +1229,8 @@ class ChatSendMixin:
         if self._closing:
             return
         if gen != self._stream_id:
+            return
+        if not self._shows_here("tool_calls"):
             return
         try:
             args_str = ", ".join(f"{k}={v!r}" for k, v in (args or {}).items())

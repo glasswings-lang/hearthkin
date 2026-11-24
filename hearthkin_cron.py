@@ -954,6 +954,26 @@ def _cron_tool_receipt_footer(cfg, result, tools_were_available):
     return ""
 
 
+# What a wake-up's reply blocks did, waiting for its post (one wake-up runs
+# per process; popped by the post so it can never ride a later one).
+_BLOCK_LINES = {}
+
+
+def _block_lines_for(kin, cfg, surface):
+    """The block lines for a post to `surface` ("telegram" or "discord"),
+    under that surface's "Show what reply blocks did" switch."""
+    lines = [l for l in (_BLOCK_LINES.get(kin) or []) if l]
+    if not lines:
+        return ""
+    try:
+        import reply_actions
+        if not reply_actions.block_lines_on((cfg or {}).get(surface) or {}):
+            return ""
+    except Exception:
+        pass
+    return "\n\n" + "\n".join(lines)
+
+
 def _post_cron_reply_to_telegram(kin, cfg, reply, result, schemas, destinations=None):
     """Post a cron reply to Telegram. Strips any model-emitted `_used: ..._`
     line from the reply first — defense-in-depth so the receipt the operator
@@ -978,7 +998,9 @@ def _post_cron_reply_to_telegram(kin, cfg, reply, result, schemas, destinations=
         clean = reply
     footer = _cron_tool_receipt_footer(cfg, result, bool(schemas))
     if destinations is None:
-        _maybe_post_telegram(kin, cfg, clean + footer)
+        _maybe_post_telegram(kin, cfg, clean + footer
+                             + _block_lines_for(kin, cfg, "telegram"))
+        _BLOCK_LINES.pop(kin, None)
     else:
         # A person's own DM gets the receipt, as an unaddressed wake-up's
         # people always did; a group or channel does not (18 Nov 2026: the
@@ -989,8 +1011,18 @@ def _post_cron_reply_to_telegram(kin, cfg, reply, result, schemas, destinations=
         others = [d for d in destinations
                   if not (isinstance(d, dict)
                           and _is_person_place(d.get("surface")))]
-        if people:
-            _deliver_to_destinations(kin, cfg, clean + footer, people)
+        for _surf in ("telegram", "discord"):
+            _mine = [d for d in people
+                     if str(d.get("surface", "")).startswith(_surf)]
+            if _mine:
+                _deliver_to_destinations(
+                    kin, cfg, clean + footer
+                    + _block_lines_for(kin, cfg, _surf), _mine)
+        _rest = [d for d in people if not str(d.get("surface", "")).startswith(
+            ("telegram", "discord"))]
+        if _rest:
+            _deliver_to_destinations(kin, cfg, clean + footer, _rest)
+        _BLOCK_LINES.pop(kin, None)
         if others:
             _deliver_to_destinations(kin, cfg, clean, others)
 
@@ -1660,12 +1692,16 @@ def _finish_cron_reply(kin, result, messages, model, options, cache,
     # A ```manual block asks for part of the kin manual. Both via
     # reply_actions, the one place every surface acts on them.
     _mail_notes = []
+    _lines = [bridge_confirm] if bridge_confirm else []
     try:
         import reply_actions
         _mail_notes, _ = reply_actions.after_reply(kin, reply,
-                                                   kin_mail_ok=True)
+                                                   kin_mail_ok=True,
+                                                   shown=_lines)
     except Exception as e:
         cron_helpers.log_cron_error(kin, "kin_message", str(e))
+    # What the blocks did, for the person, in the post (23 Nov 2026).
+    _BLOCK_LINES[kin] = _lines
     _mail_note = "\n\n".join(_mail_notes)
     # Steering notes for a turn nobody was awake to read. Both are appended to
     # the kin's own history AFTER the reply they describe, so the correction

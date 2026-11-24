@@ -413,6 +413,11 @@ class RenderMixin:
         parts = []
         n = len(self.conversation)
         speaker = self.current_agent or "Model"
+        # "Show tool calls" for this kin in the main window (23 Nov 2026).
+        try:
+            _show_tools = self._desktop_shows("tool_calls")
+        except Exception:
+            _show_tools = True
         # Compute the windowed start index. _render_window is set
         # in _load_agent based on app preference. 0 (no kin) or a
         # value >= n means "render everything".
@@ -497,9 +502,10 @@ class RenderMixin:
                     if len(result_text) > 500:
                         result_text = result_text[:500] + "\n... [truncated]"
                     header = self._block_header(speaker, ts_obj)
-                    parts.append(
-                        f"\n[{header}]\n[tool: {name}({args_str})]\n{result_text}\n"
-                    )
+                    if _show_tools:
+                        parts.append(
+                            f"\n[{header}]\n[tool: {name}({args_str})]\n{result_text}\n"
+                        )
                 # The actual reply content (a tool-only turn has content=None
                 # and is fully described by the tool blocks above).
                 if isinstance(content, str) and content:

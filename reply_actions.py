@@ -39,29 +39,41 @@ def before_message(kin, *, mail_in_chat=False):
     return "\n\n".join(parts)
 
 
-def after_reply(kin, reply_text, *, kin_mail_ok=False, prompted=False):
+def after_reply(kin, reply_text, *, kin_mail_ok=False, prompted=False,
+                shown=None):
     """Act on the blocks in a reply. Returns (notes, messages_sent): notes
     for the kin's history, and how many messages went to other kin.
     `kin_mail_ok`: ```to: blocks are acted on here (wake-ups, heartbeats,
-    and the person's own chat); `prompted`: the person is there."""
+    and the person's own chat); `prompted`: the person is there. `shown`, a
+    list, gets the plain lines for the PERSON, one per thing a block did;
+    each surface shows them when its "Show what reply blocks did" switch is
+    on (block_lines_on)."""
     notes, sent = [], 0
     if kin_mail_ok:
         try:
             import kin_mail
             note, sent = kin_mail.handle_reply(kin, reply_text,
-                                               prompted=prompted)
+                                               prompted=prompted, shown=shown)
             if note:
                 notes.append(note)
         except Exception as e:
             _log(kin, "to: block", e)
     try:
         import manual_request
-        note = manual_request.note_requests(kin, reply_text)
+        note = manual_request.note_requests(kin, reply_text, shown=shown)
         if note:
             notes.append(note)
     except Exception as e:
         _log(kin, "manual block", e)
     return notes, sent
+
+
+def block_lines_on(section):
+    """Whether a Telegram or Discord section shows what reply blocks did:
+    "Show what reply blocks did", beside "Show tool calls" (23 Nov 2026).
+    On unless switched off: being told is the point. The desktop has no
+    switch, as it has none for tool calls: it always shows them."""
+    return bool((section or {}).get("show_block_actions", True))
 
 
 def _log(kin, action, e):

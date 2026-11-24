@@ -3026,7 +3026,8 @@ class TelegramBot:
                 elif act.verb not in [v for v, _ in teachable]:
                     teachable.append((act.verb, act.text))
             for _text, out in results:
-                self._send_chunked(chat_id, "🌳 " + out)
+                if self._block_lines_on():
+                    self._send_chunked(chat_id, "🌳 " + out)
             # Teaching lane: offer to learn any unknown-but-targeted verb.
             # Flagged (🔧) as clearly the harness, never the kin's voice, so the
             # operator knows they're teaching and answers with a crisp mapping.
@@ -3118,10 +3119,11 @@ class TelegramBot:
                 except Exception:
                     pass
                 try:
-                    self._send_chunked(
-                        chat_id,
-                        "🌳 The park isn't reachable right now, so that move "
-                        "didn't run and nothing was changed.")
+                    if self._block_lines_on():
+                        self._send_chunked(
+                            chat_id,
+                            "🌳 The park isn't reachable right now, so that "
+                            "move didn't run and nothing was changed.")
                 except Exception:
                     pass
                 try:
@@ -3208,7 +3210,8 @@ class TelegramBot:
                 lambda c, s="": host.run(self.agent_name, c, say=s))
             if not res:
                 return False
-            self._send_chunked(chat_id, "🌳 " + res)
+            if self._block_lines_on():
+                self._send_chunked(chat_id, "🌳 " + res)
             # The kin's copy carries the trimmings the other surfaces get: what
             # other tenants did, and (on a look) one concrete thing worth doing.
             # Only the KIN's copy -- the operator's chat post above stays the
@@ -4247,6 +4250,27 @@ class TelegramBot:
             return got if isinstance(got, dict) else {}
         except Exception:
             return {}
+
+    def _block_lines_on(self):
+        """"Show what reply blocks did" for this kin on Telegram (23 Nov
+        2026). Every kind of block follows it: a message to another kin, a
+        manual part, a file saved from the reply, a park move."""
+        import reply_actions
+        return reply_actions.block_lines_on(self._tg_section())
+
+    def _send_block_lines(self, chat_id, lines):
+        """Tell the person, one line each, what this reply's blocks did."""
+        if not lines or not self._block_lines_on():
+            return
+        try:
+            self._send_chunked(chat_id, "\n".join(lines))
+        except Exception as e:
+            try:
+                from kin_persistence import append_failure_log
+                append_failure_log("kin_messages.log", self.agent_name,
+                                   "telling the person what blocks did", e)
+            except Exception:
+                pass
 
     def _kin_config(self):
         """The kin's whole config (not just its Telegram section), or {}:
@@ -5408,18 +5432,22 @@ class TelegramBot:
                 # In the person's own DM, a ```to:Name block writes to that
                 # kin, as on the desktop (kin_mail). Never for anyone else.
                 # A ```manual block works for anyone (reply_actions).
+                _block_lines = []
                 try:
                     import reply_actions
                     _me = self._user_is_me(user_id)
                     for _mail_note in reply_actions.after_reply(
                             self.agent_name, content, kin_mail_ok=_me,
-                            prompted=True)[0]:
+                            prompted=True, shown=_block_lines)[0]:
                         new_turns.append({"role": "system",
                                           "content": _mail_note,
                                           "ts": now_iso()})
                 except Exception as e:
                     append_failure_log("kin_messages.log", self.agent_name,
                                        "to: block on Telegram", e)
+                # What the blocks did, told to the person too (23 Nov 2026),
+                # under "Show what reply blocks did".
+                self._send_block_lines(chat_id, _block_lines)
                 # Reading nudge: kin narrated reading content without loading it
                 # and nothing was auto-attached this turn.
                 read_nudge = self._maybe_read_nudge_telegram(
@@ -5506,7 +5534,7 @@ class TelegramBot:
 
             # Authoring-bridge confirmation, posted as its own message
             # (append-only — never edits the reply), after the kin's words.
-            if authoring_confirm:
+            if authoring_confirm and self._block_lines_on():
                 self._send_chunked(chat_id, authoring_confirm)
 
             # Park mode: turn the kin's action-emotes into real game moves,
@@ -6373,15 +6401,18 @@ class TelegramBot:
                     })
                 # A ```manual block asks for part of the kin manual
                 # (reply_actions); no ```to: in a group.
+                _block_lines = []
                 try:
                     import reply_actions
-                    for _n in reply_actions.after_reply(self.agent_name,
-                                                        content)[0]:
+                    for _n in reply_actions.after_reply(
+                            self.agent_name, content,
+                            shown=_block_lines)[0]:
                         new_turns.append({"role": "system", "content": _n,
                                           "ts": now_iso()})
                 except Exception as e:
                     append_failure_log("kin_messages.log", self.agent_name,
                                        "manual block in group", e)
+                self._send_block_lines(chat_id, _block_lines)
                 # Reading nudge — suppressed when a file was auto-attached this
                 # turn (a trusted sender shared one; content is already present).
                 read_nudge = self._maybe_read_nudge_telegram(
@@ -6451,7 +6482,7 @@ class TelegramBot:
                         self._send_chunked(chat_id, _block)
             # Authoring-bridge confirmation (basename-only — no full paths in a
             # multi-user group), posted as its own message after the reply.
-            if authoring_confirm:
+            if authoring_confirm and self._block_lines_on():
                 self._send_chunked(chat_id, authoring_confirm)
             # Text-in/text-out park bridge, exactly as the DM path does it
             # (_handle_normal_message) and the desktop and the cron keeper.

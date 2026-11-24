@@ -118,8 +118,9 @@ class _Client:
 
 # message_wait_secs 0: these scenarios are about other things, so pieces
 # aren't held to be joined. The joining has its own scenario below.
-CFG = {"discord": {"policy": "always", "allow_from": ["*"]},
-       "telegram": {"message_wait_secs": 0}}
+# Discord's own wait since 23 Nov 2026 (it read Telegram's before).
+CFG = {"discord": {"policy": "always", "allow_from": ["*"],
+                   "message_wait_secs": 0}}
 
 
 def drive(coro):
@@ -285,8 +286,10 @@ check("a held message the reply never reached is answered straight after",
 
 # --- split messages put back together (12 Nov 2026) --------------------
 async def scenario_coalesce():
-    cfg = {"discord": {"policy": "always", "allow_from": ["*"]},
-           "telegram": {"message_wait_secs": 0.3}}
+    cfg = {"discord": {"policy": "always", "allow_from": ["*"],
+                       "message_wait_secs": 0.3},
+           # Telegram's own, set far apart: Discord must not read it.
+           "telegram": {"message_wait_secs": 600}}
     b = bare_bot(cfg)
     ch = _Channel()
     answered = []

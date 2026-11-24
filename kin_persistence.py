@@ -599,6 +599,10 @@ def migrate_dictation_config(saved):
 
 DEFAULT_ROOM_CONFIG = {
     "members": [],                # ordered list of kin names
+    # What this room shows you (23 Nov 2026): tool calls as they happen,
+    # and one line for each thing a reply block did. On unless switched off.
+    "show_tool_calls": True,
+    "show_block_actions": True,
     "context_note": "",           # optional addition to each kin's system prompt while in this room
     "max_auto_rounds": 10,        # hard cap on consecutive auto-rounds
     "auto_inactivity_min": 15,    # auto-pauses after N minutes of no user input
@@ -704,6 +708,10 @@ DEFAULT_TELEGRAM_CONFIG = {
     # — most users just want the kin's narrative reply. Power users who
     # want visibility into what the kin is actually doing can flip it on.
     "show_tool_calls": False,
+    # What reply blocks did (a message to another kin, a manual part asked
+    # for, a file saved from the reply, a park move), told to the person
+    # as one line each. On by default; beside "Show tool calls" (23 Nov 2026).
+    "show_block_actions": True,
     # Quieter middle ground between full tool-call display and total
     # silence: when this is True (and show_tool_calls is False), the
     # kin's reply lands with a small italic footer like
@@ -767,6 +775,10 @@ DEFAULT_TELEGRAM_CONFIG = {
 }
 
 DEFAULT_DISCORD_CONFIG = {
+    # How long to listen for the rest of a message sent in pieces. Discord's
+    # own since 23 Nov 2026: it used to read TELEGRAM'S, so changing it there
+    # changed Discord too. Same default as Telegram's.
+    "message_wait_secs": 2,
     "enabled": False,
     "bot_token": "",
     # Post each tool call and a preview of its result in the chat, as
@@ -774,6 +786,10 @@ DEFAULT_DISCORD_CONFIG = {
     # Telegram's; a failed call is always shown. Discord used to post every
     # call, with no setting, even in public channels (audit, 20 Nov 2026).
     "show_tool_calls": False,
+    # What reply blocks did (a message to another kin, a manual part asked
+    # for, a file saved from the reply, a park move), told to the person
+    # as one line each. On by default; beside "Show tool calls" (23 Nov 2026).
+    "show_block_actions": True,
     # Telegram's two tool signals, on Discord too (21 Nov 2026): the
     # "_used: ..._" line at the end of a reply naming the tools that really
     # ran, and a "still working" message every N seconds of a long quiet
@@ -1048,6 +1064,10 @@ DEFAULT_AGENT_CONFIG = {
     # person there), not by tools.json, so being off is what's stored, and a
     # kin that never touched them keeps them as before.
     "proactive_tools_off": [],
+    # What the main window shows you for this kin (23 Nov 2026), as
+    # Telegram's and Discord's own switches do there. On unless switched off.
+    "desktop_show_tool_calls": True,
+    "desktop_show_block_actions": True,
     "heartbeat_unconfined_files": False,
     # Scheduled wake-ups. Each entry: {"time": "HH:MM", "prompt": str,
     # "enabled": bool}. An empty list (the default) means no scheduling

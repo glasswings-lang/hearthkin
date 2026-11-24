@@ -346,6 +346,15 @@ class RoomEditDialog(wx.Dialog):
                          "you, marked as said there)")
         self.sees_private_check.SetValue(bool(cfg.get("sees_private", False)))
 
+        # What this room shows you (23 Nov 2026), as every surface has.
+        self.show_tools_check = wx.CheckBox(
+            panel, label="Show &tool calls in this room")
+        self.show_tools_check.SetValue(bool(cfg.get("show_tool_calls", True)))
+        self.show_blocks_check = wx.CheckBox(
+            panel, label="Show what reply &blocks did (a file saved, a park "
+                         "move, a manual part)")
+        self.show_blocks_check.SetValue(bool(cfg.get("show_block_actions", True)))
+
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         ok_btn = wx.Button(panel, wx.ID_OK, label="&Save")
         cancel_btn = wx.Button(panel, wx.ID_CANCEL, label="Ca&ncel")
@@ -372,6 +381,8 @@ class RoomEditDialog(wx.Dialog):
         ps.Add(self.distill_check, flag=wx.BOTTOM, border=10)
         ps.Add(self.private_sees_check, flag=wx.BOTTOM, border=6)
         ps.Add(self.sees_private_check, flag=wx.BOTTOM, border=10)
+        ps.Add(self.show_tools_check, flag=wx.BOTTOM, border=6)
+        ps.Add(self.show_blocks_check, flag=wx.BOTTOM, border=10)
         ps.Add(btn_row)
         panel.SetSizer(ps)
 
@@ -519,6 +530,8 @@ class RoomEditDialog(wx.Dialog):
             "distill_to_memory": self.distill_check.GetValue(),
             "private_sees": self.private_sees_check.GetValue(),
             "sees_private": self.sees_private_check.GetValue(),
+            "show_tool_calls": self.show_tools_check.GetValue(),
+            "show_block_actions": self.show_blocks_check.GetValue(),
         }
 
 

@@ -77,6 +77,18 @@ class TelegramMessageSettingsDialog(wx.Dialog):
                 "show_tool_calls", bool(self.show_tool_calls_check.GetValue())))
         sizer.Add(self.show_tool_calls_check, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
 
+        # Reply blocks, beside the tool calls (23 Nov 2026): a message to
+        # another kin, a manual part, a file saved from the reply, a park
+        # move. One switch for all of them.
+        self.show_blocks_check = wx.CheckBox(
+            panel, label="Show what reply &blocks did (a message to another "
+                         "kin, a file saved, a park move)")
+        self.show_blocks_check.SetValue(bool(tg.get("show_block_actions", True)))
+        self.show_blocks_check.Bind(
+            wx.EVT_CHECKBOX, lambda e: self._save_telegram_param(
+                "show_block_actions", bool(self.show_blocks_check.GetValue())))
+        sizer.Add(self.show_blocks_check, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+
         self.show_tool_summary_check = wx.CheckBox(
             panel, label="Sho&w tool-summary footer on replies (\"_used: note_\" italic line)")
         self.show_tool_summary_check.SetValue(bool(tg.get("show_tool_summary", True)))

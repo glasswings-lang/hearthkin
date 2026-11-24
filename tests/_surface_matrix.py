@@ -996,6 +996,38 @@ CAPABILITIES = [
     ),
 
     Capability(
+        key="tool_calls_switch",
+        what="The person can choose whether tool calls are shown, here",
+        why="\"I can't fix what I can't see\": with no switch, a surface "
+            "either buries the chat in tool steps or hides what the kin did",
+        markers=("show_tool_calls",),
+        surfaces={
+            "desktop": Present(markers="desktop_show_",
+                               where="frame/chat_send_mixin.py"),
+            "telegram": Present(),
+            "discord": Present(),
+            "cron": Present(note="a wake-up's tool steps follow the switch "
+                                 "of the chat it posts to"),
+        },
+    ),
+
+    Capability(
+        key="block_lines_switch",
+        what="The person is told what a reply block did (a message to another "
+             "kin, a file saved, a park move), under a switch, here",
+        why="A kin wrote to another kin with a block on Telegram: the kin was "
+            "told, the person heard nothing (23 Nov 2026)",
+        markers=("show_block_actions",),
+        surfaces={
+            "desktop": Present(markers="desktop_shows",
+                               where="frame/chat_stream_mixin.py"),
+            "telegram": Present(markers="_block_lines_on"),
+            "discord": Present(markers="_block_lines_on"),
+            "cron": Present(markers="_block_lines_for"),
+        },
+    ),
+
+    Capability(
         key="operator_identity",
         what="Knows which person is the operator ('This is me')",
         why="Without it, sharing a conversation stood in for 'this is the "
@@ -1032,6 +1064,9 @@ CAPABILITIES = [
 # live text would already have been read aloud).
 
 ROOMS = {
+    # Its own two switches, in the room's settings (23 Nov 2026).
+    "tool_calls_switch": Present(markers="_show_tools"),
+    "block_lines_switch": Present(markers="_room_shows"),
     # The same two switches as a group, through the one rule (21 Nov 2026).
     "sharing_switches": Present(markers="visible_rows"),
     # Since 21 Nov 2026 the person's messages in a room go through the

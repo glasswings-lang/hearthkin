@@ -258,6 +258,8 @@ A kin speaks through **four** surfaces: the main window, Telegram, Discord, and 
 
 **`tests/_surface_matrix.py` declares every capability for every surface** as `Present` / `Absent(reason)` / `NotHere(reason)`. `Absent` is a real gap with its reason recorded; `NotHere` is a **closed question** — *"nobody is present to type"* is `NotHere`, *"we never got round to it"* is `Absent`. That distinction is what stops the file rotting into a wall of justifications.
 
+**The map also goes looking (`tests/_surface_settings.py`, 23 Nov 2026).** On its own it could only hold surfaces to what someone wrote on it: Telegram and Discord had a "Show tool calls" switch for weeks while the main window and rooms had none, and nothing failed. Now every setting in every surface's defaults (Telegram's, Discord's, a room's, the kin's `desktop_` ones) must be answered as `EVERY(capability)` (a map row then holds every surface to it), `HERE(reason)`, or `QUESTION(text)` (printed every run). An unanswered setting fails. **Adding a setting to one surface means answering whether the others need it, in that file.**
+
 **The ratchet goes both ways, and that is the part that prevents drift:** declared Present but not wired → fail (it regressed, or the matrix was flattering the code); declared Absent but the marker IS there → fail (somebody built it; update the map so the next person doesn't rebuild it). **A missing cell is also a failure**, so adding a surface or a capability forces an answer for every combination — same principle as `tools/_buckets.py` making an unbucketed tool loud instead of silently invisible.
 
 **Adding a capability to one surface means declaring it for all four.** Run `python tests/test_surface_parity.py --report` for the map and the current gap list.

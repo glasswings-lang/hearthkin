@@ -276,10 +276,12 @@ def send_fences(sender, reply_text, now=None, prompted=False):
     return handle_reply(sender, reply_text, now, prompted)[0]
 
 
-def handle_reply(sender, reply_text, now=None, prompted=False):
+def handle_reply(sender, reply_text, now=None, prompted=False, shown=None):
     """send_fences, also saying how many messages actually went: (note,
     count). The count is what a caller checks, never the note's wording,
-    which the person can change."""
+    which the person can change. `shown`, a list, gets one plain line per
+    message for the PERSON (23 Nov 2026: the kin was told a message went
+    and the person on Telegram heard nothing)."""
     found = FENCE_RE.findall(reply_text or "")
     wrote_to_me = _DELIVERED.pop(str(sender).casefold(), set())
     if not found:
@@ -295,6 +297,8 @@ def handle_reply(sender, reply_text, now=None, prompted=False):
                 and can_send(sender, to, now)[0]):
             ok, said = send(sender, to, reply_text, now)
             if ok:
+                if shown is not None:
+                    shown.append(f"📨 {sender} answered {to}.")
                 return (_prompt("kin_message_answer_sent", sender)
                         .replace("{to}", to), 1)
         return "", 0
@@ -304,6 +308,10 @@ def handle_reply(sender, reply_text, now=None, prompted=False):
         sent += 1 if ok else 0
         who = resolve_kin(name, sender) or str(name).strip()
         bits.append(f"to {who}: " + ("sent; " if ok else "NOT sent; ") + said)
+        if shown is not None:
+            shown.append(f"📨 {sender} wrote to {who}." if ok
+                         else f"📨 {sender} tried to write to {who}, but it "
+                              f"wasn't sent: {said}")
     return (_prompt("kin_message_receipt", sender)
             .replace("{results}", " | ".join(bits)), sent)
 

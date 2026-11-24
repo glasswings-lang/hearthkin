@@ -102,6 +102,9 @@ class Room:
     _render_room_conversation = Frame._render_room_conversation
     _room_park_move = Frame._room_park_move
 
+    # What the room shows, its own switches (23 Nov 2026).
+    _room_shows = Frame._room_shows
+
     def __init__(self):
         self.room_conversation = [{"role": "user", "content": "Hello all.",
                                    "ts": "2026-11-12T20:00:00"}]

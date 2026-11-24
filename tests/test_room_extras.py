@@ -128,6 +128,8 @@ class Room:
     _render_room_conversation = Frame._render_room_conversation
     _insert_shared_path = Frame._insert_shared_path
     _on_regen = Frame._on_regen
+    # What the room shows, its own switches (23 Nov 2026).
+    _room_shows = Frame._room_shows
 
     def __init__(self, convo, members=("Opal", "Vesper")):
         self.room_conversation = [dict(m) for m in convo]
