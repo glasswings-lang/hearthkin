@@ -1219,6 +1219,20 @@ def _after_wake_compaction(kin, cfg, time_label):
         pass
 
 
+def nothing_to_tend(kin, entry):
+    """True when this wake-up asked to run only if memory notes are waiting
+    ("only_if_tending") and none are, so it can be skipped without calling
+    the model (24 Nov 2026, from an outside review: a plain check, not a
+    model, decides whether there's work)."""
+    if not (isinstance(entry, dict) and entry.get("only_if_tending")):
+        return False
+    try:
+        from kin_persistence import list_staging_files
+        return not list_staging_files(kin)
+    except Exception:
+        return False
+
+
 def gesture_retry_enabled(entry):
     """Is "one more try if no tool runs" switched on for this scheduled job?
     Off unless the job says so."""
@@ -2361,6 +2375,12 @@ def _main(args):
         _WAKE_TOOL_CAP = 15
 
     entry, time_label, prompt = _resolve_entry(cfg, args.entry_index)
+    if nothing_to_tend(kin, entry):
+        cron_helpers.log_cron_error(
+            kin, "skipped",
+            "no memory notes waiting; this wake-up runs only when there are "
+            "(no model call)")
+        return 0
     # A wake-up that names its own model runs on it, on every path below.
     cfg = cfg_for_entry(cfg, entry)
     # A multi-time entry stores no single `time`; the scheduler passes the

@@ -53,6 +53,12 @@ installer.
   months got squeezed); Redistill does that when you choose. Clears and new
   conversations say how to bring the old one back. Undated messages at the
   start of a copy now go next to the message they led into, not to the front.
+- **A nightly backup script, and tending wake-ups that skip when there's
+  nothing to tend.** `scripts/backup_kin.py` zips every kin's folder into
+  kin-backups in your Hearthkin folder and keeps the newest 14; it's meant to
+  run nightly as its own scheduled task, which is yours to set up. A wake-up
+  can now be set to run only when there are memory notes waiting; with none,
+  it's skipped without calling the model, and a line says so.
 - **A kin is told when a tool result it wrote wasn't real.** If a reply says
   what a tool returned or what a search found, in a turn where no tool ran,
   the kin gets a note: that wasn't a real result, so call the tool or say you

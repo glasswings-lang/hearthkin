@@ -141,6 +141,29 @@ class CronEntryDialog(wx.Dialog):
         gesture_retry_hint.SetMinSize((-1, 56))
         gesture_retry_hint.SetName("What one more try does")
 
+        # Skip when there's nothing to tend (24 Nov 2026, from an outside
+        # review): a tending job with no pending notes ran the model anyway
+        # (one kin spent a night's calls searching its own log). Off by
+        # default, and meant only for tending jobs, never a kin's own-time
+        # or journal wake-ups.
+        self.only_if_tending_check = wx.CheckBox(
+            self,
+            label="Only &run when there are memory notes to tend",
+        )
+        self.only_if_tending_check.SetValue(
+            bool(defaults.get("only_if_tending")))
+        only_if_tending_hint = wx.TextCtrl(
+            self,
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP | wx.TE_NO_VSCROLL,
+            value="(For a tending job. If no memory notes are waiting, this "
+                  "wake-up is skipped without calling the model, and a line "
+                  "says so in the wake-up log. Leave it off for a kin's own "
+                  "time or a journal wake-up, which have work whether or not "
+                  "notes are waiting.)",
+        )
+        only_if_tending_hint.SetMinSize((-1, 56))
+        only_if_tending_hint.SetName("When a wake-up is skipped")
+
         # --- Which model runs this wake-up (15 Nov 2026) ---
         # Blank = the kin's own model. A job can be handed to another model
         # (a steadier one for tool-heavy work, say) while chat stays put.
@@ -265,6 +288,13 @@ class CronEntryDialog(wx.Dialog):
         )
         sizer.Add(
             gesture_retry_hint,
+            flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8,
+        )
+        sizer.Add(
+            self.only_if_tending_check, flag=wx.LEFT | wx.RIGHT, border=8,
+        )
+        sizer.Add(
+            only_if_tending_hint,
             flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8,
         )
         sizer.Add(model_label, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
@@ -414,6 +444,7 @@ class CronEntryDialog(wx.Dialog):
             "enabled": bool(self.enabled_check.GetValue()),
             "tend_retry": int(self.retry_choice.GetSelection()),
             "gesture_retry": bool(self.gesture_retry_check.GetValue()),
+            "only_if_tending": bool(self.only_if_tending_check.GetValue()),
         })
         # Own history keeps ONE name for the job's life, so unticking and
         # ticking again picks the same history back up instead of starting

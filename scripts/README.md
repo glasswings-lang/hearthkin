@@ -97,6 +97,12 @@ There's nothing to read here — the speech **is** the output.
 | **`stamp_version.py`** | Rewrites `app_version.py` from the git tag, immediately before packaging. Called by `build.bat` and the GitHub Actions workflow. **Don't run it by hand** — it edits a source file, and the whole reason it exists is that hand-editing the version at tag time drifted twice. |
 | **`bundle_licenses.py`** | Collects third-party licence texts into `./licenses/` for the installer to ship. Called by `build.bat`. Writes files. |
 
+## Housekeeping — meant to run on a schedule
+
+| | |
+|---|---|
+| **`backup_kin.py`** | Zips every kin's folder (all of it except its own `backups/`, which are already copies) into `kin-backups/<kin>/<kin>-<date>.zip` in your Hearthkin folder, and deletes each kin's oldest zips beyond the newest 14 (`--keep` changes that; `--dest` puts them elsewhere). Only reads kin folders; writes zips and one line per kin to `logs/kin_backups.log`. Silent. Meant to run nightly as its own Task Scheduler task, separate from any kin's wake-ups; it doesn't set that up itself. |
+
 ## One-off setup and experiments
 
 | | |
