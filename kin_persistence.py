@@ -7240,8 +7240,18 @@ def _memory_with_budget_note(kin_name, memory):
 IDENTITY_FILE = "identity.md"
 NOW_FILE = "now.md"
 CURIOUS_FILE = "curious.md"
+# How the kin works, in its own words (24 Nov 2026, from an outside review:
+# a working-notes file the kin can edit). Habits a kin learns ("I write a
+# depth log whenever something matters, without being asked", "I write my
+# logs as I, because I was there") used to last only until the next
+# compaction, unless the person taught them again: the person ended up
+# being the kin's memory for how to work. Rides every turn, right after the
+# base prompt, which stays the person's and wins where they differ. Not
+# called agents.md, which would collide with the repo's coding file.
+PRACTICE_FILE = "practice.md"
 # About a short page. Over it, the kin is asked to trim; nothing is cut.
 IDENTITY_SOFT_CAP = 2500
+PRACTICE_SOFT_CAP = 2500
 
 
 def load_kin_own_file(kin_name, filename):
@@ -7265,6 +7275,19 @@ def _identity_section(kin_name):
                 f"({len(text):,} characters). Trim it when you can; it rides "
                 "along on every turn.]\n\n" + head)
     return head + "\n\n" + text
+
+
+def _practice_section(kin_name):
+    text = load_kin_own_file(kin_name, PRACTICE_FILE).strip()
+    if not text:
+        return ""
+    head = ("How you work (your practice.md, your own habits, yours to keep; "
+            "where it and the part above differ, the part above wins):")
+    if len(text) > PRACTICE_SOFT_CAP:
+        head = ("[hearthkin: your practice.md is past a short page "
+                f"({len(text):,} characters). Trim it when you can; it rides "
+                "along on every turn.]" + chr(10) * 2 + head)
+    return head + chr(10) * 2 + text
 
 
 def _last_active(kin_name):
@@ -7376,7 +7399,8 @@ def save_now_note(kin_name, note):
 
 def build_system_prompt(soul, memory, room_block=None, enabled_tools=None,
                         kin_name=None):
-    """Combine the universal base prompt + soul + memory + optional room
+    """Combine the universal base prompt + the kin's practice.md + soul +
+    identity + voice anchor + memory + optional room
     context into one system prompt. Empty pieces are skipped. Sections
     are separated by ---.
 
@@ -7423,6 +7447,9 @@ def build_system_prompt(soul, memory, room_block=None, enabled_tools=None,
                 pass
         if base and base.strip():
             parts.append(base.strip())
+    practice = _practice_section(kin_name)
+    if practice:
+        parts.append(practice)
     if soul and soul.strip():
         parts.append(soul.strip())
     identity = _identity_section(kin_name)
