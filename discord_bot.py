@@ -1203,15 +1203,27 @@ class DiscordBot:
                 "{user}", user)
             row = compact_marker(note, _keep, ts=now_iso(),
                                  preface=preface, kin=who)
+            # Says "Compacted" only when the marker was saved (message
+            # audit, 24 Nov 2026: a failed save was only logged).
+            try:
+                if share:
+                    from kin_persistence import append_agent_conversation_turn
+                    append_agent_conversation_turn(
+                        who, {**row, **self._dm_mark(ch.id),
+                              "source": f"discord:{ch.id}"},
+                        raise_on_failure=True)
+                else:
+                    from kin_persistence import append_discord_turn
+                    append_discord_turn(who, ch.id, row, raise_on_failure=True)
+            except Exception:
+                pending[ch.id] = note
+                await self._send_chunked(
+                    ch, "Couldn't compact: the note couldn't be saved into the "
+                        "conversation, so nothing changed. Your note is still "
+                        "waiting; send /compact confirm to try again.")
+                return
             from kin_persistence import save_now_note
             save_now_note(who, note)
-            if share:
-                from kin_persistence import append_agent_conversation_turn
-                append_agent_conversation_turn(
-                    who, {**row, **self._dm_mark(ch.id), "source": f"discord:{ch.id}"})
-            else:
-                from kin_persistence import append_discord_turn
-                append_discord_turn(who, ch.id, row)
             await self._send_chunked(
                 ch, f"Compacted. From now on {who} reads "
                     f"{compact_sent_words(_keep)} here. Nothing was deleted.")
@@ -1343,7 +1355,7 @@ class DiscordBot:
                  "This conversation: " + (
                      "shared with the Hearthkin desktop" if share
                      else "kept on Discord only"),
-                 "Messages it remembers here: "
+                 "Messages stored here (not all are sent each time): "
                  f"{len(self._channel_history(message.channel.id, share))}"]
         try:
             import llm_backend

@@ -812,12 +812,14 @@ class KinMgmtMixin:
         # memory-model swap can never drift into two formats or two
         # files. It also migrates the legacy voice_history.md name on
         # first touch, so an existing kin keeps its whole history.
+        logged = True
         try:
             append_model_history(
                 self.current_agent,
                 f"chat model changed from `{current or '(none)'}` "
                 f"to `{new_clean}`")
         except Exception as e:
+            logged = False
             wx.MessageBox(f"Couldn't write model_history.md: {e}",
                           "Warning", wx.OK | wx.ICON_WARNING)
         # Update config + active-model tracker. The dialog widget that
@@ -848,7 +850,10 @@ class KinMgmtMixin:
         # image and the new model doesn't support vision, the staged
         # image gets cleared with a status hint.
         self._refresh_attach_button_state()
-        self._set_status(f"Model swapped to {new_clean}. Logged to model_history.md.")
+        # "Logged" only when it was (message audit, 24 Nov 2026).
+        self._set_status(f"Model swapped to {new_clean}. "
+                         + ("Logged to model_history.md." if logged else
+                            "It couldn't be logged to model_history.md."))
         self._probe_tool_calling_after_swap(new_clean)
         return True
 

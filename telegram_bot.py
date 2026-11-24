@@ -3959,11 +3959,14 @@ class TelegramBot:
                 and (m.get("source") or "").startswith("telegram:group:")
             ]
             _drop_leading_orphan_tools(truncated)
+            # False when the save refused (a copy that couldn't be kept);
+            # callers then say nothing changed (message audit, 24 Nov 2026:
+            # "Undid the last exchange" was sent over an untouched file).
             try:
                 save_agent_conversation(self.agent_name, truncated)
             except Exception:
-                pass
-            return
+                return False
+            return True
         with self._histories_lock:
             history = self._histories.get(_hkey(user_id)) or []
             truncated = history[:idx]
@@ -3980,6 +3983,7 @@ class TelegramBot:
                 self._save_histories()
             except Exception:
                 pass
+        return True
 
     def _cmd_regen(self, user_id, chat_id):
         """Drop the kin's last reply (and any tool round-trips that
@@ -4024,7 +4028,12 @@ class TelegramBot:
                 return
             # Truncate history at (but not including) the last user message;
             # _handle_normal_message will re-append it.
-            self._truncate_history_for(user_id, idx)
+            if self._truncate_history_for(user_id, idx) is False:
+                self._send_chunked(
+                    chat_id,
+                    "Couldn't regenerate: the conversation couldn't be saved "
+                    "without the last reply, so nothing changed.")
+                return
         self._last_thinking.pop(user_id, None)
         # Re-run the model on the same prompt. Attachments thread
         # through so the kin sees the image again on regen.
@@ -4049,7 +4058,12 @@ class TelegramBot:
                     "Nothing to undo — no prior message in this conversation."
                 )
                 return
-            self._truncate_history_for(user_id, idx)
+            if self._truncate_history_for(user_id, idx) is False:
+                self._send_chunked(
+                    chat_id,
+                    "Couldn't undo: the conversation couldn't be saved "
+                    "without the last exchange, so nothing changed.")
+                return
         self._last_thinking.pop(user_id, None)
         if self._user_shares_desktop(user_id):
             ack = (
@@ -4458,8 +4472,16 @@ class TelegramBot:
                 return
             preface = load_app_prompt("compact_marker", who).replace(
                 "{user}", user)
-            self._append_turns_for(user_id, [compact_marker(
-                note, _keep, ts=now_iso(), preface=preface, kin=who)])
+            if self._append_turns_for(user_id, [compact_marker(
+                    note, _keep, ts=now_iso(), preface=preface,
+                    kin=who)]) is False:
+                pending[user_id] = note
+                self._send_chunked(
+                    chat_id,
+                    f"Couldn't compact: the note couldn't be saved into the "
+                    f"conversation, so nothing changed. Your note is still "
+                    f"waiting; send /compact confirm to try again.")
+                return
             from kin_persistence import save_now_note
             save_now_note(who, note)
             self._send_chunked(
@@ -4603,6 +4625,9 @@ class TelegramBot:
              else {**t, "ts": now_iso}) if isinstance(t, dict) else t
             for t in (new_turns or [])
         ]
+        # Returns False when anything failed to save (message audit, 24 Nov
+        # 2026: /compact said "Compacted" over a marker that never landed).
+        saved_ok = True
         if self._user_shares_desktop(user_id):
             from kin_persistence import append_agent_conversation_turn
             uid_str = str(user_id)
@@ -4612,6 +4637,7 @@ class TelegramBot:
                 try:
                     append_agent_conversation_turn(self.agent_name, tagged)
                 except Exception as e:
+                    saved_ok = False
                     append_failure_log(
                         "telegram_failures.log",
                         self.agent_name,
@@ -4628,7 +4654,7 @@ class TelegramBot:
                     self.on_activity("user", user_id)
                 except Exception:
                     pass
-            return
+            return saved_ok
         cap = self._history_cap()
         with self._histories_lock:
             # Key via _hkey (audit DH1) — keying by the raw int from
@@ -4656,6 +4682,7 @@ class TelegramBot:
             try:
                 self._save_histories()
             except Exception as e:
+                saved_ok = False
                 append_failure_log(
                     "telegram_failures.log",
                     self.agent_name,
@@ -4672,6 +4699,7 @@ class TelegramBot:
                 self.on_activity("user", user_id)
             except Exception:
                 pass
+        return saved_ok
 
     def _user_tool_bucket(self, user_id):
         """Return the user's tool bucket name. Defaults to 'none' for

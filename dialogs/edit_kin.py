@@ -2722,7 +2722,13 @@ class EditKinDialog(wx.Dialog):
         if confirm != wx.YES:
             return
         try:
-            spec["clear"]()
+            if spec["clear"]() is False:
+                # A clear returns False when its backup (or the removal)
+                # failed; it changed nothing (message audit, 24 Nov 2026).
+                self.frame._set_status(
+                    f"Couldn't reset {spec['title']}: {self.kin}'s copy "
+                    f"couldn't be backed up first, so nothing changed.")
+                return
             self.frame._set_status(
                 f"{spec['title']} reset to shared/default for {self.kin}.")
             self._refresh_prompts_listbox()

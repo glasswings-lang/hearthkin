@@ -5520,17 +5520,26 @@ def _kin_app_prompt_path(kin_name, slug):
 
 
 def _backup_prompt_file(path):
-    """Copy an existing prompt file into prompts/backups/<name>.<ts>.bak before
-    it is overwritten. Best-effort: a backup failure must not block the write,
-    but it should be rare and is logged so an operator can notice."""
+    """Copy an existing prompt file into prompts/backups/ before it is
+    overwritten or removed. Raises when the copy can't be made, so the write
+    doesn't happen (message audit, 24 Nov 2026: every screen says "your old
+    copy is backed up first", and a failed backup used to be logged while
+    the overwrite went ahead). A kin's own copy carries the kin's name in the
+    backup's name, since every kin's backups share one folder."""
+    path = Path(path)
     try:
         bdir = PROMPTS_DIR / "backups"
         bdir.mkdir(parents=True, exist_ok=True)
         ts = now_iso().replace(":", "-")
-        shutil.copy2(str(path), str(bdir / f"{path.name}.{ts}.bak"))
+        owner = ""
+        if path.parent != PROMPTS_DIR:
+            owner = (path.parent.parent.name if path.parent.name == "prompts"
+                     else path.parent.name) + "__"
+        shutil.copy2(str(path), str(bdir / f"{owner}{path.name}.{ts}.bak"))
     except Exception as e:
         append_failure_log("save_failures.log", "?",
                            f"_backup_prompt_file({path.name})", e)
+        raise
 
 
 def _seeded_versions_path():
@@ -5965,7 +5974,12 @@ def adopt_prompt_update(slug):
     about to be replaced, which is exactly when a copy has to exist."""
     entry = APP_PROMPT_REGISTRY.get(slug)
     if entry:
-        save_app_prompt(slug, entry.get("default", ""))
+        try:
+            save_app_prompt(slug, entry.get("default", ""))
+        except Exception as e:
+            append_failure_log("save_failures.log", "?",
+                               f"adopt_prompt_update({slug})", e)
+            return False
         return True
     spec = legacy_prompt_spec(slug)
     if not spec:
@@ -6693,7 +6707,7 @@ def save_discord_history(name, data, rows_added=None):
                           json.dumps(out, ensure_ascii=False))
 
 
-def append_discord_turn(name, channel_id, turn, cap=None):
+def append_discord_turn(name, channel_id, turn, cap=None, raise_on_failure=False):
     """Append one turn to a channel's segregated Discord history, capped by
     the Discord tab's "History cap" (history_rows.trim_front, the same rule
     as Telegram's; `cap` overrides it). Load-modify-save under the per-kin conversation lock
@@ -6738,6 +6752,8 @@ def append_discord_turn(name, channel_id, turn, cap=None):
                     "save_failures.log", name, "append_discord_turn", e)
             except Exception:
                 pass
+            if raise_on_failure:
+                raise
 
 
 def migrate_group_history_to_conversation(name, chat_id, bot=None):
@@ -7781,6 +7797,23 @@ def save_room_conversation(name, conversation):
             "messages": conversation,
         }
         atomic_write_json(room_dir(name) / "conversation.json", data)
+
+
+def keep_room_copy(name):
+    """Copy a room's conversation into <room>/backups/cleared before it's
+    cleared (message audit, 24 Nov 2026: clearing a room was the one clear
+    that kept nothing). Returns the copy's path, None when there was nothing
+    to copy; raises when the copy can't be made, so the caller clears
+    nothing."""
+    src = room_dir(name) / "conversation.json"
+    if not src.exists() or not src.stat().st_size:
+        return None
+    d = room_dir(name) / "backups" / "cleared"
+    d.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    dest = d / f"conversation-{stamp}.json"
+    shutil.copy2(src, dest)
+    return dest
 
 
 def create_room(name, members):

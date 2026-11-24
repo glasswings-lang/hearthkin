@@ -294,8 +294,9 @@ class FileMenuMixin:
                     f"{self.current_agent}'s current conversation with "
                     f"its contents ({len(cleaned)} message"
                     f"{'s' if len(cleaned) != 1 else ''}). "
-                    f"The current conversation on disk will be "
-                    f"overwritten.\n\nContinue?",
+                    f"A copy of the current conversation is kept first, "
+                    f"in the kin's backups, in the cleared folder."
+                    f"\n\nContinue?",
                     "Replace conversation?",
                     wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT | wx.ICON_WARNING,
                 )

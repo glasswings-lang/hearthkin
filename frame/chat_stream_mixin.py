@@ -369,8 +369,8 @@ class ChatStreamMixin:
             f"⚠️ Hearthkin: {kin_name}'s scheduled wake-up at "
             f"{time_label} didn't complete.\n\n"
             f"Reason: {reason}\n\n"
-            f"The wake-up prompt was saved; you can re-run it from "
-            f"Hearthkin's chat when you get back."
+            f"Its prompt is noted in {kin_name}'s journal for today; you "
+            f"can send it again from Hearthkin's chat when you get back."
         )
         # Discord's half of the mirror box (12 Nov 2026).
         import discord_mirror
@@ -1745,7 +1745,9 @@ class ChatStreamMixin:
                 return
             dlg = wx.MessageDialog(
                 self,
-                f"Wipe the conversation history in room '{self.current_room}'? This cannot be undone.",
+                f"Clear the conversation in room '{self.current_room}'? A "
+                f"copy is kept first, in the room's backups, in the cleared "
+                f"folder.",
                 "Confirm",
                 wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT | wx.ICON_WARNING,
             )
@@ -1753,11 +1755,13 @@ class ChatStreamMixin:
             dlg.Destroy()
             if r != wx.ID_YES:
                 return
-            self.room_conversation = []
-            self._room_round_count = 0
-            self._room_auto_count = 0
+            # A copy first, and the empty room saved, before anything on
+            # screen changes; either failing clears nothing (message audit,
+            # 24 Nov 2026: a failed save was logged, then "cleared" shown).
+            from kin_persistence import keep_room_copy
             try:
-                save_room_conversation(self.current_room, self.room_conversation)
+                keep_room_copy(self.current_room)
+                save_room_conversation(self.current_room, [])
             except Exception as e:
                 append_failure_log(
                     "save_failures.log",
@@ -1765,11 +1769,21 @@ class ChatStreamMixin:
                     "save_room_conversation (clear)",
                     e,
                 )
+                self._set_status(
+                    f"Couldn't clear room '{self.current_room}': a copy "
+                    f"couldn't be kept or the room couldn't be saved, so "
+                    f"nothing changed. Details are in logs/save_failures.log.")
+                return
+            self.room_conversation = []
+            self._room_round_count = 0
+            self._room_auto_count = 0
             self.chat_display.Clear()
             self._update_round_label()
             # Empty again, so the kin can be let to begin.
             self._refresh_continue_button()
-            self._set_status(f"Room '{self.current_room}' history cleared.")
+            self._set_status(f"Room '{self.current_room}' cleared. A copy is "
+                             f"kept in the room's backups, in the cleared "
+                             f"folder.")
             return
         if self.conversation:
             dlg = wx.MessageDialog(self, "Clear the current conversation?",

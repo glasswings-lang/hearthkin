@@ -153,7 +153,15 @@ class AllAppPromptsDialog(wx.Dialog):
         )
         try:
             if dlg.ShowModal() == wx.ID_OK:
-                save_app_prompt(slug, dlg.get_prompt())
+                try:
+                    save_app_prompt(slug, dlg.get_prompt())
+                except Exception:
+                    wx.MessageBox(
+                        "Couldn't save: your current version couldn't be "
+                        "backed up first, so nothing changed. Details are in "
+                        "logs/save_failures.log.", "Not saved",
+                        wx.OK | wx.ICON_WARNING, self)
+                    return
                 self._refresh()
         finally:
             dlg.Destroy()
@@ -171,5 +179,13 @@ class AllAppPromptsDialog(wx.Dialog):
                 "Restore built-in wording",
                 wx.YES_NO | wx.ICON_QUESTION, self) != wx.YES:
             return
-        save_app_prompt(slug, entry.get("default", ""))
+        try:
+            save_app_prompt(slug, entry.get("default", ""))
+        except Exception:
+            wx.MessageBox(
+                "Couldn't restore: your current version couldn't be backed up "
+                "first, so nothing changed. Details are in "
+                "logs/save_failures.log.", "Not restored",
+                wx.OK | wx.ICON_WARNING, self)
+            return
         self._refresh()
