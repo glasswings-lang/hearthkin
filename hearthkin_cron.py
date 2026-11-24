@@ -1040,6 +1040,46 @@ def _read_staging_fired(result):
         return True
 
 
+def _tools_known_dead(model):
+    """True when this model is on record as not calling tools. Then a tend
+    is already on the text path (toolless_memory), and re-prompting it to
+    call a tool only produces invented transcripts: prose can't change a
+    capability (24 Nov 2026, from an outside review; measured 22 Aug 2026)."""
+    try:
+        import model_utils
+        return model_utils.probed_tool_calling(model) is False
+    except Exception:
+        return False
+
+
+def _learn_tool_verdict(model, result, staging_had_work, schemas):
+    """Learn from a real tend whether this model calls tools (24 Nov 2026).
+
+    The verdict used to come only from the Test button or a model swap, so a
+    model that never calls tools kept being pushed harder every night. Now a
+    tend that had work, offered tools, and got a real reply teaches it:
+    any tool call at all means "calls tools"; none at all, on a model with
+    no verdict yet, means "does not". An empty or stopped reply teaches
+    nothing (a network blip must not become a permanent verdict), and an
+    existing verdict is only ever overwritten by a real call."""
+    if not (schemas and staging_had_work) or result is None:
+        return
+    if getattr(result, "stopped", False):
+        return
+    try:
+        import model_utils
+        from chat_helpers import scan_intermediate_tool_content
+        _, names = scan_intermediate_tool_content(
+            getattr(result, "messages_added", None) or [])
+        if names:
+            model_utils._save_probe_verdict(model, True)
+        elif ((getattr(result, "content", "") or "").strip()
+              and model_utils.probed_tool_calling(model) is None):
+            model_utils._save_probe_verdict(model, False)
+    except Exception:
+        pass
+
+
 def gesture_retry_enabled(entry):
     """Is "one more try if no tool runs" switched on for this scheduled job?
     Off unless the job says so."""
@@ -1498,7 +1538,8 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
     # editable tend_missed_call corrective up to `tend_retry` times. No
     # gesture-pattern matching — judged purely by whether the tool fired.
     if (schemas and tend_retry > 0 and staging_had_work
-            and not _read_staging_fired(result)):
+            and not _read_staging_fired(result)
+            and not _tools_known_dead(model)):
         from kin_persistence import load_app_prompt
         attempt = 0
         while attempt < tend_retry and not _read_staging_fired(result):
@@ -1520,6 +1561,7 @@ def _run_isolated_inner(kin, cfg, time_label, prompt, tend_retry=0,
                 max_iterations=_max_iter,
                 ollama_host=_kin_host,
             )
+    _learn_tool_verdict(model, result, staging_had_work, schemas)
     # Any job: one more go if the reply only described an action.
     if schemas and gesture_retry:
         result = _maybe_gesture_retry(
@@ -2331,7 +2373,8 @@ def _main(args):
                 )
             # Outcome-based tend retry (mirrors _run_isolated).
             if (schemas and tend_retry > 0 and staging_had_work
-                    and not _read_staging_fired(result)):
+                    and not _read_staging_fired(result)
+                    and not _tools_known_dead(model)):
                 from kin_persistence import load_app_prompt
                 attempt = 0
                 while attempt < tend_retry and not _read_staging_fired(result):
@@ -2356,6 +2399,7 @@ def _main(args):
                         max_iterations=_max_iter,
                         ollama_host=_kin_host,
                     )
+            _learn_tool_verdict(model, result, staging_had_work, schemas)
             # Any job: one more go if the reply only described an action.
             if schemas and gesture_retry:
                 result = _maybe_gesture_retry(

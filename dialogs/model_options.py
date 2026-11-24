@@ -133,14 +133,18 @@ class MoreModelOptionsDialog(wx.Dialog):
         ttl_row.Add(self.cache_ttl_choice, proportion=1, flag=wx.EXPAND)
         self._add(ttl_row, expand=True)
         self._help(panel,
-                   "Reuses this kin's identity (soul + memory) across turns "
-                   "instead of re-sending it — 75-90% cheaper on the cached "
-                   "portion on supported OpenRouter providers (Claude, OpenAI, "
-                   "DeepSeek, Gemini, Qwen, Grok, Moonshot, Groq). First "
-                   "message costs slightly more; every one after is cheaper. "
-                   "No effect on Ollama. TTL: 'Provider default' sends none "
-                   "(Anthropic then means 5 min); pick '1 hour' if this kin "
-                   "sees more than one turn per hour. Default: provider default.")
+                   "Reuses what this kin was already sent (its soul, memory "
+                   "and the conversation so far) instead of paying for it "
+                   "again — 75-90% cheaper on the reused part, on supported "
+                   "OpenRouter providers (Claude, OpenAI, DeepSeek, Gemini, "
+                   "Qwen, Grok, Moonshot, Groq). No effect on Ollama.\n"
+                   "How long it's kept: Claude forgets it after 5 minutes "
+                   "unless you pick 1 hour. If you usually answer within 5 "
+                   "minutes, keep the default. If you answer every 10 or 20 "
+                   "minutes, from your phone say, the 5-minute copy is gone "
+                   "each time and you pay full price; 1 hour costs a little "
+                   "more to save but usually pays for itself. Default: "
+                   "provider default.")
 
         # ── Provider routing (OpenRouter only) ─────────────────────────
         if is_openrouter:

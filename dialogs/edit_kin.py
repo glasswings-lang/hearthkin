@@ -152,6 +152,30 @@ PROACTIVE_TOOL_WHEN = {
                     "yourself."),
 }
 
+
+
+def tool_verdict_line(model):
+    """One plain sentence on whether this model calls tools, from what
+    Hearthkin has seen (the Test button, a model swap, or a real wake-up)."""
+    if not model:
+        return "No model is set, so there's nothing to know about tools yet."
+    try:
+        import model_utils
+        v = model_utils.probed_tool_calling(model)
+    except Exception:
+        v = None
+    if v is True:
+        return (f"{model} calls tools: Hearthkin has seen it use them. "
+                "Your kin works its memory with tools.")
+    if v is False:
+        return (f"{model} doesn't call tools: Hearthkin has seen it answer "
+                "without using them when it had work to do. Your kin's memory "
+                "is handed to it as text instead, and it's never pushed to "
+                "call tools it can't. Test tool calling to check again.")
+    return (f"Hearthkin doesn't know yet whether {model} calls tools. It finds "
+            "out from Test tool calling, or from the first wake-up with memory "
+            "to tend.")
+
 class EditKinDialog(wx.Dialog):
     """Edit a kin's settings: soul, generation parameters, memory, Telegram bot.
 
@@ -1194,6 +1218,15 @@ class EditKinDialog(wx.Dialog):
         self.tool_probe_btn = wx.Button(host, label="Test tool &calling…")
         self.tool_probe_btn.Bind(wx.EVT_BUTTON, self._on_test_tool_calling)
         _tool_widgets.append(self.tool_probe_btn)
+        # What Hearthkin knows about this model and tools, in plain words
+        # (24 Nov 2026, from an outside review: a person choosing a model
+        # should know what they're trading). Read-only text, so a screen
+        # reader can arrow through it; refreshed after a test.
+        self.tool_verdict_text = wx.TextCtrl(
+            host, value=tool_verdict_line(self.cfg.get("model") or ""),
+            style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
+            | wx.TE_WORDWRAP, name="What Hearthkin knows about this model and tools")
+        _tool_widgets.append(self.tool_verdict_text)
 
         enabled_set = set(load_kin_tools(self.kin))
         # reach_out and message_kin are granted by the moment (a heartbeat, a
@@ -1253,7 +1286,10 @@ class EditKinDialog(wx.Dialog):
         tools_sizer.Add(tools_header,
                         flag=wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP | wx.BOTTOM, border=6)
         for _tw in _tool_widgets:
-            tools_sizer.Add(_tw, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=6)
+            _fl = wx.LEFT | wx.RIGHT | wx.BOTTOM
+            if _tw is getattr(self, "tool_verdict_text", None):
+                _fl |= wx.EXPAND
+            tools_sizer.Add(_tw, flag=_fl, border=6)
         host.SetSizer(tools_sizer)
         host.SetupScrolling(scroll_x=False, scroll_y=True)
         self.notebook.AddPage(tools_panel, "Tools")
@@ -4898,6 +4934,12 @@ class EditKinDialog(wx.Dialog):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _refresh_tool_verdict(self, model):
+        try:
+            self.tool_verdict_text.SetValue(tool_verdict_line(model))
+        except Exception:
+            pass
+
     def _on_tool_probe_done(self, model, rec):
         """UI-thread completion handler for the tool-calling test.
 
@@ -4910,6 +4952,7 @@ class EditKinDialog(wx.Dialog):
         """
         alive = bool(self)
         if alive:
+            self._refresh_tool_verdict(model)
             try:
                 self.tool_probe_btn.Enable()
             except RuntimeError:

@@ -4002,6 +4002,30 @@ def _build_openrouter_payload(model, messages, options, think_effort, tools, cac
                     m_copy["content"] = new_c
                     new_messages[i] = m_copy
             break  # only the first system msg
+        # A second marker at the end of the history, just before the newest
+        # message (24 Nov 2026, from an outside review, confirmed in
+        # usage.log: on hosted Claude the first call of every new turn read
+        # only the system prompt from cache, e.g. 11,531 of 20,789 tokens,
+        # so the whole conversation was paid for again each turn; tool
+        # rounds inside a turn did cache). It moves forward each turn, so
+        # each turn reads everything up to the last one from cache. Only a
+        # user or assistant message with text, never the newest message
+        # itself; copied, never marked in place (audit L10).
+        for j in range(len(new_messages) - 2, -1, -1):
+            m = new_messages[j]
+            if not isinstance(m, dict) or m.get("role") not in ("user", "assistant"):
+                continue
+            c = m.get("content")
+            if isinstance(c, str) and c.strip():
+                new_messages[j] = dict(m, content=[{
+                    "type": "text", "text": c, "cache_control": dict(cc)}])
+                break
+            if isinstance(c, list) and c and isinstance(c[-1], dict) \
+                    and c[-1].get("type") == "text":
+                new_c = list(c)
+                new_c[-1] = dict(c[-1], cache_control=dict(cc))
+                new_messages[j] = dict(m, content=new_c)
+                break
     return payload
 
 

@@ -781,6 +781,37 @@ def test_repair_survives_every_cut_point():
 # name gate that stops garbage names reaching the executor.
 # ─────────────────────────────────────────────────────────────────────────
 
+def test_history_cache_marker():
+    """24 Nov 2026: a second cache marker at the end of the history, so a new
+    turn reads the conversation from cache, not just the system prompt."""
+    msgs = [
+        {"role": "system", "content": "soul"},
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi there"},
+        {"role": "user", "content": "new turn"},
+    ]
+    before = json.dumps(msgs)
+    p = lb._build_openrouter_payload(
+        "openrouter/anthropic/claude-sonnet-5", msgs, {}, "off", None,
+        True, True)
+    out = p["messages"]
+
+    def marked(m):
+        c = m.get("content")
+        return isinstance(c, list) and any(
+            isinstance(b, dict) and "cache_control" in b for b in c)
+    check("the system prompt keeps its cache marker", marked(out[0]))
+    check("the end of the history gets a second marker", marked(out[2]))
+    check("the newest message is not marked", not marked(out[3]))
+    check("only two messages are marked", sum(marked(m) for m in out) == 2)
+    check("the caller's messages aren't changed", json.dumps(msgs) == before)
+    p2 = lb._build_openrouter_payload(
+        "openrouter/anthropic/claude-sonnet-5", msgs, {}, "off", None,
+        False, True)
+    check("no markers when caching is off",
+          not any(marked(m) for m in p2["messages"]))
+
+
 def test_extract_content_tool_calls():
     good = '<tool_call>{"name": "read_file", "arguments": {"path": "x"}}</tool_call>'
     calls = lb._extract_content_tool_calls(good)
@@ -829,6 +860,7 @@ def main():
     test_repair_is_a_no_op_on_healthy_history()
     test_repair_survives_every_cut_point()
     test_extract_content_tool_calls()
+    test_history_cache_marker()
 
     print("\n" + ("-" * 50))
     if _failures:
