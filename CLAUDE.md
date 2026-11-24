@@ -33,6 +33,7 @@ This file is written to be publishable (see below). This section is here at the 
 - **`docs/troubleshooting.md`** — diagnostic playbook and the cross-provider quirk catalog. Read this before theorizing about an OpenRouter 400.
 - **`docs/private/project-history.md`** — untracked local archive. Old session logs, incident postmortems.
 - **`CHANGELOG.md`** and `git log` — release-by-release facts.
+- **`docs/devlog.md`** — what changed, newest first, in plain words for the maintainer, who uses the app and doesn't read code. **Every change gets a line there the same day it's made**: who, what it does for the person and the kin, and why. The maintainer asked for this (24 Nov 2026): "I'm just a regular old user of Hearthkin, and I certainly can't account for what you do in there."
 
 ## Layout
 

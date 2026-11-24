@@ -90,6 +90,27 @@ These all landed in November 2026, each with its own test in `tests/`.
   (`max_calls_per_round`, default 8), and a repeat guard. When the rounds or the total run out, the kin is told so and given one
   turn without tools to answer.
 
+### 23 and 24 November 2026
+
+The plain account, for the maintainer, is [`docs/devlog.md`](devlog.md);
+every change gets a line there the same day. In code terms:
+
+- **Copies before anything is removed.** `keep_copy_before_big_rewrite` on
+  every conversation save, `keep_room_copy`, `keep_trimmed_rows` (history caps
+  hand dropped rows to `history_rows.trim_front(keep=…)`), Telegram /reset
+  archives first, `delete_agent` moves to `kin-archive/`. No copy, no change.
+- **Say only what happened.** Desktop clear/undo/compact/new go through
+  `frame.chat_stream_mixin.put_back_if_unsaved`; Telegram's
+  `_truncate_history_for` and `_append_turns_for` return False on a refused
+  save; Discord's `append_discord_turn(raise_on_failure=True)`;
+  `_backup_prompt_file` raises.
+- **Memory.** `practice.md` rides after the base prompt
+  (`kin_persistence._practice_section`); `note(file="journal")`; compaction
+  rows carry yesterday's and today's journal, frozen
+  (`chat_helpers.compaction_startup`); distillation numbers rows and writes
+  bookmarks, checked by `bookmarks.py` (quotes, gaps, dates, jsonl lines).
+- **Prompt review**: `docs/private/prompt-review-2026-11-24.md`.
+
 ## Two things that will catch you out
 
 - **The prompts in the code are only the defaults.** On first run, the base

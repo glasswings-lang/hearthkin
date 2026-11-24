@@ -7,6 +7,11 @@ holds the long account behind each of its rules, and `docs/architecture.md` is
 the structural map. Read those for depth — this file is the rules you don't get
 to skip.
 
+**Every change gets a plain-words line in `docs/devlog.md` the same day**
+(newest first: who, what it does for the person and the kin, why). The
+maintainer uses the app and doesn't read code; that file is how they know
+what changed.
+
 ## Commands
 
 - **Run the app:** `python hearthkin.pyw` (use plain `python`, not `pythonw`,
