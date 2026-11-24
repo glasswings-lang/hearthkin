@@ -20,7 +20,11 @@ what changed.
 - **Tests:** `python tests/run_all.py` — plain-Python, no pytest. **The suite
   must be green before any change is considered done.** Each `tests/test_*.py`
   is standalone and runnable on its own; one that builds wx windows runs via
-  `python tests/_gui_runner.py <file>`.
+  `python tests/_gui_runner.py <file>`. The suite runs at idle priority and
+  skips window tests unless given `--gui`: window tests can freeze the
+  maintainer's screen reader, so tell them first and run `--gui` before a
+  build, not on every change. Between changes, run only the tests a change
+  touches.
 - **Build a release:** `build.bat` (PyInstaller onedir → `dist/Hearthkin/`).
   Don't hand-bump `app_version.py`; the build stamps the version from the git
   tag.
@@ -200,7 +204,7 @@ One line each here; the rule and its reasons are in `CLAUDE.md`.
 
 ## Before you call a change done
 
-1. `python tests/run_all.py` is green.
+1. `python tests/run_all.py` is green (and `--gui` before a build).
 2. If you touched a frame method, it still resolves (the app imports; the method
    set is unchanged).
 3. If you fixed a behavior, you can describe how to see it working from the UI.
