@@ -1369,7 +1369,7 @@ class TelegramBot:
         {"command": "status", "description": "Active kin, model, context-usage %, bot uptime."},
         {"command": "tools", "description": "Tools you can call via this kin."},
         {"command": "new", "description": "Archive current chat, start fresh. Memory kept."},
-        {"command": "clear", "description": "Wipe history (asks to confirm). Memory kept."},
+        {"command": "clear", "description": "Empty history (a copy is kept). Memory kept."},
         {"command": "reset", "description": "Wipe history AND memory.md (asks to confirm)."},
         {"command": "regen", "description": "Redo the kin's last reply."},
         {"command": "undo", "description": "Drop the last user/assistant exchange."},
@@ -2254,7 +2254,7 @@ class TelegramBot:
             self._send_chunked(
                 chat_id,
                 f"{label}. Your message is in the queue and will be "
-                f"answered when that finishes — nothing is lost.")
+                f"answered when that finishes, as long as Hearthkin stays open.")
         except Exception:
             pass
 
@@ -3315,8 +3315,8 @@ class TelegramBot:
             "/tools — see what tools you can call via this kin\n"
             "/new — archive current conversation, start fresh "
             "(memory kept)\n"
-            "/clear — wipe current history without archiving "
-            "(memory kept)\n"
+            "/clear — empty current history; a copy is kept on the "
+            "computer first (memory kept)\n"
             "/reset — wipe history AND memory.md (asks to confirm)\n"
             "/regen — redo the kin's last reply\n"
             "/undo — drop the last user/assistant exchange\n"
@@ -3472,7 +3472,8 @@ class TelegramBot:
             chat_id,
             f"Cleared your conversation history with {self.agent_name}. "
             "They won't remember anything from before this message. "
-            "A copy is kept on the computer. Memory is untouched."
+            f"A copy is kept on the computer, in {self.agent_name}'s "
+            "telegram_archive folder. Memory is untouched."
         )
 
     def _cmd_new(self, user_id, chat_id):
@@ -3542,7 +3543,7 @@ class TelegramBot:
                     f"{self.agent_name}: the conversation file couldn't be "
                     f"emptied, so it's still going. The old one was saved "
                     f"anyway, as {archived_to.name} in the conversations "
-                    f"folder inside your Hearthkin folder."
+                    f"folder of your .hearthkin folder."
                     if archived_to else
                     f"Couldn't start a new conversation with "
                     f"{self.agent_name}: the conversation file couldn't be "
@@ -3554,7 +3555,7 @@ class TelegramBot:
                 ack = (
                     f"Started a new conversation. The old one (shared with "
                     f"the desktop) is saved as {archived_to.name}, in the "
-                    f"conversations folder inside your Hearthkin folder, "
+                    f"conversations folder of your .hearthkin folder, "
                     f"not in {self.agent_name}'s own folder. The desktop "
                     f"and anyone else sharing it now see an empty "
                     f"conversation. {self.agent_name}'s memory is untouched."
@@ -3666,14 +3667,40 @@ class TelegramBot:
                 save_agent_conversation_preserving_externals,
                 load_agent_conversation,
             )
+            # A copy is kept first (keep_copy_before_big_rewrite), and if
+            # it can't be, the save raises and nothing is reset (message
+            # audit, 24 Nov 2026: this used to be ignored, then "Reset
+            # complete ... is gone" was sent over an untouched conversation).
             try:
                 current = load_agent_conversation(self.agent_name)
                 save_agent_conversation_preserving_externals(
                     self.agent_name, [], len(current),
                 )
             except Exception:
-                pass
+                self._send_chunked(
+                    chat_id,
+                    f"Couldn't reset {self.agent_name}: a copy of the "
+                    f"conversation couldn't be kept first, so nothing was "
+                    f"reset, conversation or memory.")
+                return
+            convo_where = (f"a copy is in {self.agent_name}'s backups, in the "
+                           f"cleared folder")
         else:
+            # Private chat: archived first, like /clear and /new (it used
+            # to be wiped with no copy at all). No copy, no reset.
+            with self._histories_lock:
+                history = list(self._histories.get(_hkey(user_id)) or [])
+            if history:
+                try:
+                    if not self._archive_telegram_history(user_id, history):
+                        raise OSError("archive not written")
+                except Exception:
+                    self._send_chunked(
+                        chat_id,
+                        f"Couldn't reset {self.agent_name}: a copy of your "
+                        f"conversation couldn't be kept first, so nothing "
+                        f"was reset, conversation or memory.")
+                    return
             # _histories_lock so an inference worker writing a new
             # turn simultaneously can't be lost (audit T1). Key via
             # _hkey (audit DH1).
@@ -3683,30 +3710,41 @@ class TelegramBot:
                     self._save_histories()
                 except Exception:
                     pass
+            convo_where = (f"a copy is in {self.agent_name}'s "
+                           f"telegram_archive folder")
         self._last_thinking.pop(user_id, None)
-        # Wipe memory.md atomically. We import lazily because the
-        # kin_persistence helpers shouldn't be loaded until they're
-        # actually used (keeps cold-start light).
+        # memory.md is copied into backups/cleared before it's emptied
+        # (24 Nov 2026: it was wiped with no copy). No copy, no wipe.
         memory_wiped = False
+        memory_copy = None
         try:
-            from kin_persistence import save_memory
+            import shutil
+            from kin_persistence import (save_memory, agent_dir,
+                                         cleared_copies_dir)
+            mem = agent_dir(self.agent_name) / "memory.md"
+            if mem.exists() and mem.stat().st_size:
+                d = cleared_copies_dir(self.agent_name)
+                d.mkdir(parents=True, exist_ok=True)
+                stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                memory_copy = d / f"memory-before-reset-{stamp}.md"
+                shutil.copy2(mem, memory_copy)
             save_memory(self.agent_name, "")
             memory_wiped = True
         except Exception:
             pass
         if memory_wiped:
             ack = (
-                f"Reset complete. Your conversation history with "
-                f"{self.agent_name} is gone, and their memory.md "
-                f"has been wiped. They start the next message as a "
-                f"blank slate."
+                f"Reset done. Your conversation with {self.agent_name} is "
+                f"emptied ({convo_where}), and their memory.md is emptied"
+                + (f" (a copy is in their backups, in the cleared folder, "
+                   f"as {memory_copy.name})" if memory_copy else "")
+                + ". They start the next message as a blank slate."
             )
         else:
             ack = (
-                f"Conversation cleared, but couldn't wipe memory.md "
-                f"(file system error). You may want to clear it "
-                f"manually from the desktop app: Tools → Open active "
-                f"kin folder → edit memory.md."
+                f"Your conversation with {self.agent_name} is emptied "
+                f"({convo_where}), but memory.md couldn't be copied or "
+                f"emptied, so it's unchanged."
             )
         self._send_chunked(chat_id, ack)
 
@@ -7402,8 +7440,15 @@ class TelegramBot:
                     chat_bits.append("saved " + ", ".join(
                         f"{os.path.basename(str(p))} ({n} bytes)" for p, n in oks))
                 if errs:
+                    # The "see logs" was false until 24 Nov 2026 (message
+                    # audit): the errors only went to the kin's note.
+                    from kin_persistence import append_failure_log as _afl
+                    for _p, _e in errs:
+                        _afl("save_failures.log", self.agent_name,
+                             "file from a reply: %s" % _p, _e)
                     chat_bits.append(
-                        f"{len(errs)} file(s) couldn't be saved (see logs)")
+                        f"{len(errs)} file(s) couldn't be saved (see "
+                        f"logs/save_failures.log)")
                 chat = "📝 " + "; ".join(chat_bits) if chat_bits else None
                 return note, chat
             # Nothing committed. Nudge toward the fence convention only if the
@@ -7442,12 +7487,19 @@ class TelegramBot:
             self._toolless_scopes = []
             oks = [(p, d) for (p, ok, d) in results if ok]
             errs = [p for (p, ok, _d) in results if not ok]
+            if errs:
+                from kin_persistence import append_failure_log as _afl
+                for (_p, _ok, _d) in results:
+                    if not _ok:
+                        _afl("save_failures.log", self.agent_name,
+                             "no-tools memory file: %s" % _p, _d)
             chat_bits = []
             if oks:
                 chat_bits.append("saved " + ", ".join(
                     f"{os.path.basename(str(p))} ({n} bytes)" for p, n in oks))
             if errs:
-                chat_bits.append(f"{len(errs)} couldn't be saved (see logs)")
+                chat_bits.append(f"{len(errs)} couldn't be saved (see "
+                                 f"logs/save_failures.log)")
             if archived:
                 chat_bits.append(f"tended {len(archived)} staging scope(s)")
             return note, ("📝 " + "; ".join(chat_bits) if chat_bits else None)

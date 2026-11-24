@@ -7688,9 +7688,21 @@ def delete_agent(name):
     err = validate_kin_name(name)
     if err:
         raise ValueError(f"refusing to delete agent with unsafe name: {err}")
+    # Moved, never erased (message audit, 24 Nov 2026): deleting a kin used
+    # to erase its whole folder, and with it every copy Hearthkin had
+    # promised was "kept on the computer" (backups/cleared, backups/,
+    # telegram_archive/), plus memory, journals and now.md. It now goes to
+    # ~/.hearthkin/kin-archive/<name>-deleted-<date>, where the person can
+    # bring it back or erase it themselves. Returns the new folder, or None.
     d = agent_dir(name)
-    if d.exists():
-        shutil.rmtree(d)
+    if not d.exists():
+        return None
+    archive = CONFIG_DIR / "kin-archive"
+    archive.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    dest = archive / f"{name}-deleted-{stamp}"
+    shutil.move(str(d), str(dest))
+    return dest
 
 
 # ─── Room helpers ───────────────────────────────────────────────────────────

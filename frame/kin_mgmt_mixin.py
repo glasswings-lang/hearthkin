@@ -595,7 +595,12 @@ class KinMgmtMixin:
         # explicit cleanup (see schtasks_sync_kin call below).
         dlg = wx.MessageDialog(
             self,
-            f"Delete kin '{self.current_agent}'? This removes their soul, config, and history. It cannot be undone.",
+            f"Delete kin '{self.current_agent}'? Their whole folder (soul, "
+            f"memory, journals, conversation, settings and every copy kept "
+            f"of them) moves to the kin-archive folder in your .hearthkin "
+            f"folder, and they leave Hearthkin. Nothing is erased: to bring "
+            f"them back, move the folder back into the kin folder; to erase "
+            f"them for good, delete it there yourself.",
             "Delete kin",
             wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT | wx.ICON_WARNING,
         )
@@ -616,20 +621,32 @@ class KinMgmtMixin:
                     cron_helpers.schtasks_sync_kin(name, [])
             except Exception:
                 pass
-            delete_agent(name)
+            try:
+                moved_to = delete_agent(name)
+            except Exception as e:
+                append_failure_log("save_failures.log", name, "delete kin", e)
+                self._set_status(
+                    f"Couldn't delete {name}: their folder couldn't be moved "
+                    f"to the kin-archive folder, so nothing changed. Details "
+                    f"are in logs/save_failures.log.")
+                dlg.Destroy()
+                return
             # Drop in-memory per-kin state so a recreated same-named
             # kin doesn't inherit stale counters (audit H4).
             self._cleanup_per_kin_state(name)
             self.current_agent = None
             agents = list_agents()
             self._refresh_agent_list()
+            where = (f" Their folder is in kin-archive, as {moved_to.name}."
+                     if moved_to else "")
             if agents:
                 self._load_agent(agents[0])
+                self._set_status(f"Deleted kin: {name}.{where}")
             else:
                 self.chat_display.Clear()
                 self.conversation.clear()
                 self.SetTitle(APP_NAME)
-                self._set_status(f"Deleted kin: {name}. No kin remain.")
+                self._set_status(f"Deleted kin: {name}. No kin remain.{where}")
         dlg.Destroy()
 
     def _on_save_soul(self, event):

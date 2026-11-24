@@ -1195,12 +1195,19 @@ def _toolless_memory_cron(kin, reply, safe_tools, shown_scopes,
             return nudge, "[no-tools memory] nothing was saved this wake-up"
         oks = [(p, d) for (p, ok, d) in results if ok]
         errs = [p for (p, ok, _d) in results if not ok]
+        if errs:
+            from kin_persistence import append_failure_log as _afl
+            for (_p, _ok, _d) in results:
+                if not _ok:
+                    _afl("save_failures.log", kin,
+                         "no-tools memory file: %s" % _p, _d)
         conf_bits = []
         if oks:
             conf_bits.append("saved " + ", ".join(
                 f"{os.path.basename(str(p))} ({n} bytes)" for p, n in oks))
         if errs:
-            conf_bits.append(f"{len(errs)} file(s) couldn't be saved (see logs)")
+            conf_bits.append(f"{len(errs)} file(s) couldn't be saved (see "
+                             f"logs/save_failures.log)")
         if archived:
             conf_bits.append(f"tended {len(archived)} staging scope(s)")
         return note, ("[no-tools memory] " + "; ".join(conf_bits)
@@ -1273,7 +1280,11 @@ def _maybe_authoring_bridge_cron(kin, reply, safe_tools, shown_scopes=(),
         for p, e in errs:
             note_bits.append(f"could NOT save {p!r} — {e}")
         if errs:
-            conf_bits.append(f"{len(errs)} file(s) couldn't be saved (see logs)")
+            from kin_persistence import append_failure_log as _afl
+            for _p, _e in errs:
+                _afl("save_failures.log", kin, "file from a reply: %s" % _p, _e)
+            conf_bits.append(f"{len(errs)} file(s) couldn't be saved (see "
+                             f"logs/save_failures.log)")
         from kin_persistence import load_app_prompt
         note = (load_app_prompt("authoring_bridge_result", kin)
                 .replace("{results}", "; ".join(note_bits))

@@ -95,7 +95,7 @@ b._maybe_say_queued_from_poll({"message": m(8, "private", 8)})
 check("the notice really isn't sent to a stranger", sent == [])
 b._maybe_say_queued_from_poll({"message": m(7, "private", 7)})
 check("...and is sent to an allowed person",
-      len(sent) == 1 and "nothing is lost" in sent[0][1])
+      len(sent) == 1 and "as long as Hearthkin stays open" in sent[0][1])
 
 print("--- a Telegram DM reply is cleaned of speaker tags ---")
 

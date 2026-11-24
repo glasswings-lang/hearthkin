@@ -142,15 +142,24 @@ class BotIntegrationMixin:
         Speech first, toast second: the operator uses NVDA, and a Windows
         toast alone is easy to miss entirely.
         """
+        # Said as the real wait (message audit, 24 Nov 2026: 90 seconds was
+        # read out as "1 minutes"; Telegram itself said the real time).
         try:
-            mins = max(1, int(timeout_secs) // 60)
+            secs = int(timeout_secs)
         except Exception:
-            mins = 10
+            secs = 600
+        if secs < 60:
+            wait = f"{secs} seconds"
+        elif secs % 60:
+            wait = f"{secs // 60} minutes {secs % 60} seconds" if secs >= 120 \
+                else f"1 minute {secs % 60} seconds"
+        else:
+            wait = "1 minute" if secs == 60 else f"{secs // 60} minutes"
         short = str(command or "").strip().replace("\n", " ")
         if len(short) > 90:
             short = short[:90] + "…"
         spoken = (f"{kin_name} is asking to run a command on Telegram, "
-                  f"and is waiting for you. {mins} minutes to answer.")
+                  f"and is waiting for you. {wait} to answer.")
         # Sound FIRST — it's the signal most likely to survive the operator
         # typing over NVDA or not looking at the screen.
         self._play_approval_alert()
@@ -167,7 +176,7 @@ class BotIntegrationMixin:
                 title=f"{kin_name} needs approval",
                 message=(f"{kin_name} wants to run:\n{short}\n\n"
                          f"Answer in the Telegram chat (yes / no / remember). "
-                         f"It gives up after {mins} min — that is not a refusal."),
+                         f"It gives up after {wait} — that is not a refusal."),
                 parent=None,
             )
             notif.Show(timeout=15)

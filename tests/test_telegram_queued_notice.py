@@ -87,8 +87,8 @@ b._maybe_say_queued_from_poll(msg())
 check("a queued message is told what it is waiting on",
       len(b.sent) == 1
       and "Bracken is saving notes to its memory" in b.sent[0][1])
-check("...and told the message is not lost, which is the actual worry",
-      "queue" in b.sent[0][1] and "nothing is lost" in b.sent[0][1].lower())
+check("...and told it will be answered, and the one condition (24 Nov 2026: it was told nothing is lost, which is false if Hearthkin closes)",
+      "queue" in b.sent[0][1] and "as long as hearthkin stays open" in b.sent[0][1].lower())
 check("...in the chat it came from", b.sent[0][0] == 7)
 
 

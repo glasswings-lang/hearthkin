@@ -76,7 +76,7 @@ check("the message names a file", bool(name))
 check("...and that file is in the Hearthkin conversations folder",
       bool(name) and (kp.CONVOS_DIR / name).exists())
 check("...which is the folder the message names",
-      "conversations folder inside your Hearthkin folder" in msg)
+      "conversations folder of your .hearthkin folder" in msg)
 check("...not the kin's own folder", not (kin_dir(KIN) / "conversations" / name).exists()
       and "kin's conversations folder" not in msg)
 check("the conversation is empty now", kp.load_agent_conversation(KIN) == [])

@@ -320,7 +320,7 @@ class ImportHistoryDialog(wx.Dialog):
         )
         self.mode_replace_radio = wx.RadioButton(
             panel,
-            label="&Replace existing history (backed up to .jsonl.bak.<timestamp>)",
+            label="&Replace existing history (a copy goes in the kin's backups folder first)",
         )
         body.Add(self.mode_append_radio, flag=wx.BOTTOM, border=4)
         body.Add(self.mode_merge_radio, flag=wx.BOTTOM, border=4)
@@ -927,8 +927,8 @@ class ImportHistoryDialog(wx.Dialog):
             confirm = wx.MessageBox(
                 f"Weave the imported turns into {target_kin}'s existing "
                 f"history by date?\n\n"
-                f"The existing conversation is backed up to "
-                f"conversation.jsonl.bak.<timestamp> first, then rewritten "
+                f"The existing conversation is copied into the kin's backups "
+                f"folder first, then rewritten "
                 f"with the imported turns threaded into place. Existing turns "
                 f"keep their order; only the imported ones are placed by time.",
                 "Confirm merge", wx.YES_NO | wx.CANCEL | wx.ICON_WARNING, self,
@@ -942,8 +942,8 @@ class ImportHistoryDialog(wx.Dialog):
             confirm = wx.MessageBox(
                 f"Replace {target_kin}'s existing conversation history "
                 f"with the imported block?\n\n"
-                f"The existing conversation will be backed up to "
-                f"conversation.jsonl.bak.<timestamp> in the kin folder.",
+                f"A copy of the existing conversation goes in the kin's "
+                f"backups folder first.",
                 "Confirm replace", wx.YES_NO | wx.CANCEL | wx.ICON_WARNING, self,
             )
             if confirm != wx.YES:

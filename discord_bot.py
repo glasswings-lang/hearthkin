@@ -887,7 +887,7 @@ class DiscordBot:
             await self._send_chunked(
                 message.channel,
                 f"{label}. Your message is in the queue and will be answered "
-                f"when that finishes; nothing is lost.")
+                f"when that finishes, as long as Hearthkin stays open.")
         except Exception:
             pass
 

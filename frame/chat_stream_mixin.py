@@ -16,6 +16,28 @@ from frame_shared import (
 )
 
 
+def put_back_if_unsaved(win, before, before_file, what):
+    """After a clear, undo, compact or new conversation: if the save failed
+    (a copy that couldn't be kept refuses the save on purpose), put the
+    conversation back as it was and say so, instead of a success line over
+    the failure (message audit, 24 Nov 2026: four messages said "cleared" /
+    "undid" / "compacted" while nothing on disk had changed). True when it
+    put things back. A plain function so every mixin can call it."""
+    if not getattr(win, "_last_save_failed", False):
+        return False
+    win.conversation = list(before)
+    win.current_convo_file = before_file
+    for step in ("_render_conversation", "_update_token_display"):
+        try:
+            getattr(win, step)()
+        except Exception:
+            pass
+    win._set_status(
+        f"Couldn't {what}: the conversation couldn't be saved, so nothing "
+        "changed. Details are in logs/save_failures.log.")
+    return True
+
+
 class ChatStreamMixin:
 
     def _stat_conversation_mtime(self, kin_name):
@@ -526,6 +548,9 @@ class ChatStreamMixin:
                     f"Snapshot save failed (see logs/save_failures.log): {e}"
                 )
                 self._last_save_failed = True
+
+    def _put_back_if_unsaved(self, before, before_file, what):
+        return put_back_if_unsaved(self, before, before_file, what)
 
     def _on_stream_done(self, gen):
         if self._closing:
@@ -1194,7 +1219,8 @@ class ChatStreamMixin:
                 f"num_ctx, prefill (reading the prompt) can take longer "
                 f"than the watchdog allows. Your message is preserved; "
                 f"try sending again. To wait longer per attempt, raise "
-                f"Watchdog timeout in Settings → Model && generation. "
+                f"Watchdog timeout in the kin's settings: Model and "
+                f"generation tab, More model options. "
                 f"See logs/streaming_hangs.log.]\n"
             )
             status_msg = (
@@ -1244,7 +1270,8 @@ class ChatStreamMixin:
             try:
                 self._notify_cron_failure(
                     self.current_agent, hung_user_text,
-                    "stream hung for 5 minutes — no chunks arrived",
+                    f"stream hung for {elapsed_min} minutes — no chunks "
+                    f"arrived",
                 )
             except Exception:
                 pass
@@ -1589,9 +1616,12 @@ class ChatStreamMixin:
         if j == i or j == 0 or convo[j - 1].get("role") != "user":
             self._set_status("Nothing to undo.")
             return
+        before, before_file = list(convo), getattr(self, "current_convo_file", None)
         del convo[j - 1:]
         self._render_conversation()
         self._persist_current_conversation()
+        if self._put_back_if_unsaved(before, before_file, "undo"):
+            return
         self._set_status("Undid your last message and "
                          f"{getattr(self, 'current_agent', None) or 'the kin'}"
                          "'s reply.")
@@ -1748,10 +1778,13 @@ class ChatStreamMixin:
             dlg.Destroy()
             if r != wx.ID_YES:
                 return
+        before, before_file = list(self.conversation), getattr(self, "current_convo_file", None)
         self.conversation.clear()
         self.chat_display.Clear()
         self.current_convo_file = None
         self._persist_current_conversation()
+        if self._put_back_if_unsaved(before, before_file, "clear the conversation"):
+            return
         self._update_token_display()
         # The save above copies the old conversation into the kin's
         # backups/cleared/ first (keep_copy_before_big_rewrite).

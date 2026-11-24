@@ -159,12 +159,16 @@ class FileMenuMixin:
         keep = self._compact_keep()
         preface = load_app_prompt("compact_marker", kin).replace(
             "{user}", self._compact_user_name())
+        before, before_file = list(self.conversation), getattr(self, "current_convo_file", None)
         self.conversation.append(
             compact_marker(note, keep, ts=now_iso(),
                            preface=preface, kin=kin))
+        self._persist_current_conversation()
+        from frame.chat_stream_mixin import put_back_if_unsaved
+        if put_back_if_unsaved(self, before, before_file, "compact"):
+            return
         from kin_persistence import save_now_note
         save_now_note(kin, note)
-        self._persist_current_conversation()
         try:
             self._render_conversation()
         except Exception:
@@ -210,8 +214,9 @@ class FileMenuMixin:
             dlg = wx.MessageDialog(
                 self,
                 f"Start fresh with {self.current_agent or 'this kin'}? "
-                "The current conversation will be archived to the kin's "
-                "conversations folder first, then cleared. "
+                "The current conversation will be saved first, in the "
+                "conversations folder of your .hearthkin folder (File, Open "
+                "finds it), then cleared. "
                 f"{self.current_agent or 'The kin'}'s memory and soul are "
                 "untouched.",
                 "New conversation",
@@ -239,16 +244,26 @@ class FileMenuMixin:
                 )
                 return
             archived_name = archive_path.name
+        before, before_file = list(self.conversation), getattr(self, "current_convo_file", None)
         self.conversation.clear()
         self.chat_display.Clear()
         self.current_convo_file = None
         self._persist_current_conversation()
+        from frame.chat_stream_mixin import put_back_if_unsaved
+        if put_back_if_unsaved(self, before, before_file,
+                                     "start a new conversation"):
+            return
         self._update_token_display()
         if archived_name:
+            # The copy is in CONVOS_DIR, ~/.hearthkin/conversations, NOT the
+            # kin's own folder (this used to name the kin's own folder
+            # until 24 Nov 2026, as Telegram's /new did; the person looked
+            # there and found nothing).
             self._set_status(
-                f"New conversation started. Previous one archived to "
-                f"{archived_name} in the kin's conversations folder "
-                f"(File → Open to reload it). Memory and soul untouched."
+                f"New conversation started. The old one is saved as "
+                f"{archived_name}, in the conversations folder of your "
+                f".hearthkin folder (File, Open to reload it). Memory and "
+                f"soul untouched."
             )
         else:
             self._set_status("New conversation started.")

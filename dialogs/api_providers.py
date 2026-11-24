@@ -104,7 +104,7 @@ class _ProviderEntryDialog(wx.Dialog):
             self,
             value="Not hidden as you type, so you can check what you pasted. "
                   "It is never written into providers.md — it goes to its own "
-                  "file in your home folder, which keeps the provider list "
+                  "file in the .ai_programs folder of your user folder, which keeps the provider list "
                   "safe to paste when you're asking someone for help.",
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL
             | wx.TE_WORDWRAP,
@@ -166,7 +166,7 @@ class _ProviderEntryDialog(wx.Dialog):
             self.name_hint.SetValue(
                 "Saved as \"%s\". Its models will be named \"%s/...\", and "
                 "its key is read from the %s_API_KEY environment variable, "
-                "or from %s_key.json in your home folder."
+                "or from %s_key.json in the .ai_programs folder of your user folder."
                 % (cleaned, cleaned, cleaned.upper().replace("-", "_"),
                    cleaned))
 
