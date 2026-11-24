@@ -270,7 +270,7 @@ check("a wake-up counts once toward memory summaries, like a reply anywhere",
       'note_unattended_turns(kin, "desktop", 1)' in _src
       and 'note_unattended_turns(kin, "desktop", 2)' not in _src)
 check("a wake-up's reply has the desktop's length cap, not none",
-      _src.count('"num_predict": cfg.get("num_predict", 2000)') == 2)
+      _src.count('"num_predict": cfg.get("num_predict", 2000)') >= 2)
 
 
 print()

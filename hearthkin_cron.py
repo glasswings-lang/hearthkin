@@ -580,6 +580,23 @@ def _build_messages(kin, user_turn_text, enabled_tools=None, history_tokens=0,
         # view_after_compaction hands the note back as a plain system row;
         # tag it so it is sent (below) and kept by the size budget.
         convo[0] = dict(convo[0], compact=True)
+    # A job that keeps its own history never sees the kin's main
+    # conversation, or its compaction note, so it starts from the kin's own
+    # now.md instead (24 Nov 2026, from an outside review: read now.md first
+    # in every new context, not only after a compaction). Sent like a
+    # compaction note, at the front.
+    if history_path:
+        try:
+            from kin_persistence import load_kin_own_file, NOW_FILE
+            _now = (load_kin_own_file(kin, NOW_FILE) or "").strip()
+        except Exception:
+            _now = ""
+        if _now:
+            convo = [{"role": "system", "compact": True, "content":
+                      "[hearthkin: this job keeps its own history, so you "
+                      "don't see your main conversation here. This is your "
+                      "now.md, where you last said you were:]\n\n" + _now}
+                     ] + list(convo)
     if history_tokens and history_tokens > 0:
         # Budget by SIZE, not turn count. Counting turns sounds equivalent and
         # is not: a kin being fed long passages has turns of 1,200+ tokens, so
@@ -1076,6 +1093,128 @@ def _learn_tool_verdict(model, result, staging_had_work, schemas):
         elif ((getattr(result, "content", "") or "").strip()
               and model_utils.probed_tool_calling(model) is None):
             model_utils._save_probe_verdict(model, False)
+    except Exception:
+        pass
+
+
+def conversation_fill_pct(kin, cfg):
+    """How full the kin's main conversation is, as sent, in percent of its
+    window: an estimate (this subprocess has no provider count), corrected by
+    the kin's measured token ratio. 0 when it can't tell."""
+    try:
+        from chat_helpers import PRIVATE, visible_rows, view_after_compaction
+        convo = visible_rows(load_agent_conversation(kin) or [], PRIVATE, cfg)
+        convo = view_after_compaction(convo)
+        est = sum(_est_tokens(str(m.get("content") or ""))
+                  for m in convo if isinstance(m, dict))
+        est += _est_tokens(build_system_prompt(
+            load_soul(kin) or "", load_memory_for_prompt(kin) or "",
+            kin_name=kin))
+        try:
+            est = int(est * llm_backend.token_calibration_ratio(kin))
+        except Exception:
+            pass
+        num_ctx = int(cfg.get("num_ctx", 8192) or 8192)
+        return int(est * 100 / max(512, num_ctx - 2000))
+    except Exception:
+        return 0
+
+
+def maybe_kin_led_compaction(kin, cfg):
+    """The kin compacts its own conversation, at a quiet moment (24 Nov
+    2026, from an outside review; the person had been compacting by hand, or
+    missing the mark and letting the window roll, which trims the oldest
+    turns with nothing in the kin's words covering the gap).
+
+    Runs after a wake-up, only when the kin's "kin_led_compaction" switch is
+    on and its conversation is past compact_hint_pct. Three steps: a memory
+    pass WITH tools (keep what matters in its own files), then its note (the
+    same request the person's compaction uses, no tools), then the
+    compaction row, appended to the conversation (nothing deleted). A model
+    on record as not calling tools skips the memory pass. Returns a one-line
+    account for the journal, or "" when nothing ran."""
+    if not cfg.get("kin_led_compaction"):
+        return ""
+    try:
+        mark = int(cfg.get("compact_hint_pct", 70) or 0)
+    except (TypeError, ValueError):
+        mark = 0
+    if mark <= 0:
+        return ""
+    pct = conversation_fill_pct(kin, cfg)
+    if pct < mark:
+        return ""
+    from kin_persistence import load_app_prompt, save_now_note, now_iso
+    from chat_helpers import (compact_marker, compact_keep_count,
+                              compact_options)
+    model = (cfg.get("model") or "").strip()
+    host = resolve_kin_ollama_host(cfg.get("ollama_host_name", ""))
+    options = {"temperature": cfg.get("temperature", 0.8),
+               "num_ctx": cfg.get("num_ctx", 8192),
+               "num_predict": cfg.get("num_predict", 2000)}
+    max_ctx = max(2048, int(cfg.get("num_ctx", 8192) or 8192) - 2000)
+    # 1. The memory pass, with tools.
+    schemas, executor, safe = _load_cron_tools(kin, model)
+    if schemas and not _tools_known_dead(model):
+        ask = load_app_prompt("kin_compaction_memory_pass", kin).replace(
+            "{pct}", str(min(pct, 100)))
+        msgs = _build_messages(kin, ask, enabled_tools=safe)
+        _cron_tool_loop(
+            model, msgs, tools=schemas, tool_executor=executor,
+            options=options, max_context_tokens=max_ctx, kin_name=kin,
+            surface="kin-compaction-memory",
+            max_iterations=int(cfg.get("max_tool_iterations", 8) or 8),
+            ollama_host=host)
+    # 2. The note, as the person's compaction asks for it.
+    user = (load_json(CONFIG_FILE, {}).get("user_name", "") or "").strip() \
+        or "the person you talk with"
+    req = load_app_prompt("compact_request", kin).replace("{user}", user)
+    msgs = _build_messages(kin, req, enabled_tools=[])
+    res = _cron_chat(model, msgs, options=compact_options(options, cfg),
+                     stream=False, max_context_tokens=max_ctx, kin_name=kin,
+                     surface="kin-compaction-note", ollama_host=host)
+    note = (getattr(res, "content", "") or "").strip()
+    try:
+        note = extract_inline_thinking(note)[0].strip()
+    except Exception:
+        pass
+    if not note:
+        return ("Kin-led compaction: the conversation was %d%% full, but no "
+                "note came back, so nothing was compacted." % pct)
+    # 3. The compaction itself: one row appended; nothing deleted.
+    keep = compact_keep_count(cfg)
+    preface = load_app_prompt("compact_marker_by_kin", kin).replace(
+        "{pct}", str(min(pct, 100)))
+    row = dict(compact_marker(note, keep, ts=now_iso(), preface=preface,
+                              kin=kin), source="wake-up")
+    append_agent_conversation_turn(kin, row, raise_on_failure=True)
+    save_now_note(kin, note)
+    return ("Kin-led compaction: the conversation was %d%% full; %s kept what "
+            "mattered, wrote its note, and compacted it. Nothing was deleted."
+            % (pct, kin))
+
+
+def _after_wake_compaction(kin, cfg, time_label):
+    """Run kin-led compaction after a successful wake-up, and tell the person
+    in one line (journal, and Telegram where wake-ups post). Never raises: a
+    compaction that fails must not turn a good wake-up into a failed one."""
+    try:
+        line = maybe_kin_led_compaction(kin, cfg)
+    except WakeStopped:
+        return
+    except Exception as e:
+        cron_helpers.log_cron_error(kin, "kin_led_compaction", str(e))
+        line = ("Kin-led compaction didn't finish (%s: %s), so nothing was "
+                "compacted." % (type(e).__name__, e))
+    if not line:
+        return
+    try:
+        cron_helpers.append_journal(kin, time_label or "(no time)",
+                                    "(kin-led compaction)", line)
+    except Exception:
+        pass
+    try:
+        _maybe_post_telegram(kin, cfg, "🗜️ " + line)
     except Exception:
         pass
 
@@ -2474,6 +2613,7 @@ def _main(args):
             except Exception:
                 pass
             return 1
+        _after_wake_compaction(kin, cfg, time_label)
         return 0
 
     # Isolated mode: Hearthkin is closed (or never running). Full path —
@@ -2506,6 +2646,7 @@ def _main(args):
         except Exception:
             pass
         return 1
+    _after_wake_compaction(kin, cfg, time_label)
     return 0
 
 

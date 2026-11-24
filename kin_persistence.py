@@ -1353,6 +1353,9 @@ DEFAULT_AGENT_CONFIG = {
     # the context window), that they can compact it (Chat -> Compact this
     # conversation). 0 = never. Nothing happens on its own (12 Nov 2026).
     "compact_hint_pct": 70,
+    # The kin compacts for itself at a wake-up past compact_hint_pct
+    # (hearthkin_cron.maybe_kin_led_compaction). Off unless chosen.
+    "kin_led_compaction": False,
     # How many of the latest messages are still sent, word for word, after a
     # compaction, besides the note. 0 = the note alone. Drift lives in the
     # recent messages: kept, they hand the kin fresh examples of the very
@@ -4387,9 +4390,30 @@ DEFAULT_COMPACT_REQUEST = (
     "note from you and the last few messages, not everything before them. "
     "So please write that note now, to yourself, in your own voice: what "
     "we've been doing, what matters in it, what's unfinished, and how "
-    "things are between you and {user} right now. Write it for the you who "
-    "will read it next, with no memory of this conversation. Just the note; "
-    "no tools.]"
+    "things are between you and {user} right now. Say how you feel about "
+    "where things are, plainly, and anything the next you needs that wasn't "
+    "said out loud. Write it for the you who will read it next, with no "
+    "memory of this conversation. Just the note; no tools.]"
+)
+# Kin-led compaction (24 Nov 2026, from an outside review: the kin compacts
+# itself when its conversation is full, after updating its own memory, in its
+# own words). Two editable prompts: the memory pass, and the line before the
+# note when the kin compacted on its own.
+DEFAULT_KIN_COMPACTION_MEMORY_PASS = (
+    "[hearthkin: your conversation is {pct} percent full, so it's about to be "
+    "compacted: after this you'll be sent a note from you and the last few "
+    "messages, not everything before them. Nothing is deleted. Before the "
+    "note, keep what matters, with your tools: anything that belongs in "
+    "memory.md, your depth logs, or today's journal (note, with "
+    "file=\"journal\"), and your practice.md if you learned a habit. Write "
+    "from the conversation itself, in your own words. When you've kept what "
+    "you want, say \"done\".]"
+)
+DEFAULT_COMPACT_MARKER_BY_KIN = (
+    "[hearthkin: this conversation was compacted here, on a wake-up, when it "
+    "was {pct} percent full: your kin-led compaction is switched on. "
+    "Everything before it is kept, but you're no longer sent it. Before it "
+    "was compacted, you kept what mattered and wrote yourself this note:]"
 )
 DEFAULT_COMPACT_MARKER = (
     "[hearthkin: this conversation was compacted here, at {user}'s request. "
@@ -5392,12 +5416,30 @@ APP_PROMPT_REGISTRY = {
     },
     "compact_request": {
         "default": DEFAULT_COMPACT_REQUEST,
-        "version": 1,
+        # 2 (24 Nov 2026): asks how the kin feels and what went unsaid.
+        "version": 2,
         "placeholders": ["{user}"],
         "title": "Compacting: asking the kin for its note",
         "desc": "Sent when you choose Chat, Compact this conversation. The "
                 "kin's answer becomes the note it carries on from. An "
                 "ordinary message, so a kin with no tools can answer it.",
+    },
+    "kin_compaction_memory_pass": {
+        "default": DEFAULT_KIN_COMPACTION_MEMORY_PASS,
+        "version": 1,
+        "placeholders": ["{pct}"],
+        "title": "Kin-led compaction: the memory pass before the note",
+        "desc": "Sent on a wake-up when the kin's conversation is past its "
+                "compaction mark and kin-led compaction is on, with its "
+                "tools, before it writes its note.",
+    },
+    "compact_marker_by_kin": {
+        "default": DEFAULT_COMPACT_MARKER_BY_KIN,
+        "version": 1,
+        "placeholders": ["{pct}"],
+        "title": "Kin-led compaction: the line before the kin's note",
+        "desc": "Put in front of the kin's note where it compacted its own "
+                "conversation on a wake-up.",
     },
     "compact_marker": {
         "default": DEFAULT_COMPACT_MARKER,
@@ -7412,16 +7454,30 @@ def compact_request_text(kin_name, user):
 
 def save_now_note(kin_name, note):
     """Keep a compaction's note as the kin's now.md. The one before is kept
-    as now.md.previous. Never raises: a failed save must not undo the
-    compaction itself."""
+    as now.md.previous, and EVERY one before is kept, dated, in the kin's
+    now/ folder (24 Nov 2026, from an outside review: one bad write must not
+    erase the last good handoff; now.md.previous alone was one deep). Never
+    raises: a failed save must not undo the compaction itself."""
     note = (note or "").strip()
     if not kin_name or not note:
         return False
     try:
         p = agent_dir(kin_name) / NOW_FILE
         if p.exists():
+            old = _read_text_tolerant(p)
             prev = p.with_name(NOW_FILE + ".previous")
-            prev.write_text(_read_text_tolerant(p), encoding="utf-8")
+            prev.write_text(old, encoding="utf-8")
+            try:
+                hist = agent_dir(kin_name) / "now"
+                hist.mkdir(parents=True, exist_ok=True)
+                stamp = datetime.datetime.fromtimestamp(
+                    p.stat().st_mtime).strftime("%Y-%m-%d_%H-%M-%S")
+                dest = hist / f"now-{stamp}.md"
+                if not dest.exists():
+                    dest.write_text(old, encoding="utf-8")
+            except Exception as e:
+                append_failure_log("save_failures.log", kin_name,
+                                   "save_now_note (dated copy)", e)
         p.write_text(note + "\n", encoding="utf-8")
         return True
     except Exception as e:

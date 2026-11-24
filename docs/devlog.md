@@ -53,6 +53,17 @@ installer.
   months got squeezed); Redistill does that when you choose. Clears and new
   conversations say how to bring the old one back. Undated messages at the
   start of a copy now go next to the message they led into, not to the front.
+- **A kin can compact for itself.** A new switch in the kin's Memory
+  settings, off unless you turn it on. Then, at a wake-up when the
+  conversation is past the kin's compaction mark, the kin keeps what matters
+  with its tools (memory, depth logs, journal, habits), writes its note, and
+  compacts. Nothing is deleted; you're told in one line, in the journal and
+  on Telegram. A model that doesn't call tools goes straight to the note.
+- **now.md is kept and read.** Every earlier now.md is kept, dated, in the
+  kin's now folder (only one old copy used to survive). The note asks how the
+  kin feels and what went unsaid. A wake-up that keeps its own history
+  starts from the kin's now.md, since it never sees the main conversation's
+  note.
 - **Every copy has one shape and one place.** Whatever removes conversation
   (clear, new conversation, /new, /clear, /reset, the history cap) now keeps
   its copy the same way: one message per line, like the live conversation,

@@ -69,7 +69,7 @@ check("a tend with no work teaches nothing", mu.probed_tool_calling("m-nowork") 
 
 src = (ROOT / "hearthkin_cron.py").read_text(encoding="utf-8")
 check("both tend paths skip the re-prompt for a known non-caller",
-      src.count("and not _tools_known_dead(model)") == 2)
+      src.count("and not _tools_known_dead(model)):") == 2)
 check("both tend paths learn from the outcome",
       src.count("    _learn_tool_verdict(model, result, staging_had_work, schemas)") == 2)
 

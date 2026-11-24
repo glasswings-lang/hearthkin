@@ -665,6 +665,19 @@ class EditKinDialog(wx.Dialog):
         compact_row.Add(compact_lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT,
                         border=4)
         compact_row.Add(self.compact_hint_field)
+        # Kin-led compaction (24 Nov 2026): at a wake-up past that mark, the
+        # kin keeps what matters with its tools, writes its note, and
+        # compacts. Off unless chosen; the person is told in one line.
+        self.kin_led_compact_check = wx.CheckBox(
+            host, label="Let this kin &compact for itself at a wake-up once "
+                        "it's that full (it keeps what matters first, and "
+                        "you're told)")
+        self.kin_led_compact_check.SetValue(
+            bool(self.cfg.get("kin_led_compaction", False)))
+        self.kin_led_compact_check.Bind(
+            wx.EVT_CHECKBOX, lambda e: self._save_param(
+                "kin_led_compaction",
+                bool(self.kin_led_compact_check.GetValue())))
 
         # How many latest messages a compaction keeps besides the note
         # (15 Nov 2026). 0 = the note alone: kept messages hand the kin
@@ -952,6 +965,8 @@ class EditKinDialog(wx.Dialog):
         memory_sizer.Add(at_pct_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(compact_row,
+                         flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        memory_sizer.Add(self.kin_led_compact_check,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(compact_keep_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
