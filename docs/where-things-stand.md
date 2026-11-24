@@ -162,10 +162,10 @@ others.
     settings, with a note per kin.
   - Once rooms can be compacted, also check the per-reply tool cap and the
     long-reply warning for rooms that run unattended.
-- **The user guide is behind.** `docs/user-guide.html` doesn't cover this
-  round: compaction everywhere, the note allowance, conversation search and its
-  per-person switch, wake-up tool lines, and kins' own files. The kin-facing
-  [`docs/kin_manual.md`](kin_manual.md) is up to date.
+- **The user guide** was caught up on 24 Nov 2026 (copies in one place, restore,
+  bookmarks, compaction, a kin's own files, wake-up switches, tool verdicts, the
+  model-swap note). Keep it current: a line in `docs/devlog.md` and the guide
+  with every change a person can see.
 - **Heavy reading is costly on hosted models.** Each file a kin reads stays
   attached for the next `tool_history_keep` rounds (default 5), and each
   further tool call in a reply resends everything. A kin reading deeply can

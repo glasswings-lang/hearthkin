@@ -148,7 +148,7 @@ class CronEntryDialog(wx.Dialog):
         # or journal wake-ups.
         self.only_if_tending_check = wx.CheckBox(
             self,
-            label="Only &run when there are memory notes to tend",
+            label="Only run when there are memory &notes to tend",
         )
         self.only_if_tending_check.SetValue(
             bool(defaults.get("only_if_tending")))

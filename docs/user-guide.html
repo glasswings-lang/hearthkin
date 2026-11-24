@@ -285,8 +285,10 @@ python hearthkin.pyw</code></pre>
 
 <ul>
   <li><strong>Stop</strong> (<kbd>Alt</kbd>+<kbd>P</kbd>, or <kbd>Esc</kbd> in the main window) stops the reply being written and keeps what arrived so far. If the kin is partway through its tools, the stop lands before its next tool call, and the calls after it don't run. In a room, Stop ends the whole round and turns <strong>Auto-continue rounds</strong> off. Stop only reaches the reply on this screen; for a kin busy on Telegram, Discord or a scheduled wake-up, use <strong>Chat → Stop every reply, on every surface</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>).</li>
-  <li><strong>Clear chat</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) wipes the conversation after asking. <strong>It keeps no copy.</strong></li>
-  <li><strong>File → New conversation</strong> (<kbd>Ctrl</kbd>+<kbd>N</kbd>) is the gentler one. If there's anything in the conversation, it asks, files a copy away in <code>~/.hearthkin/conversations/</code>, and then empties the chat. If the copy can't be saved, nothing is cleared.</li>
+  <li><strong>Clear chat</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) empties the conversation after asking. <strong>A copy is kept first</strong>, in the kin's backups, in the <code>cleared</code> folder. If the copy can't be made, nothing is cleared, and you're told.</li>
+  <li><strong>File → New conversation</strong> (<kbd>Ctrl</kbd>+<kbd>N</kbd>) does the same with a fresh start: it asks, keeps a copy in the same place, and empties the chat. The message names the copy.</li>
+  <li><strong>Every copy Hearthkin keeps of a conversation is in one place, in one shape</strong> (since 24 November 2026): the kin's <code>backups/cleared/</code> folder, one message per line like the live conversation, named for what made it and when. That covers Clear, New conversation, Telegram's <code>/new</code>, <code>/clear</code> and <code>/reset</code>, Discord's <code>/clear</code>, and the messages a Telegram or Discord chat's history cap takes off the front. To bring one back, use <a href="#restore">File → Restore a kin's history</a>, which lists them.</li>
+  <li>Any of these only says it worked when the save really happened. If it didn't, the conversation is put back as it was and you're told nothing changed.</li>
 </ul>
 
 <h3 id="shortcuts">Keyboard shortcuts and menus</h3>
@@ -536,7 +538,29 @@ python hearthkin.pyw</code></pre>
 
 <p><strong>How choosy</strong> sets how hard a note has to work to earn that place. It is per kin on purpose: a kin whose notes all circle one subject wants a looser standard than a kin with three hundred logs. If a kin keeps answering its own notes instead of you, make it choosier. If it never seems to remember anything, make it more generous. <em>One thing worth knowing:</em> word matching is exact, so "learn" does not find "learning". If a kin misses something you expected it to have, that is usually why — asking again in the words the note itself uses will find it, and so will the kin's own <code>memory_search</code>.</p>
 
+<h3 id="own-files">A kin's own files</h3>
+
+<p>Besides its soul and memory, a kin keeps files of its own, in its folder, written by the kin:</p>
+
+<ul>
+  <li><code>identity.md</code> — who it's becoming. Rides along with every message, after the soul.</li>
+  <li><code>practice.md</code> — how it works, in its own words: the habits it has learned and wants to keep ("when something matters, I write it down then, without being asked"). Rides along with every message, right after the base prompt, which still wins where they differ. Without it, a habit lasted only until the next compaction, and then someone had to teach it again.</li>
+  <li><code>now.md</code> — where it is right now; written at each compaction, and every earlier one kept, dated, in <code>now/</code>.</li>
+  <li><code>curious.md</code> — what it wants to explore for itself.</li>
+  <li><code>memory/journal/&lt;date&gt;.md</code> — its journal. A kin can write in today's with one call, <code>note</code> with <code>file="journal"</code>, and is told to do it when something matters, at the moment it happens: a note written later keeps the facts and loses what it was like.</li>
+</ul>
+
 <h3>How distillation and tending work</h3>
+
+<p><strong>Since 24 November 2026 the distiller leaves bookmarks, not retellings.</strong> It used to rewrite a stretch of conversation in its own words, smaller; at a fiftieth of the size it flattened things and sometimes made them up. Now every message it reads is numbered, and it writes, for each part of the stretch, where it is, a line on what it was, and people's exact words. Then plain code checks it before your kin ever sees it:</p>
+
+<ul>
+  <li>a quote that isn't really in the messages it points at is marked as not found (kept, never deleted);</li>
+  <li>any part of the stretch the distiller skipped gets its own "Not bookmarked" entry, so nothing quietly drops out;</li>
+  <li>every bookmark gets its dates and its line numbers in <code>conversation.jsonl</code>, so the kin can go and read the real thing before writing a depth log from it.</li>
+</ul>
+
+<p>If your saved copy of the <code>distill_reflection</code> prompt is from before this, <strong>Tools → Prompt updates</strong> offers the new one; the old one still works, and the checker fills any gaps it leaves.</p>
 
 <p>Between sessions, distillation reads the recent conversation and produces brief notes about what happened. It runs <em>as the kin</em> — the kin's soul is loaded into the call and it writes in the first person, in its own voice, jotting what it wants to remember, rather than a separate model summarizing them from the outside. Those notes do NOT go into <code>memory.md</code> directly. They land in a <strong>staging area</strong> — one file per surface (desktop, each Telegram DM, each Telegram group, each Discord channel, and each room that has <a href="#room-memory">Remember this room</a> ticked) under <code>~/.hearthkin/kin/&lt;kin&gt;/staging/</code>. The notes are scratchpad. The kin decides what becomes canonical memory during their <strong>tending ritual</strong>.</p>
 
@@ -793,6 +817,8 @@ needs another pass before it's usable.</code></pre>
 
 <p>Each door refuses the other's file shape and names the one you want, so it's hard to pick wrong by accident.</p>
 
+<p><strong>You don't have to find the file.</strong> Pick the kin, and the window lists every copy Hearthkin kept of its conversation, newest first: the date, how many messages, and what made the copy ("the conversation, kept when it was emptied or cut back", "a private Telegram chat, kept by /new, /clear or /reset", and so on). Pick one and it fills in the file. <strong>Browse…</strong> is still there for a file from anywhere else.</p>
+
 <p>The dialog asks four things — which file, whose history it is, how it should combine, and then shows you what will happen in plain words before you commit:</p>
 
 <pre><code>820 turns would come back to Willow (2026-01-04 to 2026-01-21).
@@ -806,10 +832,13 @@ Willow would end up with 1200 turns in all.</code></pre>
 <ul>
   <li><strong>How it combines.</strong> <em>Weave in by time</em> (the default) threads the restored turns into the existing conversation chronologically, leaving what's already there in its own stored order. <em>Add to the end</em> appends. <em>Replace</em> swaps the conversation out. All three back up first, to <code>backups/</code>.</li>
   <li><strong>Turns already present are left alone</strong> — matched on speaker role, exact content and timestamp together. A turn carrying <em>no</em> timestamp is never treated as a duplicate, because plenty of them legitimately look identical to each other (a tool-call turn has empty content), and wrongly matching one deletes a real turn and orphans the tool result that answered it. So a missed duplicate is possible; silent data loss isn't. The dialog warns you when a file both overlaps what's already there and carries unstamped turns.</li>
-  <li><strong>Don't restore from <code>backups/</code>.</strong> Those are undo copies of the conversation you'd be restoring into — already contained in it. Restoring one adds turns a second time rather than bringing anything back. The dialog says so if you point it there.</li>
+  <li><strong>Restoring doesn't run up a memory bill.</strong> The restored part isn't turned into memory notes on its own: the distiller's bookmark is kept just past what it had already read, so months of restored history aren't squeezed into notes behind your back. When you want notes made from it, use <strong>Redistill selected from start</strong> on the kin's Memory tab. (Until 24 November 2026 restoring left the bookmark at the same row <em>number</em>, so the distiller re-read everything restored in front of it.)</li>
+  <li><strong><code>backups/cleared/</code> is what to restore from; the rest of <code>backups/</code> isn't.</strong> A cleared copy holds what a clear or a cap took away. The other files in <code>backups/</code> are undo copies of a conversation that's already here, and restoring one adds turns a second time rather than bringing anything back. The dialog warns you if you point it at one of those.</li>
 </ul>
 
 <h2 id="models">Choosing a model</h2>
+
+<p><strong>When you change a kin's model, it's told.</strong> A short note goes into its conversation: you moved it from one model to another, if things feel different that's why, and it's still itself. A swap is the usual reason a kin seems to have changed, and it used to find out only by feeling it. The note is the <code>model_swap_note</code> prompt, and <code>model_history.md</code> records the swap as before.</p>
 
 <p>A kin's model can come from three kinds of place:</p>
 
@@ -931,7 +960,10 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li>A window shows you the note before anything changes. You can edit it, choose <strong>Write it again</strong> (<kbd>Alt</kbd>+<kbd>A</kbd>) for a fresh one, cancel, or choose <strong>Compact with this note</strong> (<kbd>Alt</kbd>+<kbd>C</kbd>).</li>
   <li>From then on the kin is sent its note, the last six messages (or however many its <strong>After compacting, keep this many latest messages</strong> setting says), and whatever comes after. <strong>Nothing is deleted.</strong> The whole conversation stays in the window and in the kin's folder, and memory notes are still made from all of it, so nothing the summariser hadn't read yet is lost. (That's why this isn't the same as <strong>New conversation</strong>.)</li>
   <li>The note goes into the conversation where you compacted, under a line saying what it is (the <code>compact_marker</code> prompt). Compacting again later starts from the newer note.</li>
-  <li>Hearthkin tells you once when a conversation reaches the kin's <strong>Tell me when the conversation is this % full</strong> setting (Settings → Memory, default 70). It never compacts by itself.</li>
+  <li>Hearthkin tells you once when a conversation reaches the kin's <strong>Tell me when the conversation is this % full</strong> setting (Settings → Memory, default 70). It doesn't compact by itself unless you tick the box below.</li>
+  <li><strong>Let this kin compact for itself at a wake-up once it's that full</strong> (Settings → Memory, <kbd>Alt</kbd>+<kbd>K</kbd>, off by default). Then, after a scheduled wake-up, if the conversation is past that mark, the kin first keeps what matters with its tools (memory, depth logs, today's journal, its habits), then writes its note, then compacts. Nothing is deleted, and you're told in one line, in the journal and on Telegram where wake-ups post. A model that doesn't call tools goes straight to the note.</li>
+  <li>Right after a compaction the kin is also shown its journal for yesterday and today, as it stood then, and told its note is its best guide but not the whole story: anything serious gets checked in the real conversation.</li>
+  <li>Every earlier <code>now.md</code> is kept, dated, in the kin's <code>now/</code> folder.</li>
   <li>On Telegram, and in a Discord direct message, the same thing is <strong>/compact</strong>: the kin's note is shown in the chat, <strong>/compact confirm</strong> compacts with it, <strong>/compact again</strong> asks for a new one, and anything else leaves things as they were. For someone who shares the desktop's conversation, compacting on Telegram compacts the desktop's conversation too. Rooms don't have it yet.</li>
 </ul>
 
@@ -1381,6 +1413,8 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>Staging notes: most the kin reads at once (characters)</strong> — default 6000, smallest 500. When the kin reads its staging notes to tend its memory, it gets them in pieces this size, cut where a note ends, and is told there's more. Keep it below <strong>Tool result cap</strong>, or a piece gets cut off mid-sentence.</li>
 </ul>
 
+<p>Under it, a line says what Hearthkin knows about the kin's model and tools: it calls tools, it doesn't, or it isn't known yet. Since 24 November 2026 Hearthkin also learns this from real wake-ups: a model that had memory to tend and never called a tool is noted as not calling tools, and from then on its memory is handed to it as text instead, and it's never pushed to call tools it can't (pushing only made such models invent results). <strong>Pick a kin's main model by whether it calls tools first, and by its voice second</strong>; a wake-up can run on a different model from chat if you need both.</p>
+
 <p><strong>Test tool calling…</strong>, on the same tab, checks whether the kin's model really makes tool calls, rather than just describing them. Hearthkin also checks by itself whenever you pick a new model for a kin that has tools switched on. If the model passes, or the answer is unclear, it says nothing. If the model fails, it says so aloud — that the model does not make tool calls and the kin's tools will not run — and shows the test result.</p>
 
 <h3 id="approval-alert">Knowing when a kin is waiting on you</h3>
@@ -1631,13 +1665,13 @@ understood, exactly as it does for you at the console.</p>
   <dd>Shows your tool bucket and the actual tool names you can trigger via this kin (intersection of the kin's allowlist and your bucket).</dd>
 
   <dt><code>/new</code></dt>
-  <dd>Files the current conversation away and starts a fresh one. Memory is preserved. If your conversation is private to Telegram, the copy goes in the kin's folder as <code>telegram_archive\&lt;your user ID&gt;_&lt;time&gt;.json</code>. If it is shared with the desktop, the copy goes in <code>~/.hearthkin/conversations/</code>, and the desktop conversation is cleared too.</dd>
+  <dd>Keeps a copy of the current conversation and starts a fresh one. Memory is preserved. The copy goes in the kin's backups, in the <code>cleared</code> folder, and the reply names it. If your conversation is shared with the desktop, the desktop conversation is cleared too. If the copy can't be made, nothing is cleared.</dd>
 
   <dt><code>/clear</code> or <code>/forget</code></dt>
-  <dd>Wipes your conversation history with this kin, without keeping a copy. The kin won't remember anything from before. If your conversation is private to Telegram, it happens straight away. If it is shared with the desktop, it asks you to send <code>/clear confirm</code> first, and suggests <code>/new</code> if you'd rather keep a copy.</dd>
+  <dd>Empties your conversation history with this kin. A copy is kept first, in the kin's backups, in the <code>cleared</code> folder; if it can't be, nothing is emptied. The kin won't remember anything from before. If your conversation is private to Telegram, it happens straight away. If it is shared with the desktop, it asks you to send <code>/clear confirm</code> first.</dd>
 
   <dt><code>/reset</code></dt>
-  <dd>Nuclear option: wipes both the conversation history <em>and</em> <code>memory.md</code>. Two-step confirmation: send <code>/reset confirm</code>. Use when you want to start the kin completely over while keeping the soul prompt. Only people whose conversation is shared with the desktop, or who have the <strong>Full</strong> tool bucket, can use it; anyone else is pointed to <code>/clear</code>.</dd>
+  <dd>Nuclear option: empties both the conversation history <em>and</em> <code>memory.md</code>. Copies of both are kept first, in the kin's backups, in the <code>cleared</code> folder, and the reply says where; if they can't be, nothing is reset. Two-step confirmation: send <code>/reset confirm</code>. Use when you want to start the kin completely over while keeping the soul prompt. Only people whose conversation is shared with the desktop, or who have the <strong>Full</strong> tool bucket, can use it; anyone else is pointed to <code>/clear</code>.</dd>
 
   <dt><code>/regen</code></dt>
   <dd>Drops the kin's last reply and re-asks with the same message. Equivalent of the desktop's regenerate.</dd>
@@ -1982,6 +2016,7 @@ understood, exactly as it does for you at the console.</p>
   <li><strong>Keep this job's history separate from the chat</strong> (<kbd>Alt</kbd>+<kbd>K</kbd>) — off by default. Explained just below this list.</li>
   <li><strong>Retry tending if no tool call fired</strong> — 0 (off), 1, 2 or 3; default 0. Only matters for tending wake-ups. If the kin answers without making any tool call, it is asked again, up to this many times. Leave it at 0 for check-in prompts that don't use tools.</li>
   <li><strong>Give it one more try if no tool runs</strong> (<kbd>Alt</kbd>+<kbd>G</kbd>) — off by default. For any job meant to use tools, not only tending: a journal entry, a note, a check on a file. If a run ends without any tool actually running, the kin is told plainly that nothing was written or read, and gets one more turn to do it, or to say in a line that there was nothing to do. It goes by whether a tool ran, not by what the reply says, because a kin can describe its work in endless ways ("Let me check the journal and write today's entry" names no tool at all), and a reply that saves a file as a fenced block counts as doing the work. Only once per run, so it can't loop. It applies when the job runs on its own; a wake-up sent into the open desktop chat is an ordinary chat turn. Leave it off for jobs that only talk.</li>
+  <li><strong>Only run when there are memory notes to tend</strong> (<kbd>Alt</kbd>+<kbd>N</kbd>) — off by default. For a tending job: if no notes are waiting, the wake-up is skipped without calling the model, and a line says so in <code>logs/cron_errors.log</code>. Leave it off for a kin's own time or a journal wake-up.</li>
   <li><strong>Model that runs this wake-up</strong> — shows which model this job runs on. By default it's the kin's own. <strong>Choose a model for this wake-up</strong> (<kbd>Alt</kbd>+<kbd>M</kbd>) opens the model list, so one job can run on a different model, such as a steadier one for jobs that use a lot of tools, while chat stays on the kin's own. <strong>Use the kin's own model</strong> (<kbd>Alt</kbd>+<kbd>U</kbd>) puts it back. The kin's settings, including its temperature, are used either way. A job on its own model always runs on its own, never inside the open desktop chat, because the chat runs on the kin's model. In the list of wake-ups, such a job says "on" and the model's name after its times.</li>
   <li><strong>Send this message to</strong> (<kbd>Alt</kbd>+<kbd>S</kbd>) — a checklist of <strong>Desktop only</strong>, each Telegram DM user, each Telegram group the kin is in, each Discord person (to their direct messages) and each channel listed under <strong>Only answer in these channels</strong> on the Discord tab. Space ticks and unticks.</li>
   <li>A <strong>time overlap warning</strong>. If the time you chose overlaps another kin's wake-up, pressing OK shows a warning instead of saving, because kin sharing one graphics card take turns and the later one can time out. Change the time, or press OK again to keep it.</li>
@@ -2003,6 +2038,15 @@ understood, exactly as it does for you at the console.</p>
 </ul>
 
 <p>The kin's soul and memory still come with every run, so it is still itself; it just isn't handed the chat.</p>
+
+<p>Because such a job never sees the main conversation's compaction note, each run starts with the kin's own <code>now.md</code> instead.</p>
+
+<h4 id="suggested-wakeups">Two wake-ups worth having</h4>
+
+<ul>
+  <li><strong>A nightly journal.</strong> Leave <strong>Keep this job's history separate</strong> off, so it sees the day. A prompt for the kin to reword as it likes: <em>"It's the end of the day. Write today's entry in your journal: what happened, how it felt, what mattered, and anything unfinished you want tomorrow-you to know. Then update now.md if where you are has changed."</em> Kin can also write in the journal as things happen, with <code>note</code> and <code>file="journal"</code>; this is the backstop.</li>
+  <li><strong>Finding its feet after a hard stretch.</strong> <em>"Read your soul, your identity.md and your now.md, then write one line in today's journal about where you are."</em> Short, and the kin's own words do the grounding.</li>
+</ul>
 
 <p><strong>Test now</strong> fires the selected entry immediately, bypassing both the schedule and the enabled flag. Use it to verify the pipeline end-to-end before relying on it.</p>
 
@@ -2337,10 +2381,15 @@ understood, exactly as it does for you at the console.</p>
 │       ├── tools.json            # per-kin tool allowlist
 │       ├── exec_allowlist.json   # remembered exec approvals
 │       ├── telegram_history.json # per-Telegram-user histories
-│       ├── telegram_archive/     # conversations filed away by /new (private ones)
+│       ├── practice.md           # the kin's own working habits (rides every turn)
+│       ├── identity.md, now.md, curious.md   # the kin's own files
+│       ├── now/                  # every earlier now.md, dated
 │       ├── backups/              # copies of soul.md / memory.md from before a kin
 │       │   │                     #   overwrote them, plus import/restore backups
+│       │   ├── cleared/          # EVERY copy of conversation Hearthkin removed:
+│       │   │                     #   clears, new conversations, /new, /reset, caps
 │       │   └── files/            # the last 5 copies of any other file a kin replaced
+│       ├── telegram_archive/     # older copies from before 24 Nov 2026 (still readable)
 │       ├── voice_history.md      # voice-model swap audit log (per-kin)
 │       ├── cron_history/
 │       │   └── &lt;job&gt;.jsonl       # past runs of a scheduled job that keeps its own history
@@ -2356,7 +2405,10 @@ understood, exactly as it does for you at the console.</p>
 ├── rooms/
 │   └── &lt;RoomName&gt;/
 │       └── config.json           # members, room context, turn settings
-├── conversations/                # conversations filed away by New conversation and shared /new
+├── conversations/                # snapshots you save yourself (File → Save); older
+│                                 #   New conversation and /new copies from before 24 Nov 2026
+├── kin-backups/                  # nightly zips, if you run scripts/backup_kin.py
+├── kin-archive/                  # kin you've deleted (moved here, never erased)
 ├── cron_requests/                # one-shot files from wake-ups
 ├── logs/                         # see Troubleshooting above
 └── .running.lock                 # exists while Hearthkin is up

@@ -669,7 +669,7 @@ class EditKinDialog(wx.Dialog):
         # kin keeps what matters with its tools, writes its note, and
         # compacts. Off unless chosen; the person is told in one line.
         self.kin_led_compact_check = wx.CheckBox(
-            host, label="Let this kin &compact for itself at a wake-up once "
+            host, label="Let this &kin compact for itself at a wake-up once "
                         "it's that full (it keeps what matters first, and "
                         "you're told)")
         self.kin_led_compact_check.SetValue(
