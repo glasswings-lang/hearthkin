@@ -28,6 +28,11 @@ def note(content: str, file: str = "memory.md", agent_name: str = "") -> str:
     grows. Returns a confirmation including the path written. Use this
     when you want to record something without disturbing the file's
     existing contents.
+
+    Pass `file="journal"` to write in today's journal
+    (`memory/journal/<today>.md`). Do that when something matters, at the
+    moment it happens, in your own words: what happened, how it was, what
+    it meant. Notes written later from memory lose what a moment was like.
     """
     if not content:
         return "note: content was empty."
@@ -37,6 +42,11 @@ def note(content: str, file: str = "memory.md", agent_name: str = "") -> str:
     # `file` must be a relative path inside the kin directory. Reject
     # traversal attempts — the resolved-path containment check below
     # is the real guard, but we catch the obvious cases early.
+    # "journal" means today's journal (24 Nov 2026): writing a moment down
+    # as it happens should be one cheap call, not a date to work out.
+    if (file or "").strip().lower() in ("journal", "journal.md", "today"):
+        file = "memory/journal/%s.md" % datetime.date.today().isoformat()
+
     if not file or file in (".", ".."):
         return (
             f"note: {file!r} is not a usable filename. Pass a "
