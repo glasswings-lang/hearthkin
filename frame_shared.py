@@ -483,6 +483,11 @@ def distill_memory_blocking(kin_name, conversation, existing_memory, model,
             convo_lines.append(f"{speaker}: {content}")
         else:
             convo_lines.append(f"{kin_name}: {content}")
+    # Every row is numbered (24 Nov 2026): the distiller writes bookmarks
+    # naming row ranges, and bookmarks.check turns those back into dates and
+    # conversation.jsonl lines and checks every quote against these rows. One
+    # rendered line per row, so #n is conversation[n - 1].
+    convo_lines = [f"#{i} {line}" for i, line in enumerate(convo_lines, 1)]
     convo_text = "\n\n".join(convo_lines) if convo_lines else "(no conversation yet)"
 
     existing = (existing_memory or "").strip() or "(no prior memory)"
@@ -580,6 +585,17 @@ def distill_memory_blocking(kin_name, conversation, existing_memory, model,
     # consolidation's job, not distillation's: distillation can only add,
     # so it can never drop an existing entry.
     new_entries = (result.content or "").strip()
+    # Checked by plain code before anyone reads it (bookmarks.py): quotes
+    # that aren't in the rows they cite are flagged, rows the bookmarks left
+    # out get a bookmark saying so, and every heading gets its dates and
+    # conversation.jsonl lines.
+    check_report = {}
+    if new_entries:
+        import bookmarks
+        from kin_persistence import agent_dir
+        line_of = bookmarks.line_finder(agent_dir(kin_name) / "conversation.jsonl")
+        new_entries, check_report = bookmarks.check(
+            new_entries, list(conversation or []), line_of)
     existing_body = strip_memory_logs_section(existing_memory)
     if new_entries:
         combined = (existing_body + "\n\n" + new_entries).strip()
@@ -595,6 +611,7 @@ def distill_memory_blocking(kin_name, conversation, existing_memory, model,
         # docs/design/memory-architecture-and-ritual-framing.md.
         "memory": apply_memory_log_index(combined, kin_name),
         "new_entries": new_entries,
+        "check": check_report,
         "prompt_tokens": int(usage.get("prompt_tokens") or 0),
         "completion_tokens": int(usage.get("completion_tokens") or 0),
         "model": model,

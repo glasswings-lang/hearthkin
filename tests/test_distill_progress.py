@@ -90,7 +90,9 @@ check(reported == [7, 17, 24],
       f"(got {reported})")
 check(reported == sorted(reported),
       "the count only ever goes up, so a cue built on it can't fall back")
-check(result.get("new_entries") == "".join(DELTAS),
+# Since 24 Nov 2026 what comes back is checked (bookmarks.py); these deltas
+# aren't bookmarks, so they come back whole, under a note saying so.
+check(result.get("new_entries", "").endswith("".join(DELTAS)),
       "streaming for the cue didn't change what the caller gets back")
 
 

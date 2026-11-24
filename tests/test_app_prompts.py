@@ -709,8 +709,11 @@ for _label, _needle in (
     ("distiller keeps exact words where a line sounded like someone", "exact words"),
     ("distiller keeps speakers attributed by their bracket name", "[SomeName]"),
     ("distiller never folds two people into one note", "fold two"),
-    ("distiller records only what is new", "what's\n    new"),
-    ("distiller allows a blank answer", "blank page is honest"),
+    # v4 (24 Nov 2026): bookmarks, not retellings. "Only what's new" and "a
+    # blank page is honest" went: every row is now covered, and plain code
+    # (bookmarks.py) checks quotes and fills gaps. tests/test_distill_bookmarks.py.
+    ("distiller leaves bookmarks, not a retelling", "NOT retelling"),
+    ("distiller covers every row", "Cover every row"),
     ("distiller forbids emphasis markup", "no asterisks"),
     ("distiller outputs only the notes", "no preamble"),
 ):
@@ -726,7 +729,9 @@ for _label, _needle in (
 # sentence/word starts.
 _words = re.findall(r"(?<![.\w])[A-Z][a-z]{2,}", _DISTILL)
 _allowed = {"You", "Some", "Name", "Display", "Later", "Where", "Prose",
-            "Keep", "Plain", "Just", "Write", "Don", "Full"}
+            "Keep", "Plain", "Just", "Write", "Don", "Full",
+            # v4's rule list and bookmark example
+            "Every", "One", "Rules", "Cover", "Rows", "Quote", "The"}
 check("distiller introduces no personal names",
       not (set(_words) - _allowed))
 
@@ -749,8 +754,8 @@ check("distiller still formats with kin_name and word_cap", _ok)
 _REFLECT = k.APP_PROMPT_REGISTRY["distill_reflection"]["default"]
 check("reflection cue is time-agnostic (no end-of-day lull claim)",
       "quiet now" not in _REFLECT.lower())
-check("reflection cue keeps the 'before it slips' framing",
-      "before it slips" in _REFLECT.lower())
+check("reflection cue asks for bookmarks through all of it (v2, 24 Nov 2026)",
+      "bookmarks through all of it" in _REFLECT.lower())
 check("reflection cue shows memory as read-only context",
       "don't reproduce" in _REFLECT.lower())
 # Substitutes cleanly via the same .replace path the harness uses; no brace

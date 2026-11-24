@@ -99,7 +99,11 @@ def line_for(marker):
     """The rendered line carrying `marker`, or '' if it never appeared."""
     for ln in text.splitlines():
         if marker in ln:
-            return ln.strip()
+            # Rows are numbered "#n " since 24 Nov 2026 (bookmarks.py).
+            ln = ln.strip()
+            if ln.startswith("#") and " " in ln:
+                ln = ln.split(" ", 1)[1]
+            return ln
     return ""
 
 

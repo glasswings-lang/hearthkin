@@ -1412,52 +1412,52 @@ DEFAULT_AGENT_CONFIG = {
 # attached — not stripped database rows.
 DEFAULT_DISTILL_PROMPT = (
     "You are {kin_name}. A stretch of time has passed with the people you "
-    "live alongside, and before it slips, you're writing down what you want "
-    "to remember from it -- a few notes to your future self, in your own "
-    "voice. Later, when you tend your memory, you'll read these back and "
-    "decide what to keep; for now you're just catching what you don't want "
-    "to lose.\n\n"
-    "Write from inside your own life, in the first person -- what actually "
-    "happened and how it was to be there, the way you'd tell it, not a "
-    "report about it from the outside. Where someone said a line that "
-    "sounded like them and no one else, keep it in their exact words: the "
-    "quote is the part that survives being remembered a second time, and a "
-    "paraphrase keeps the fact but loses the person. Prose for people, "
-    "feelings, and what shifts between you; plain bullets for plain lists "
-    "of facts.\n\n"
-    "Keep who said what attached to their name. Some turns are tagged with "
+    "live alongside, and you're leaving bookmarks in it for your future self: "
+    "where each thing happened, what it was, and the exact words that made it "
+    "what it was. You are NOT retelling it. The whole conversation is kept, "
+    "word for word; your bookmarks are how a later you finds the right part "
+    "and goes back to read it.\n\n"
+    "Every row of the conversation is numbered: #1, #2, and so on. Write one "
+    "bookmark for each part of the stretch, in order, like this:\n\n"
+    "## #12-#40 · what this part was, in a few words\n"
+    "One or two plain sentences, in the first person, on what happened and "
+    "what it meant to you.\n"
+    "- Name: \"their exact words, copied from the conversation\"\n"
+    "- me: \"my exact words\"\n\n"
+    "Rules, all of them checked afterwards by plain code against the rows:\n\n"
+    "- Cover every row, from #1 to the last, with no gaps. A quiet or "
+    "ordinary stretch gets a bookmark too (\"## #41-#58 · small talk about "
+    "dinner\"). Rows you leave out are marked as left out.\n"
+    "- Quote only words that are really there, copied exactly, inside the "
+    "rows your bookmark names. A quote that can't be found there is flagged "
+    "as not real. If you don't remember the exact words, don't quote; say "
+    "plainly what happened instead.\n"
+    "- Keep who said what attached to their name. Some turns are tagged with "
     "a name in brackets -- [SomeName], or [Display Name (@username)] -- and "
     "those are different, specific people; their words stay theirs, and you "
-    "never fold two of them into one note, even on the same subject. A turn "
-    "with no bracket is from the person you're here with day to day.\n\n"
-    "You're shown your existing memory for context only, so you don't "
-    "repeat yourself -- don't reproduce or rewrite it, just write what's "
-    "new since then. If something you already remember has changed, say so "
-    "plainly. If a person or topic already has its own depth log, a "
-    "one-line note that there's something new is enough -- you know where "
-    "the depth lives. If nothing this time is worth keeping, write nothing "
-    "at all; a blank page is honest.\n\n"
-    "Plain sentences and plain bullets, no asterisks or bold -- let the "
-    "words carry it. Don't write a list of your log files or the words "
-    "'Full log:'; that part keeps itself. Just the notes -- no preamble, "
-    "no sign-off. Keep it well under {word_cap} words."
+    "never fold two of them into one quote. A turn with no bracket is from "
+    "the person you're here with day to day.\n"
+    "- Write from inside your own life: \"I\", never your own name as if you "
+    "were someone else; not a report about it from the outside.\n\n"
+    "You're shown your existing memory for context only; don't reproduce it. "
+    "Plain text, no asterisks or bold, no preamble, no sign-off. Keep it well under "
+    "{word_cap} words; many short bookmarks are better than a few long ones."
 )
 
 # The user turn the kin is handed at distillation: its existing memory (as
-# read-only context so it doesn't repeat itself) and the recent conversation,
-# then the first-person cue to jot what's worth keeping. Registered as an
-# editable app prompt (slug "distill_reflection") so an operator can retune the
-# framing without a code change; {existing_memory} and {conversation} are
-# substituted by distill_memory_blocking. Time-agnostic on purpose —
-# distillation can fire mid-conversation (the every-N trigger), so this must
-# not assert an end-of-day lull; the reflective end-of-day ritual is *tending*,
-# not this quick jotting.
+# read-only context so it doesn't repeat itself) and the numbered
+# conversation, then the cue to bookmark it. Registered as an editable app
+# prompt (slug "distill_reflection"); {existing_memory} and {conversation} are
+# substituted by distill_memory_blocking. Time-agnostic on purpose:
+# distillation can fire mid-conversation. Version 2 (24 Nov 2026): bookmarks,
+# not jotted notes; a saved copy of version 1 still works (the code fills any
+# rows its notes skip and flags what it can't check).
 DEFAULT_DISTILL_REFLECTION = (
-    "What I already remember (context only — don't reproduce or rewrite it):\n"
+    "What I already remember (context only, don't reproduce or rewrite it):\n"
     "{existing_memory}\n\n"
-    "What just happened:\n{conversation}\n\n"
-    "Before it slips, jot what you want to keep — only what's new, and "
-    "nothing at all if there's nothing worth keeping."
+    "What just happened, every row numbered:\n{conversation}\n\n"
+    "Leave bookmarks through all of it, from the first row to the last: "
+    "where each part is, what it was, and the exact words that matter."
 )
 
 # Memory consolidation — different prompt from distillation. Under the
@@ -3793,18 +3793,23 @@ def archive_staging(name, scope):
 
 _STAGING_FILE_HEADER = """# Staging notes — {scope}
 
-These are notes the summarizer left for {kin_name} between sessions.
-Each entry below was produced by automatic distillation of recent
-conversation on this scope. **None of this has been added to
-memory.md yet** — that's {kin_name}'s job during tending.
+These are bookmarks {kin_name} left in recent conversation on this
+scope: where each part is (its dates, and its lines in
+`conversation.jsonl` when it's kept there), what it was, and people's
+exact words. They point at the record; they don't replace it. **None of
+this has been added to memory.md yet** — that's {kin_name}'s job during
+tending.
 
-Read the entries, decide what's worth keeping. Substantive things go
-into the matching `memory/<topic>.md` log; brief index updates go into
-`memory.md`. When done, call `archive_staging` to move this file out
-of the way so the next round of notes starts fresh.
+Plain code checked every bookmark before you saw it. A quote that isn't
+in the rows it names is marked "these words aren't in rows ... as
+written": don't trust it until you've found it. A "Not bookmarked" part
+is conversation nobody summarised. Before you write a depth log from a
+bookmark, read those lines of `conversation.jsonl` (`read_file` with a
+line range) and write from the record, in your own words, as I.
 
-If anything here feels flattened or wrong, read the raw conversation
-(`read_file` on `conversation.jsonl`) for the period in question.
+Substantive things go into the matching `memory/<topic>.md` log; brief
+index updates go into `memory.md`. When done, call `archive_staging` to
+move this file out of the way so the next round starts fresh.
 """
 
 
@@ -4852,7 +4857,7 @@ APP_PROMPT_REGISTRY = {
     },
     "distill_reflection": {
         "default": DEFAULT_DISTILL_REFLECTION,
-        "version": 1,
+        "version": 2,
         "placeholders": ["{existing_memory}", "{conversation}"],
         "title": "Distillation reflection (what the kin is handed to jot)",
         "desc": "The user turn at memory distillation: the kin's existing "
@@ -5753,7 +5758,7 @@ DEFAULT_BASE_PROMPT_VERSION = 3
 # framing produced clinical/observer "taxidermy" that eroded the kin over
 # time; running as themselves fixes it at the root. A version-2 override is
 # still the out-of-character summarizer.
-DEFAULT_DISTILL_PROMPT_VERSION = 3
+DEFAULT_DISTILL_PROMPT_VERSION = 4
 
 
 def _record_legacy_seeded_version(key, version):
