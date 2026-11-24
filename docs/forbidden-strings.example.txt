@@ -29,6 +29,9 @@
 #   - Prefix a line with =  for a whole-WORD match, when a bare fragment would
 #     collide with ordinary English:
 #       =ash         matches the name "ash" but NOT "crash" or "hashed"
+#   - Prefix a line with ==  for a whole word that must also match its
+#     capitals, for a name that is also an ordinary lowercase word:
+#       ==Robin      matches the name "Robin" but NOT "a robin" or "Robinson"
 #
 # The entries below are fictional placeholders — delete them and add your own.
 

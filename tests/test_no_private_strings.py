@@ -45,6 +45,11 @@ One string per line. Blank lines and `#` comments ignored. Matching is
 case-insensitive and substring-based, so `Lastname` catches `lastname` and
 `LastnameTheKin`.
 
+Prefix a line with `==` for a whole-word match that also keeps its capitals,
+for a name that is also an ordinary word: `==Robin` catches the name "Robin"
+but not "a robin" or "Robinson" (added 24 Nov 2026, when a name had to be
+left off the list because its lowercase word is all through the code).
+
 Prefix a line with `=` for a whole-word match instead, when a fragment would
 collide with ordinary English — e.g. `=ash` matches the name `ash` but not
 `crash` or `hashed`. That collision is real: the scrub found one name that
@@ -82,20 +87,34 @@ def check(label, cond):
 
 
 def load_terms():
-    """Read the forbidden list. Returns (substrings, whole_words)."""
-    subs, words = [], []
+    """Read the forbidden list. Returns (substrings, whole_words,
+    exact_words): the last are whole words matched with their capitals."""
+    subs, words, exact = [], [], []
     with open(LIST_PATH, "r", encoding="utf-8") as fh:
         for raw in fh:
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
-            if line.startswith("="):
+            if line.startswith("=="):
+                term = line[2:].strip()
+                if term:
+                    exact.append(term)
+            elif line.startswith("="):
                 term = line[1:].strip()
                 if term:
                     words.append(term.lower())
             else:
                 subs.append(line.lower())
-    return subs, words
+    return subs, words, exact
+
+
+def hits(text, subs, words, exact):
+    """True if `text` holds any forbidden term. One place, so the file check
+    and the commit-message check can never match differently."""
+    low = text.lower()
+    return (any(s in low for s in subs)
+            or any(word_hit(low, w) for w in words)
+            or any(word_hit(text, w) for w in exact))
 
 
 def tracked_files():
@@ -141,8 +160,8 @@ def check_message_file(path):
             return 1
         return 0
 
-    subs, words = load_terms()
-    if not subs and not words:
+    subs, words, exact = load_terms()
+    if not subs and not words and not exact:
         print("GUARD DISARMED - forbidden-strings.txt is empty.")
         return 1
 
@@ -153,12 +172,12 @@ def check_message_file(path):
             # leak and must not block the commit.
             kept = [l for l in fh.read().splitlines()
                     if not l.lstrip().startswith("#")]
-            body = chr(10).join(kept).lower()
+            body = chr(10).join(kept)
     except OSError:
         print("could not read the commit message file; refusing to guess")
         return 1
 
-    if any(sub in body for sub in subs) or any(word_hit(body, w) for w in words):
+    if hits(body, subs, words, exact):
         print("Your commit message contains a forbidden string.")
         print("The message is not shown here on purpose - printing it would")
         print("republish exactly what the list exists to keep out.")
@@ -194,8 +213,8 @@ def main():
         print("ALL PASS (nothing checked)")
         return 0
 
-    subs, words = load_terms()
-    if not subs and not words:
+    subs, words, exact = load_terms()
+    if not subs and not words and not exact:
         check("forbidden-strings.txt has at least one term", False)
         print("")
         print("The list is present but empty, so nothing would ever match.")
@@ -204,17 +223,18 @@ def main():
         return 1
 
 
-    print("checking %d term(s) against tracked files" % (len(subs) + len(words)))
+    print("checking %d term(s) against tracked files"
+          % (len(subs) + len(words) + len(exact)))
 
     offenders = set()
     for rel in tracked_files():
         path = os.path.join(REPO, rel)
         try:
             with open(path, "r", encoding="utf-8", errors="ignore") as fh:
-                body = fh.read().lower()
+                body = fh.read()
         except OSError:
             continue
-        if any(s in body for s in subs) or any(word_hit(body, w) for w in words):
+        if hits(body, subs, words, exact):
             offenders.add(rel)
 
     # Deliberately reports paths and a count, never the term or the line.
