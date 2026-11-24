@@ -957,7 +957,7 @@ class TelegramBot:
         if key is not None:
             from kin_persistence import keep_trimmed_rows
             keep = (lambda rows: keep_trimmed_rows(
-                self.agent_name, "telegram_archive", key, rows))
+                self.agent_name, "telegram", key, rows))
         return trim_front(history, cap, keep=keep)
 
     def __init__(self, agent_name, get_config, get_soul, get_memory,
@@ -3478,102 +3478,60 @@ class TelegramBot:
             f"Cleared your conversation history with {self.agent_name}. "
             "They won't remember anything from before this message. "
             f"A copy is kept on the computer, in {self.agent_name}'s "
-            "telegram_archive folder (on the computer, File, Restore a "
+            "backups, in the cleared folder (File, Restore a "
             "kin's history brings it back). Memory is untouched."
         )
 
     def _cmd_new(self, user_id, chat_id):
-        """Archive the current history to disk, then start fresh.
-        The kin's memory.md is untouched.
-
-        Non-share users: archive lands at
-        ~/.hearthkin/kin/<kin>/telegram_archive/<user_id>_<ts>.json
-        and only the per-user slice is wiped.
-
-        Share users: snapshot the kin's main conversation.jsonl into
-        ~/.hearthkin/conversations/<kin>_telegram_new_<ts>.json (the
-        Hearthkin-wide conversations folder, NOT the kin's own folder;
-        until 24 Nov 2026 the message said "the kin's conversations
-        folder" and the person looked there and found nothing), then
-        wipe conversation.jsonl, which also keeps a copy in the kin's
-        backups/cleared. If no snapshot can be written, nothing is
-        wiped. Affects the desktop and any other sharing user; ack
-        says so, and names only places that were really written."""
+        """Keep a copy of the current history, then start fresh. The
+        kin's memory.md is untouched. Either way the copy is the standard
+        one (24 Nov 2026): one message per line, in the kin's
+        backups/cleared, named for what made it. Private chats are named
+        telegram-<user>; a chat shared with the desktop is copied by
+        emptying conversation.jsonl. No copy, nothing emptied, and the
+        message names only the copy that was really made. (Until 24 Nov
+        2026 a shared /new also wrote a second copy, of another shape, to
+        the Hearthkin-wide conversations folder, and its message sent the
+        person to the kin's folder, where it wasn't.)"""
         if self._user_shares_desktop(user_id):
-            from kin_persistence import (
-                load_agent_conversation,
-                save_agent_conversation,
-                CONVOS_DIR,
-                atomic_write_json,
-                now_iso,
-            )
+            # One copy, in the standard shape and place (24 Nov 2026):
+            # emptying the conversation keeps it in the kin's
+            # backups/cleared (keep_copy_before_big_rewrite), and refuses if
+            # it can't. /new used to write a second, differently shaped copy
+            # into the shared conversations folder as well.
+            import kin_persistence as _kp
             current = []
             try:
-                current = list(load_agent_conversation(self.agent_name) or [])
+                current = list(_kp.load_agent_conversation(self.agent_name) or [])
             except Exception:
                 current = []
-            archived_to = None
-            if current:
-                try:
-                    ts = (
-                        datetime.datetime.now()
-                        .strftime("%Y-%m-%d_%H-%M-%S")
-                    )
-                    snapshot_path = (
-                        CONVOS_DIR
-                        / f"{self.agent_name}_telegram_new_{ts}.json"
-                    )
-                    atomic_write_json(snapshot_path, {
-                        "agent_name": self.agent_name,
-                        "snapshotted_at": now_iso(),
-                        "source": f"telegram_user_{user_id}_/new",
-                        "messages": current,
-                    })
-                    archived_to = snapshot_path
-                except Exception:
-                    archived_to = None
-                if archived_to is None:
-                    self._send_chunked(
-                        chat_id,
-                        f"Couldn't start a new conversation with "
-                        f"{self.agent_name}: the old one couldn't be saved "
-                        f"first, so nothing was emptied."
-                    )
-                    return
+            if not current:
+                self._send_chunked(
+                    chat_id,
+                    f"Started a new conversation with {self.agent_name}. "
+                    f"(Nothing to save.)")
+                return
+            _kp.LAST_COPY.pop(self.agent_name, None)
             try:
-                save_agent_conversation(self.agent_name, [])
+                _kp.save_agent_conversation(self.agent_name, [])
             except Exception:
                 self._send_chunked(
                     chat_id,
                     f"Couldn't start a new conversation with "
-                    f"{self.agent_name}: the conversation file couldn't be "
-                    f"emptied, so it's still going. The old one was saved "
-                    f"anyway, as {archived_to.name} in the conversations "
-                    f"folder of your .hearthkin folder."
-                    if archived_to else
-                    f"Couldn't start a new conversation with "
-                    f"{self.agent_name}: the conversation file couldn't be "
-                    f"emptied, so it's still going."
-                )
+                    f"{self.agent_name}: the old one couldn't be saved first, "
+                    f"so nothing was emptied.")
                 return
+            copy = _kp.LAST_COPY.get(self.agent_name)
             self._last_thinking.pop(user_id, None)
-            if archived_to:
-                ack = (
-                    f"Started a new conversation. The old one (shared with "
-                    f"the desktop) is saved as {archived_to.name}, in the "
-                    f"conversations folder of your .hearthkin folder, "
-                    f"not in {self.agent_name}'s own folder. The desktop "
-                    f"and anyone else sharing it now see an empty "
-                    f"conversation. {self.agent_name}'s memory is untouched. "
-                    f"On the computer, File, Restore a kin's history brings "
-                    f"it back."
-                )
-            else:
-                ack = (
-                    f"Started a new conversation with {self.agent_name}. "
-                    f"(Nothing to save.)"
-                )
-            self._send_chunked(chat_id, ack)
+            self._send_chunked(
+                chat_id,
+                f"Started a new conversation. The old one (shared with the "
+                f"desktop) is kept"
+                + (f" as {copy.name}" if copy else "")
+                + f", in {self.agent_name}'s backups, in the cleared folder. "
+                f"The desktop and anyone else sharing it now see an empty "
+                f"conversation. {self.agent_name}'s memory is untouched. On "
+                f"the computer, File, Restore a kin's history brings it back.")
             return
 
         # Non-share path: per-user archive + per-user wipe. Snapshot
@@ -3613,7 +3571,7 @@ class TelegramBot:
             ack = (
                 f"Started a new conversation. The old one is saved on "
                 f"the computer as {archived_to.name}, in "
-                f"{self.agent_name}'s telegram_archive folder. "
+                f"{self.agent_name}'s backups, in the cleared folder. "
                 f"{self.agent_name}'s memory is untouched."
             )
         else:
@@ -3719,7 +3677,7 @@ class TelegramBot:
                 except Exception:
                     pass
             convo_where = (f"a copy is in {self.agent_name}'s "
-                           f"telegram_archive folder")
+                           f"backups, in the cleared folder")
         self._last_thinking.pop(user_id, None)
         # memory.md is copied into backups/cleared before it's emptied
         # (24 Nov 2026: it was wiped with no copy). No copy, no wipe.
@@ -3757,30 +3715,14 @@ class TelegramBot:
         self._send_chunked(chat_id, ack)
 
     def _archive_telegram_history(self, user_id, history):
-        """Write `history` to a timestamped file under the kin's
-        telegram_archive/ subdirectory. Returns the Path on success,
-        raises on failure. Caller decides how to handle errors."""
-        from kin_persistence import atomic_write_json, now_iso
-        archive_dir = _agent_dir(self.agent_name) / "telegram_archive"
-        archive_dir.mkdir(parents=True, exist_ok=True)
-        # Filename is user-id + timestamp so multiple archives per
-        # user don't collide; ISO timestamp uses dashes/colons that
-        # need cleanup for filesystem-safety on Windows.
-        ts = (
-            datetime.datetime.now()
-            .strftime("%Y-%m-%d_%H-%M-%S")
-        )
-        # user_id can be int or str depending on history shape; normalize.
-        uid_str = str(user_id)
-        filename = f"{uid_str}_{ts}.json"
-        path = archive_dir / filename
-        atomic_write_json(path, {
-            "agent_name": self.agent_name,
-            "user_id": uid_str,
-            "archived_at": now_iso(),
-            "messages": history,
-        })
-        return path
+        """Keep a copy of a private Telegram chat's history before it's
+        emptied: the standard copy (kin_persistence.keep_cleared_copy), one
+        message per line in the kin's backups/cleared, named for the chat.
+        It used to go to its own telegram_archive folder as one JSON block.
+        Returns the path; raises on failure, so the caller empties nothing."""
+        from kin_persistence import keep_cleared_copy
+        return keep_cleared_copy(self.agent_name, f"telegram-{user_id}",
+                                 list(history))
 
     def _cmd_status(self, user_id, chat_id):
         """Report what the user is talking to, the active model, the

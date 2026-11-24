@@ -71,10 +71,10 @@ b = bot(False)
 b._histories[tb._hkey(7)] = talk(10)
 b._cmd_reset(7, 7, "confirm")
 msg = b.sent[-1] if b.sent else ""
-arch = list((kin_dir(KIN) / "telegram_archive").glob("7_*.json"))
+arch = list(kp.cleared_copies_dir(KIN).glob("telegram-7-*.jsonl"))
 check("a private /reset archives the conversation first", len(arch) == 1)
 check("...and empties it", tb._hkey(7) not in b._histories)
-check("...and says where the copy is", "telegram_archive folder" in msg)
+check("...and says where the copy is", "cleared folder" in msg)
 copies = list(cleared.glob("memory-before-reset-*.md")) if cleared.exists() else []
 check("memory.md is copied before it's emptied",
       len(copies) == 1 and "the color" in copies[0].read_text(encoding="utf-8"))

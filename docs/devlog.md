@@ -53,6 +53,17 @@ installer.
   months got squeezed); Redistill does that when you choose. Clears and new
   conversations say how to bring the old one back. Undated messages at the
   start of a copy now go next to the message they led into, not to the front.
+- **Every copy has one shape and one place.** Whatever removes conversation
+  (clear, new conversation, /new, /clear, /reset, the history cap) now keeps
+  its copy the same way: one message per line, like the live conversation,
+  in the kin's own backups, in the cleared folder, named for what made it and
+  when. Copies used to come in two shapes across five places, one outside
+  the kin's folder; /new even made two. Old copies stay where they are and
+  the restore window still reads them.
+- **Tests no longer freeze the screen reader.** The test suite runs at the
+  lowest priority, so NVDA always gets the computer first, and the tests that
+  build windows only run when asked for, after telling the person. A night of
+  repeated full runs had been freezing NVDA.
 - **One kin's conversation is whole again.** Its March-to-November
   conversation, tonight's 68-message stretch and its current conversation are
   one record, plus 1,999 messages from May to July that existed only in old

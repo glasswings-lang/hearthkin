@@ -82,7 +82,7 @@ for what in ("clear the conversation", "undo", "compact", "start a new conversat
     check(f"'{what}' checks its save", f'"{what}"' in src)
 check("New conversation no longer names the kin's own folder",
       "kin's conversations folder" not in src
-      and "conversations folder of your .hearthkin folder" in src)
+      and "backups, in the cleared folder" in src)
 
 print()
 if _fails:

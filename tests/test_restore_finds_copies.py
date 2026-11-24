@@ -98,6 +98,18 @@ check("an undated turn at the start of a copy lands by the turn it led into",
       pos > 0 and "may 20" in [m["content"] for m in merged[pos + 1:pos + 3]]
       and merged[pos - 1]["content"].startswith("mar"))
 
+# One shape, one place (standardised the same day, at the person's request).
+p = kp.keep_cleared_copy(KIN, "telegram-5", talk(3, 2, "feb"))
+check("every copy is one message per line, in backups/cleared",
+      p.suffix == ".jsonl" and p.parent.name == "cleared"
+      and len(p.read_text(encoding="utf-8").splitlines()) == 3)
+_new = ((ROOT / "telegram_bot.py").read_text(encoding="utf-8")
+        + (ROOT / "frame" / "file_menu_mixin.py").read_text(encoding="utf-8"))
+check("no conversation copy is written to the conversations folder or "
+      "telegram_archive any more",
+      "_telegram_new_" not in _new and "_pre-new.json" not in _new
+      and '/ "telegram_archive"' not in _new)
+
 src = ((ROOT / "frame" / "chat_stream_mixin.py").read_text(encoding="utf-8")
        + (ROOT / "frame" / "file_menu_mixin.py").read_text(encoding="utf-8")
        + (ROOT / "telegram_bot.py").read_text(encoding="utf-8"))

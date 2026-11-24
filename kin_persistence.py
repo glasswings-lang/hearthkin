@@ -6510,6 +6510,11 @@ def cleared_copies_dir(name):
     return agent_dir(name) / "backups" / "cleared"
 
 
+# The last copy keep_copy_before_big_rewrite made for each kin, so a caller
+# that just emptied a conversation can say exactly where the copy is.
+LAST_COPY = {}
+
+
 def keep_copy_before_big_rewrite(name, path, new_count, new_lines=None):
     """Copy `path` (a conversation.jsonl) aside before a rewrite to
     `new_count` messages, if that takes away a lot. Returns the copy's path,
@@ -6566,6 +6571,7 @@ def keep_copy_before_big_rewrite(name, path, new_count, new_lines=None):
             n += 1
             dest = d / f"conversation-{stamp}-{old_count}-messages-{n}.jsonl"
         shutil.copy2(path, dest)
+        LAST_COPY[name] = dest
         return dest
     except Exception as e:
         try:
@@ -6577,20 +6583,26 @@ def keep_copy_before_big_rewrite(name, path, new_count, new_lines=None):
 
 
 def keep_cleared_copy(name, label, messages):
-    """Write `messages` (what a clear is about to take away) to the kin's
-    backups/cleared/ as JSON, named with `label` and the time. Returns the
-    path. Raises if it can't, so the caller can refuse to clear."""
+    """THE way Hearthkin keeps a copy of conversation it's about to remove
+    (24 Nov 2026, standardised at the person's request: "standardize formats
+    or whatever... we gotta make this compatible"). One shape, the live
+    conversation's own: one message per line (.jsonl). One place: the kin's
+    backups/cleared/. Named `<label>-<when>-<n>-messages.jsonl`, so the name
+    says what made it and when. Copies used to come in two shapes across
+    five places, one of them outside the kin's folder, and a person looking
+    where a message said found nothing. Returns the path. Raises if it
+    can't, so the caller can refuse to remove anything."""
     d = cleared_copies_dir(name)
     d.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(label))[:60] or "cleared"
-    dest = d / f"{safe}-{stamp}-{len(messages)}-messages.json"
+    dest = d / f"{safe}-{stamp}-{len(messages)}-messages.jsonl"
     n = 1
     while dest.exists():
         n += 1
-        dest = d / f"{safe}-{stamp}-{len(messages)}-messages-{n}.json"
-    atomic_write_json(dest, {"agent_name": name, "cleared_at": now_iso(),
-                             "label": str(label), "messages": messages})
+        dest = d / f"{safe}-{stamp}-{len(messages)}-messages-{n}.jsonl"
+    atomic_write_text(dest, "".join(
+        json.dumps(m, ensure_ascii=False) + "\n" for m in messages))
     return dest
 
 
@@ -6742,7 +6754,7 @@ def append_discord_turn(name, channel_id, turn, cap=None, raise_on_failure=False
                 cap = history_cap({})
         data[key] = trim_front(
             lst, cap, keep=lambda rows: keep_trimmed_rows(
-                name, "discord_archive", key, rows))
+                name, "discord", key, rows))
         try:
             agent_dir(name).mkdir(parents=True, exist_ok=True)
             # Atomic, like every other history file: written in place, a
@@ -7854,8 +7866,19 @@ def find_saved_copies(name):
                       "when": made, "last_message": last})
 
     d = agent_dir(name)
+
+    def _cleared_kind(n):
+        if n.endswith("-older.jsonl"):
+            return ("older messages a "
+                    + ("Discord channel" if n.startswith("discord") else "Telegram chat")
+                    + "'s history cap took off")
+        if n.startswith("telegram"):
+            return "a private Telegram chat, kept by /new, /clear or /reset"
+        if n.startswith("discord"):
+            return "a Discord channel, kept by /clear"
+        return "the conversation, kept when it was emptied or cut back"
     for p in sorted((d / "backups" / "cleared").glob("*")):
-        _add(p, "kept when the conversation was cleared or cut back")
+        _add(p, _cleared_kind(p.name))
     for p in sorted((d / "backups").glob("conversation-*.jsonl")):
         _add(p, "kept before an import or restore")
     for p in sorted((d / "telegram_archive").glob("*")):
@@ -7879,10 +7902,12 @@ def keep_trimmed_rows(name, folder, key, rows):
     Telegram's and Discord's own histories lost what the cap took)."""
     if not rows:
         return None
-    d = agent_dir(name) / folder
+    # In backups/cleared like every other copy (24 Nov 2026); `folder` names
+    # the place it came from ("telegram", "discord").
+    d = cleared_copies_dir(name)
     d.mkdir(parents=True, exist_ok=True)
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(key))
-    path = d / f"{safe}-older.jsonl"
+    path = d / f"{folder}-{safe}-older.jsonl"
     with open(path, "a", encoding="utf-8") as fh:
         for r in rows:
             fh.write(json.dumps(r, ensure_ascii=False) + "\n")

@@ -71,7 +71,7 @@ b._save_histories = lambda: None
 b._history_cap = lambda: 40
 b.on_activity = None
 b._append_turns_for(9, talk(50, "tg"))
-older = kin_dir(KIN) / "telegram_archive" / f"{tb._hkey(9)}-older.jsonl"
+older = kp.cleared_copies_dir(KIN) / f"telegram-{tb._hkey(9)}-older.jsonl"
 rows = [json.loads(x) for x in older.read_text(encoding="utf-8").splitlines()] \
     if older.exists() else []
 check("a Telegram private chat over its cap keeps the older rows",
@@ -80,7 +80,7 @@ check("a Telegram private chat over its cap keeps the older rows",
 
 for t in talk(50, "dc"):
     kp.append_discord_turn(KIN, 77, t, cap=40)
-dolder = kin_dir(KIN) / "discord_archive" / "77-older.jsonl"
+dolder = kp.cleared_copies_dir(KIN) / "discord-77-older.jsonl"
 drows = [json.loads(x) for x in dolder.read_text(encoding="utf-8").splitlines()] \
     if dolder.exists() else []
 stored = kp.load_discord_history(KIN).get("77") or []

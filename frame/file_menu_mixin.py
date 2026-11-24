@@ -209,16 +209,14 @@ class FileMenuMixin:
         if self.current_room is not None:
             self._set_status("Rooms persist their own history. Use 'Clear chat' to wipe a room.")
             return
-        archived_name = None
+        kin = self.current_agent or "this kin"
         if self.conversation:
             dlg = wx.MessageDialog(
                 self,
-                f"Start fresh with {self.current_agent or 'this kin'}? "
-                "The current conversation will be saved first, in the "
-                "conversations folder of your .hearthkin folder (File, Open "
-                "finds it), then cleared. "
-                f"{self.current_agent or 'The kin'}'s memory and soul are "
-                "untouched.",
+                f"Start fresh with {kin}? A copy of the current conversation "
+                f"is kept first, in {kin}'s backups, in the cleared folder "
+                f"(File, Restore a kin's history brings it back), then it's "
+                f"cleared. {kin}'s memory and soul are untouched.",
                 "New conversation",
                 wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT | wx.ICON_WARNING,
             )
@@ -226,24 +224,14 @@ class FileMenuMixin:
             dlg.Destroy()
             if r != wx.ID_YES:
                 return
-            # Auto-archive before wiping. If the archive doesn't land on
-            # disk, ABORT the wipe — never trade the live conversation for
-            # a failed save. (_write_convo already logs + shows the error.)
-            try:
-                CONVOS_DIR.mkdir(parents=True, exist_ok=True)
-            except Exception:
-                pass
-            stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            agent_slug = self.current_agent or "unknown"
-            archive_path = CONVOS_DIR / f"convo_{agent_slug}_{stamp}_pre-new.json"
-            self._write_convo(archive_path)
-            if not archive_path.exists():
-                self._set_status(
-                    "New conversation cancelled — archive failed, your "
-                    "conversation is untouched (see logs/save_failures.log)."
-                )
-                return
-            archived_name = archive_path.name
+        # One copy, the standard one (24 Nov 2026): emptying the conversation
+        # keeps it in the kin's backups/cleared, one message per line, and
+        # refuses if it can't (keep_copy_before_big_rewrite). This used to
+        # write its own differently shaped copy into the shared conversations
+        # folder as well, and the message named the wrong folder.
+        import kin_persistence as _kp
+        _kp.LAST_COPY.pop(self.current_agent, None)
+        had = bool(self.conversation)
         before, before_file = list(self.conversation), getattr(self, "current_convo_file", None)
         self.conversation.clear()
         self.chat_display.Clear()
@@ -251,21 +239,17 @@ class FileMenuMixin:
         self._persist_current_conversation()
         from frame.chat_stream_mixin import put_back_if_unsaved
         if put_back_if_unsaved(self, before, before_file,
-                                     "start a new conversation"):
+                               "start a new conversation"):
             return
         self._update_token_display()
-        if archived_name:
-            # The copy is in CONVOS_DIR, ~/.hearthkin/conversations, NOT the
-            # kin's own folder (this used to name the kin's own folder
-            # until 24 Nov 2026, as Telegram's /new did; the person looked
-            # there and found nothing).
+        copy = _kp.LAST_COPY.get(self.current_agent)
+        if had:
             self._set_status(
-                f"New conversation started. The old one is saved as "
-                f"{archived_name}, in the conversations folder of your "
-                f".hearthkin folder (to bring it back: File, Restore a "
-                f"kin's history). Memory and "
-                f"soul untouched."
-            )
+                "New conversation started. The old one is kept"
+                + (f" as {copy.name}" if copy else "")
+                + f", in {kin}'s backups, in the cleared folder (to bring it "
+                f"back: File, Restore a kin's history). Memory and soul "
+                f"untouched.")
         else:
             self._set_status("New conversation started.")
 
