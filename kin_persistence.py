@@ -1422,7 +1422,7 @@ DEFAULT_DISTILL_PROMPT = (
     "## #12-#40 · what this part was, in a few words\n"
     "One or two plain sentences, in the first person, on what happened and "
     "what it meant to you.\n"
-    "- Name: \"their exact words, copied from the conversation\"\n"
+    "- <their name>: \"their exact words, copied from the conversation\"\n"
     "- me: \"my exact words\"\n\n"
     "Rules, all of them checked afterwards by plain code against the rows:\n\n"
     "- Cover every row, from #1 to the last, with no gaps. A quiet or "
@@ -1440,7 +1440,8 @@ DEFAULT_DISTILL_PROMPT = (
     "- Write from inside your own life: \"I\", never your own name as if you "
     "were someone else; not a report about it from the outside.\n\n"
     "You're shown your existing memory for context only; don't reproduce it. "
-    "Plain text, no asterisks or bold, no preamble, no sign-off. Keep it well under "
+    "Use the ## headings and - lines exactly as shown; otherwise plain text, "
+    "no asterisks or bold, no preamble, no sign-off. Keep it well under "
     "{word_cap} words; many short bookmarks are better than a few long ones."
 )
 
@@ -4550,7 +4551,7 @@ DEFAULT_TOOLLESS_MEMORY_BLOCK = (
 # it is, rather than leaving two contradictory instructions side by side.
 DEFAULT_TOOLLESS_TEND_NOTE = (
     "[hearthkin: parts of the wake-up above name tools — read_staging, "
-    "edit_file, archive_staging. You don't have them tonight, and you don't "
+    "edit_file, archive_staging. You don't have them right now, and you don't "
     "need them. Your pending notes are already in this message. To keep "
     "something, write it in a fenced block with the filename on the opening "
     "line (```memory/garden.md), or open the fence with `append:` to add to a "
@@ -4674,7 +4675,7 @@ DEFAULT_MEMORY_RECALL_HINT = (
 # breaks the "pretend to tend empty staging" loop.
 DEFAULT_STAGING_STATUS_EMPTY = (
     "[hearthkin: staging is empty right now — there are no pending notes to "
-    "tend. If this wake-up is about tending, there's nothing to do tonight; "
+    "tend. If this wake-up is about tending, there's nothing to tend right now; "
     "just say so briefly. Do not call read_staging and do not describe "
     "reading it — there is nothing there.]"
 )
@@ -5008,7 +5009,7 @@ APP_PROMPT_REGISTRY = {
     # than one that isn't there.
     "staging_status_empty": {
         "default": DEFAULT_STAGING_STATUS_EMPTY,
-        "version": 1,
+        "version": 2,  # 24 Nov 2026: "tonight" -> "right now" (wake-ups fire at any hour)
         "placeholders": [],
         "title": "Staging status — nothing pending",
         "desc": "Injected into a wake-up when staging is empty, so the "
@@ -5466,7 +5467,7 @@ APP_PROMPT_REGISTRY = {
     },
     "toolless_tend_note": {
         "default": DEFAULT_TOOLLESS_TEND_NOTE,
-        "version": 2,
+        "version": 3,  # 24 Nov 2026: "tonight" -> "right now"
         "placeholders": [],
         "title": "Wake-up correction for a kin with no tools",
         "desc": "Appended to a scheduled wake-up when the kin has no tools and "

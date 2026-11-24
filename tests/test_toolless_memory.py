@@ -291,7 +291,7 @@ check("D1 staging work is reported, including the scope C5 left pending",
 check("D1 the notes are in the wake-up itself",
       "swapped shifts with someone on Thursday" in whole)
 check("D1 the impossible instruction is corrected, not left standing",
-      "You don't have them tonight" in whole)
+      "You don't have them right now" in whole)
 check("D1 and the correction teaches the fence instead",
       "append:" in whole and "memory/" in whole)
 
@@ -304,7 +304,7 @@ whole_ctl = "\n".join(m["content"] for m in msgs_ctl)
 check("D1-control a tooled kin is unchanged",
       had_ctl and scopes_ctl == []
       and "swapped shifts" not in whole_ctl
-      and "You don't have them tonight" not in whole_ctl)
+      and "You don't have them right now" not in whole_ctl)
 
 # D2. The kin replies at 3am with a fence. It has to land with nobody watching.
 NIGHT_REPLY = (
@@ -327,7 +327,7 @@ had_empty, scopes_empty = HC._inject_staging_status(KIN, msgs_empty, [])
 check("D3 an empty staging yields no scopes to archive",
       not had_empty and scopes_empty == [])
 check("D3 and no tending correction is injected",
-      "You don't have them tonight"
+      "You don't have them right now"
       not in "\n".join(m["content"] for m in msgs_empty))
 
 # D4. The retry loop is gated on tools. A tool-less kin must never be
@@ -351,13 +351,13 @@ _suffix = CronExecMixin._cron_staging_suffix(None, KIN)
 # The count line names the scopes it is counting, so a scope name is its
 # signature — and it must not appear beside notes the send path already inlined.
 check("D6 the live-injection wake-up gets the correction, not the count",
-      "You don't have them tonight" in _suffix and "desktop" not in _suffix)
+      "You don't have them right now" in _suffix and "desktop" not in _suffix)
 _suffix_ctl = None
 save_kin_tools(KIN, ["read_staging", "write_file", "archive_staging"])
 _suffix_ctl = CronExecMixin._cron_staging_suffix(None, KIN)
 save_kin_tools(KIN, [])
 check("D6-control a tooled kin still gets the ordinary status line",
-      "You don't have them tonight" not in _suffix_ctl and _suffix_ctl.strip())
+      "You don't have them right now" not in _suffix_ctl and _suffix_ctl.strip())
 
 # Matched loosely on purpose. What this check is FOR is that the isolated
 # branch still commits, rather than journalling the reply and dropping the

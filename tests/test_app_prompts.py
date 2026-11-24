@@ -731,7 +731,7 @@ _words = re.findall(r"(?<![.\w])[A-Z][a-z]{2,}", _DISTILL)
 _allowed = {"You", "Some", "Name", "Display", "Later", "Where", "Prose",
             "Keep", "Plain", "Just", "Write", "Don", "Full",
             # v4's rule list and bookmark example
-            "Every", "One", "Rules", "Cover", "Rows", "Quote", "The"}
+            "Every", "One", "Rules", "Cover", "Rows", "Quote", "The", "Use"}
 check("distiller introduces no personal names",
       not (set(_words) - _allowed))
 
