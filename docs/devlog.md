@@ -45,6 +45,16 @@ installer.
     every copy it had;
   - wrong folder names, a log that didn't exist, a backup file that didn't
     exist, and "nothing is lost" where it could be, are corrected.
+- **Hosted Claude reuses the conversation from its cache.** The usage log
+  showed every new message re-paying for the whole history (only the system
+  prompt was cached between messages). A second cache marker fixes it. The
+  cache setting's help now explains 5 minutes versus 1 hour in plain words.
+- **Hearthkin learns from real wake-ups which models use tools.** A model
+  that had memory to tend and never called a tool is noted as "doesn't call
+  tools"; from then on its memory is handed over as text and it's never
+  pushed to call tools it can't (pushing only made it invent results). The
+  kin's Tools tab says plainly which it is: calls tools, doesn't, or not known
+  yet.
 - **Telegram's /new said the old conversation was in the kin's folder.** It's
   in the conversations folder of `.hearthkin`. Found because the person looked
   where it said and found nothing.
