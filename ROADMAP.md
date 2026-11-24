@@ -50,4 +50,4 @@ These are odd jobs sitting on the shelf:
 
 ## How to read this doc
 
-If you found this because something in Hearthkin looked broken: check the **Known temporary quirks** section first. If what you're seeing is described there, it's known and there's a plan. If it isn't, it's probably a real bug worth reporting on the [Issues page](https://github.com/glasswings-lang/hearthkin/issues).
+If you found this because something in Hearthkin looked broken: check the **Known temporary quirks** section first. If what you're seeing is described there, it's known and there's a plan. If it isn't, it's probably a real bug. Issues are turned off on this repository (see the README), so the way to fix it is your own fork; Hearthkin is CC0.
