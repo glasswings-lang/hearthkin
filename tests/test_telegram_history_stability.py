@@ -146,7 +146,7 @@ _src = (ROOT / "telegram_bot.py").read_text(encoding="utf-8")
 check("no append path still slices the history directly",
       "history = history[-cap:]" not in _src)
 check("both the DM and group paths go through the helper",
-      _src.count("self._trim_history(history, cap)") == 2)
+      _src.count("self._trim_history(history, cap, key=") == 2)
 
 
 print()
