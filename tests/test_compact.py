@@ -194,7 +194,9 @@ check("compacting adds one marker and deletes nothing",
 check("the note you're shown is the kin's words, without its thinking",
       shown_notes[0] == "Note number 1.")
 check("...and what's kept is the note as you left it",
-      mark["content"].endswith("Note number 2, edited by Wren."))
+      "Note number 2, edited by Wren." in mark["content"]
+      # since 24 Nov 2026 the kin's recent journal follows the note
+      and mark["content"].index("Note number 2") < mark["content"].index("conversation.jsonl"))
 check("...under a line saying what it is",
       "compacted here" in mark["content"])
 check("...and you're told it worked and that nothing was deleted",

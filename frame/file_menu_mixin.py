@@ -161,7 +161,7 @@ class FileMenuMixin:
             "{user}", self._compact_user_name())
         self.conversation.append(
             compact_marker(note, keep, ts=now_iso(),
-                           preface=preface))
+                           preface=preface, kin=kin))
         from kin_persistence import save_now_note
         save_now_note(kin, note)
         self._persist_current_conversation()

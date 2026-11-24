@@ -4421,7 +4421,7 @@ class TelegramBot:
             preface = load_app_prompt("compact_marker", who).replace(
                 "{user}", user)
             self._append_turns_for(user_id, [compact_marker(
-                note, _keep, ts=now_iso(), preface=preface)])
+                note, _keep, ts=now_iso(), preface=preface, kin=who)])
             from kin_persistence import save_now_note
             save_now_note(who, note)
             self._send_chunked(

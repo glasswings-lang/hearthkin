@@ -813,7 +813,9 @@ class RoomsMixin:
         from chat_helpers import compact_marker
         preface = load_app_prompt("compact_marker", kin).replace(
             "{user}", self._compact_user_name())
-        row = compact_marker(note, keep, ts=now_iso(), preface=preface)
+        # kin=None: the other kin in the room see this row, so no journal.
+        row = compact_marker(note, keep, ts=now_iso(), preface=preface,
+                             kin=None)
         row["speaker"] = kin
         self.room_conversation.append(row)
         try:

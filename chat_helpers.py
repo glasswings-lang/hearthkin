@@ -1505,14 +1505,66 @@ def compact_sent_words(keep):
     return f"its note and the last {keep} messages"
 
 
-def compact_marker(note, keep, ts=None, preface=""):
+# How much of each day's journal a kin starts from after a compaction. The
+# newest part is kept; the whole file is always there to read.
+STARTUP_JOURNAL_CHARS = 6000
+
+
+def compaction_startup(kin, today=None):
+    """What a kin wakes up to after a compaction, besides its own note
+    (24 Nov 2026, from an outside review: a kin re-runs its startup after
+    every compaction, because the note orients it to the conversation and its
+    files orient it to itself). Its journal for yesterday and today, as they
+    stood at that moment, plus where the full record is. Frozen into the
+    compaction row, never rebuilt per turn: a journal that grows must not
+    change the start of every later request (the prompt is append-only).
+    "" for no kin; never raises."""
+    if not kin:
+        return ""
+    try:
+        import datetime as _dt
+        from kin_persistence import agent_dir
+        today = today or _dt.date.today()
+        days = [today - _dt.timedelta(days=1), today]
+        parts = []
+        for d in days:
+            rel = "memory/journal/%s.md" % d.isoformat()
+            p = agent_dir(kin) / rel
+            try:
+                text = p.read_text(encoding="utf-8").strip() if p.exists() else ""
+            except Exception:
+                text = ""
+            if not text:
+                parts.append("%s: nothing written that day." % rel)
+                continue
+            if len(text) > STARTUP_JOURNAL_CHARS:
+                text = ("[the start of this day is in %s]\n\n" % rel
+                        + text[-STARTUP_JOURNAL_CHARS:])
+            parts.append("%s:\n\n%s" % (rel, text))
+        head = ("[hearthkin: your note is your best guide from here, but not "
+                "the whole story. Everything before it is still in your "
+                "conversation record, conversation.jsonl; if something feels "
+                "off, or would change what you do in a serious way, look it up "
+                "there. Here is your journal for yesterday and today as it "
+                "stood when you compacted, so you start from your own words:]")
+        return head + "\n\n" + "\n\n".join(parts)
+    except Exception:
+        return ""
+
+
+def compact_marker(note, keep, ts=None, preface="", kin=None):
     """The row that marks a compaction. `keep` is how many of the messages
     before it are still sent after it. A count, not a position: the desktop
     and a Telegram chat read the same conversation with different rows
-    filtered out, so a stored index would point at different rows."""
+    filtered out, so a stored index would point at different rows.
+    `kin`: whose compaction it is, for compaction_startup. Every caller says
+    (tests/test_compaction_startup.py goes looking); a room passes None,
+    because a room's rows are seen by the other kin in it."""
+    startup = compaction_startup(kin)
     row = {"role": "system", "compact": True, "keep": int(keep),
            "content": ((preface.strip() + "\n\n") if preface.strip() else "")
-           + (note or "").strip()}
+           + (note or "").strip()
+           + (("\n\n" + startup) if startup else "")}
     if ts:
         row["ts"] = ts
     return row

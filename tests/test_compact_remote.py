@@ -89,7 +89,7 @@ tb._handle_command("/compact confirm", 1, 1)
 hist = tb._histories[telegram_bot._hkey(1)]
 check("/compact confirm adds the marker and deletes nothing",
       len(hist) == 11 and hist[-1].get("compact")
-      and hist[-1]["content"].endswith("Note 2: we fixed Discord.")
+      and "Note 2: we fixed Discord." in hist[-1]["content"]
       and "Nothing was deleted" in tg_sent[-1])
 seen = tb._load_history_for(1)
 check("...and from then on the kin reads its note and the last six",
