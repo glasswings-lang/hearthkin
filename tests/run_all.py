@@ -148,7 +148,11 @@ def main():
     isolated_gui = []
     # Probed once, in a throwaway process, so this runner never moves its own
     # thread off the desktop the person is using.
-    can_isolate = desktop_isolation_available()
+    # Even the probe makes an isolated desktop, so it too waits for --gui.
+    gui_run = "--gui" in sys.argv
+    can_isolate = desktop_isolation_available() if gui_run else False
+    if gui_run:
+        env["HEARTHKIN_GUI_RUN"] = "1"
     allow_gui = gui_tests_enabled()
     gui_runner = os.path.join(HERE, "_gui_runner.py")
     try:
@@ -160,6 +164,16 @@ def main():
             except OSError:
                 source = ""
             if builds_widgets(source):
+                # Window tests run only when asked for (--gui), and the person
+                # is told first (24 Nov 2026: "some test or other is making
+                # NVDA freeze and it's unpredictable", during a night of
+                # repeated full runs; each run put 19 test windows on an
+                # isolated desktop). Isolation keeps them out of the
+                # foreground; it evidently doesn't keep them away from the
+                # screen reader entirely. Run them on purpose, before a build.
+                if "--gui" not in sys.argv:
+                    skipped_gui.append(name)
+                    continue
                 if can_isolate:
                     # Run it, on a desktop that has no input attached.
                     cmd = [sys.executable, gui_runner, path]
@@ -168,7 +182,13 @@ def main():
                     skipped_gui.append(name)
                     continue
             print(f"\n===== {name} =====", flush=True)
-            result = subprocess.run(cmd, env=env)
+            # Lowest CPU priority (24 Nov 2026): a full run at normal priority
+            # starved the screen reader, which lagged and froze. Idle priority
+            # means NVDA always gets the processor first; the suite just takes
+            # a little longer.
+            result = subprocess.run(
+                cmd, env=env,
+                creationflags=(0x00000040 if sys.platform == "win32" else 0))
             if result.returncode != 0:
                 failed.append(name)
     finally:
@@ -188,10 +208,15 @@ def main():
         # missing and why.
         print(f"Skipped {len(skipped_gui)} test file(s) that build wx windows: "
               + ", ".join(skipped_gui), flush=True)
-        print("The desktop could not be isolated on this machine, and a wx "
-              "window on the live desktop takes the foreground even unshown — "
-              "which drags a screen reader into a window it can't read.",
-              flush=True)
+        if "--gui" not in sys.argv:
+            print("Window tests run only with --gui: they can freeze a screen "
+                  "reader even on an isolated desktop. Tell the person first, "
+                  "then run them on purpose (before every build).", flush=True)
+        else:
+            print("The desktop could not be isolated on this machine, and a wx "
+                  "window on the live desktop takes the foreground even unshown "
+                  "— which drags a screen reader into a window it can't read.",
+                  flush=True)
     if failed:
         print(f"SUITE FAILED - {len(failed)} file(s): " + ", ".join(failed), flush=True)
         _announce(f"Suite failed. {len(failed)} file"

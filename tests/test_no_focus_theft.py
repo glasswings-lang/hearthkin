@@ -135,7 +135,14 @@ check("...and REFUSES the test outright when it can't",
 # would return the isolated desktop's foreground (None) and read as a change
 # that never happened. Measure from where the person is.
 
-if sys.platform == "win32" and run_all.desktop_isolation_available():
+# Only on a window-test run (run_all --gui sets HEARTHKIN_GUI_RUN): this part
+# builds a real dialog on an isolated desktop, which can still freeze a screen
+# reader (24 Nov 2026), so it isn't done on every ordinary run.
+_gui_run = os.environ.get("HEARTHKIN_GUI_RUN") == "1"
+if not _gui_run:
+    print("SKIP the end-to-end window check: window tests run only with "
+          "run_all --gui")
+if _gui_run and sys.platform == "win32" and run_all.desktop_isolation_available():
     import ctypes
     import subprocess
     _u = ctypes.WinDLL("user32", use_last_error=True)
@@ -185,7 +192,7 @@ if sys.platform == "win32" and run_all.desktop_isolation_available():
     check("...it really built widgets, rather than passing vacuously",
           "tab order" in _out)
     check("...and no window it made ever took the foreground", not _stolen)
-else:
+elif _gui_run:
     check("desktop isolation unavailable here — widget tests stay skipped",
           not run_all.gui_tests_enabled())
 

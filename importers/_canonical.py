@@ -255,7 +255,13 @@ def _forward_filled_keys(messages):
         if isinstance(ts, str) and ts:
             last = ts
         keys.append(last)
-    return keys
+    # Unstamped turns at the very START have nothing before them to
+    # inherit, and kept "" — which still sent them to the front of the
+    # whole file (24 Nov 2026: 17 turns from a 19 May snapshot opened a
+    # kin's March-to-November conversation). They take the first stamp
+    # after them instead, so they sit just before the turn they led into.
+    first = next((k for k in keys if k), "")
+    return [k or first for k in keys]
 
 
 def _weave_by_timestamp(existing, imported, imported_keys=None):

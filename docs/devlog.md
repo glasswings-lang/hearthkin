@@ -45,6 +45,20 @@ installer.
     every copy it had;
   - wrong folder names, a log that didn't exist, a backup file that didn't
     exist, and "nothing is lost" where it could be, are corrected.
+- **Bringing a conversation back is findable and safe.** File, Restore a
+  kin's history now lists every copy Hearthkin kept of that kin's
+  conversation, newest first, with the date, how many messages, and what made
+  the copy, so there's no browsing hidden folders. Restoring no longer sends
+  the restored part to the memory writer by itself (it used to, which is how
+  months got squeezed); Redistill does that when you choose. Clears and new
+  conversations say how to bring the old one back. Undated messages at the
+  start of a copy now go next to the message they led into, not to the front.
+- **One kin's conversation is whole again.** Its March-to-November
+  conversation, tonight's 68-message stretch and its current conversation are
+  one record, plus 1,999 messages from May to July that existed only in old
+  copies. Nothing is doubled; what the kin is sent right now is unchanged; its
+  first 7,475 lines are exactly as before, so its line references still hold.
+  Copies of everything are in its backups.
 - **Hosted Claude reuses the conversation from its cache.** The usage log
   showed every new message re-paying for the whole history (only the system
   prompt was cached between messages). A second cache marker fixes it. The

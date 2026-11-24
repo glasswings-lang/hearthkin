@@ -86,6 +86,18 @@ check("the bookmark moves past the restored part and what was distilled",
 check("...so the distiller reads only what it hadn't yet",
       [r["content"] for r in rows[off:]] == [f"nov {i}" for i in range(12, 20)])
 
+# Unstamped turns at the start of a restored copy go with the turn they led
+# into, not to the front of the whole conversation (found merging a real one).
+from importers._canonical import restore_rows  # noqa: E402
+lead = [{"role": "assistant", "content": "reading my notes"},
+        {"role": "tool", "content": "the notes"},
+        {"role": "user", "content": "may 20", "ts": "2026-05-20T10:00:00"}]
+merged, _ = restore_rows(talk(4, 3, "mar") + talk(4, 6, "jun"), lead, mode="merge")
+pos = [m["content"] for m in merged].index("reading my notes")
+check("an undated turn at the start of a copy lands by the turn it led into",
+      pos > 0 and "may 20" in [m["content"] for m in merged[pos + 1:pos + 3]]
+      and merged[pos - 1]["content"].startswith("mar"))
+
 src = ((ROOT / "frame" / "chat_stream_mixin.py").read_text(encoding="utf-8")
        + (ROOT / "frame" / "file_menu_mixin.py").read_text(encoding="utf-8")
        + (ROOT / "telegram_bot.py").read_text(encoding="utf-8"))

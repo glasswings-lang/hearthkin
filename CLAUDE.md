@@ -56,7 +56,7 @@ Entry point is `python hearthkin.pyw`. The frame is split across `frame_shared.p
 - `model_browser.py` — NVDA-accessible model picker.
 - `tools/` — kin-callable tools registry.
 - `Hearthkin.spec` + `build.bat` — PyInstaller onedir.
-- `tests/` — plain-Python tests, no pytest. `python tests/run_all.py` runs all.
+- `tests/` — plain-Python tests, no pytest. `python tests/run_all.py` runs all but the window tests; `--gui` adds those (tell the person first: they can freeze NVDA).
 
 **Import shape:** every cross-module reference is a static `from <mod> import ...`. PyInstaller follows those. **Never** dynamic `importlib.import_module(...)` for project modules. Circular imports are avoided by lazy-importing inside method bodies.
 
@@ -405,6 +405,8 @@ Two ways in: `HEARTHKIN_SILENT`, which `run_all.py` sets for every child, and a 
 **The gate is the RUNNER's job, not each test's.** The rule was written down, and two tests were then added without it and shipped stealing focus on every run — a rule each new file has to remember is a rule that gets forgotten. `run_all.py` reads each test's source (`builds_widgets`) and handles those files itself.
 
 **They RUN, on an isolated desktop — an opt-in flag was the wrong fix.** A Windows window station holds several *desktops* and exactly one is the input desktop. `tests/_isolated_desktop.py` creates a fresh one and moves the thread onto it with `SetThreadDesktop`; windows made there are real and fully testable but have **no path to anyone's foreground**. `tests/_gui_runner.py` does that first, in a fresh process, then runs the test as `__main__` — isolation must happen before wx is imported, since `SetThreadDesktop` fails once a thread owns windows.
+
+**But only with `--gui`, and only after telling the person (24 Nov 2026).** During a night of repeated full runs the owner reported "some test or other is making NVDA freeze and it's unpredictable": isolation keeps test windows out of the foreground, but evidently not away from the screen reader entirely. So `python tests/run_all.py` skips every window test (and the isolation probe, and `test_no_focus_theft.py`'s end-to-end check) and says so; `python tests/run_all.py --gui` runs them. Run `--gui` on purpose, after saying so, and before every build, not on every change.
 
 Three rules for this machinery:
 
