@@ -262,7 +262,8 @@ class FileMenuMixin:
             self._set_status(
                 f"New conversation started. The old one is saved as "
                 f"{archived_name}, in the conversations folder of your "
-                f".hearthkin folder (File, Open to reload it). Memory and "
+                f".hearthkin folder (to bring it back: File, Restore a "
+                f"kin's history). Memory and "
                 f"soul untouched."
             )
         else:

@@ -29,6 +29,12 @@ from importers._canonical import restore_rows
 from kin_persistence import list_agents, load_agent_conversation
 
 
+def copy_line(c):
+    """One saved copy, said plainly: when, how many messages, what made it."""
+    when = c["when"].strftime("%d %b %Y, %H:%M") if c.get("when") else "unknown date"
+    return f"{when}: {c['count']:,} messages, {c['kind']}"
+
+
 class RestoreHistoryDialog(wx.Dialog):
     """File → Restore a kin's history… — pick an archived conversation.jsonl,
     pick the kin it belongs to, choose how it combines, restore."""
@@ -66,8 +72,23 @@ class RestoreHistoryDialog(wx.Dialog):
             panel, choices=self._existing_agents or ["(no kin yet)"])
         if self._existing_agents:
             self.kin_choice.SetSelection(0)
-        self.kin_choice.Bind(wx.EVT_CHOICE, self._on_input_changed)
+        self.kin_choice.Bind(wx.EVT_CHOICE, self._on_kin_changed)
         body.Add(self.kin_choice, flag=wx.EXPAND | wx.BOTTOM, border=10)
+
+        # ─── Copies Hearthkin kept of this kin (24 Nov 2026) ─────── #
+        # Copies live in five places in two shapes, inside a hidden folder;
+        # browsing for them by screen reader was the whole obstacle. Every
+        # one is listed here, newest first, in plain words. Picking one
+        # fills in the file above.
+        body.Add(wx.StaticText(
+            panel, label="&Copies Hearthkin kept of this kin's conversation "
+                         "(newest first; pick one):"),
+            flag=wx.BOTTOM, border=2)
+        self.copies_list = wx.ListBox(panel, size=(-1, 120))
+        self.copies_list.Bind(wx.EVT_LISTBOX, self._on_copy_picked)
+        body.Add(self.copies_list, flag=wx.EXPAND | wx.BOTTOM, border=10)
+        self._copies = []
+        self._fill_copies()
 
         # ─── How it combines ─────────────────────────────────────── #
         # A StaticText would label nothing here — the next control is a
@@ -147,6 +168,24 @@ class RestoreHistoryDialog(wx.Dialog):
         self.restore_btn.Enable(bool(can_restore))
 
     # ─── Event handlers ──────────────────────────────────────────── #
+
+    def _fill_copies(self):
+        from kin_persistence import find_saved_copies
+        kin = self._selected_kin()
+        self._copies = find_saved_copies(kin) if kin else []
+        self.copies_list.Set([copy_line(c) for c in self._copies]
+                             or ["(no copies kept for this kin)"])
+
+    def _on_kin_changed(self, event):
+        self._fill_copies()
+        self._refresh()
+
+    def _on_copy_picked(self, event):
+        i = self.copies_list.GetSelection()
+        if i == wx.NOT_FOUND or i >= len(self._copies):
+            return
+        self._paths = []
+        self.file_field.SetValue(str(self._copies[i]["path"]))
 
     def _on_browse(self, event):
         with wx.FileDialog(
@@ -310,8 +349,12 @@ class RestoreHistoryDialog(wx.Dialog):
         # leaving it to be worked out from the arithmetic.
         unstamped = sum(1 for r in rows if not r.get("ts"))
         overlapping = stats["skipped_duplicates"] > 0
+        # backups/cleared holds what a clear or a cap REMOVED, so restoring
+        # from it brings real turns back; only the other backups are undo
+        # copies of what's already here.
         in_backups = any(
             "backups" in os.path.normpath(p).lower().split(os.sep)
+            and "cleared" not in os.path.normpath(p).lower().split(os.sep)
             for p in paths)
 
         if in_backups:
@@ -327,6 +370,12 @@ class RestoreHistoryDialog(wx.Dialog):
                 f"those are already here too. If this overlaps what "
                 f"{kin} has, restoring would add them a second time.")
 
+        if mode != "replace" and stats["restored"]:
+            lines.append(
+                "\nMemory notes aren't made from the restored part on their "
+                "own, so nothing runs up a bill or gets squeezed without you "
+                "choosing it. To make notes from it, use Redistill selected from "
+                "start on the kin's Memory tab when you're ready.")
         self._say("\n".join(lines), can_restore=stats["restored"] > 0)
 
     def _on_restore(self, event):

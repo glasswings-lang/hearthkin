@@ -1803,4 +1803,5 @@ class ChatStreamMixin:
         # The save above copies the old conversation into the kin's
         # backups/cleared/ first (keep_copy_before_big_rewrite).
         self._set_status("Conversation cleared. A copy is kept in the "
-                         "kin's backups, in the cleared folder.")
+                         "kin's backups, in the cleared folder. "
+                         "To bring it back: File, Restore a kin's history.")

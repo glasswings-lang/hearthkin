@@ -3478,7 +3478,8 @@ class TelegramBot:
             f"Cleared your conversation history with {self.agent_name}. "
             "They won't remember anything from before this message. "
             f"A copy is kept on the computer, in {self.agent_name}'s "
-            "telegram_archive folder. Memory is untouched."
+            "telegram_archive folder (on the computer, File, Restore a "
+            "kin's history brings it back). Memory is untouched."
         )
 
     def _cmd_new(self, user_id, chat_id):
@@ -3563,7 +3564,9 @@ class TelegramBot:
                     f"conversations folder of your .hearthkin folder, "
                     f"not in {self.agent_name}'s own folder. The desktop "
                     f"and anyone else sharing it now see an empty "
-                    f"conversation. {self.agent_name}'s memory is untouched."
+                    f"conversation. {self.agent_name}'s memory is untouched. "
+                    f"On the computer, File, Restore a kin's history brings "
+                    f"it back."
                 )
             else:
                 ack = (

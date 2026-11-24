@@ -51,6 +51,8 @@ from kin_persistence import (
     agent_dir,
     append_agent_conversation_turn,
     create_agent,
+    load_agent_config,
+    save_agent_config,
     load_agent_conversation,
     save_agent_conversation,
     sanitize_for_prompt_literal,
@@ -483,11 +485,57 @@ def restore_history(kin_name, messages, *, mode="merge",
 
     backup_path = _backup_conversation(kin_name)
 
+    # Where the distiller's bookmark goes (24 Nov 2026). Restoring months of
+    # history woven in front of the bookmark used to leave it pointing at
+    # the same row NUMBER, now somewhere back in the restored part, so the
+    # distiller re-read all of it: the five-minute, fiftieth-of-the-size
+    # flattening that started the memory rebuild. Now the restored part is
+    # never distilled automatically (Redistill from start does it, on
+    # purpose), and what had already been distilled stays distilled.
+    new_offset = None
+    if not created_kin:
+        try:
+            cfg = load_agent_config(kin_name) or {}
+            old = int((cfg.get("distill_offsets") or {}).get("desktop", 0) or 0)
+
+            def _k(m):
+                return (m.get("role"), str(m.get("ts") or ""),
+                        str(m.get("content") or "")[:200])
+            done = {_k(m) for m in existing[:old]}
+            existing_keys = {_k(m) for m in existing}
+            last_handled = -1
+            first_undone = None
+            for i, m in enumerate(rows):
+                k = _k(m)
+                if k in done or k not in existing_keys:
+                    last_handled = i
+                elif first_undone is None:
+                    first_undone = i
+            if mode == "replace":
+                new_offset = len(rows)
+            elif first_undone is not None and first_undone <= last_handled:
+                new_offset = first_undone
+            else:
+                new_offset = last_handled + 1
+        except Exception:
+            new_offset = None
+
     save_agent_conversation(kin_name, rows)
+
+    if new_offset is not None:
+        try:
+            cfg = load_agent_config(kin_name) or {}
+            offs = dict(cfg.get("distill_offsets") or {})
+            offs["desktop"] = new_offset
+            cfg["distill_offsets"] = offs
+            save_agent_config(kin_name, cfg)
+        except Exception:
+            pass
 
     return {
         "kin": kin_name,
         "kin_dir": str(d),
+        "distill_bookmark": new_offset,
         "written": stats["restored"],
         "dropped": stats["dropped"],
         "skipped_duplicates": stats["skipped_duplicates"],

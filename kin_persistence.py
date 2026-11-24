@@ -7801,6 +7801,77 @@ def save_room_conversation(name, conversation):
         atomic_write_json(room_dir(name) / "conversation.json", data)
 
 
+def find_saved_copies(name):
+    """Every saved copy of a kin's conversation that Hearthkin made, newest
+    first, as dicts {path, kind, when, count} (24 Nov 2026). Copies live in
+    five places in two shapes, and finding one meant browsing hidden folders
+    by hand; the restore window lists these instead. `kind` says, in plain
+    words, what made the copy. Never raises; an unreadable file is left out.
+    """
+    import re as _re
+    found = []
+
+    def _count_and_when(p):
+        try:
+            if p.suffix == ".jsonl":
+                n, last = 0, ""
+                with open(p, encoding="utf-8", errors="replace") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        n += 1
+                        try:
+                            ts = json.loads(line).get("ts")
+                            if ts:
+                                last = str(ts)
+                        except Exception:
+                            pass
+                return n, last, None
+            data = json.loads(p.read_text(encoding="utf-8", errors="replace"))
+            msgs = data.get("messages") if isinstance(data, dict) else None
+            if not isinstance(msgs, list):
+                return None
+            owner = data.get("agent_name") or data.get("agent")
+            stamps = [str(m.get("ts")) for m in msgs
+                      if isinstance(m, dict) and m.get("ts")]
+            return len(msgs), (stamps[-1] if stamps else ""), owner
+        except Exception:
+            return None
+
+    def _add(p, kind, check_owner=False):
+        r = _count_and_when(p)
+        if not r or not r[0]:
+            return
+        n, last, owner = r
+        if check_owner and owner and owner != name:
+            return
+        try:
+            made = datetime.datetime.fromtimestamp(p.stat().st_mtime)
+        except OSError:
+            made = None
+        found.append({"path": p, "kind": kind, "count": n,
+                      "when": made, "last_message": last})
+
+    d = agent_dir(name)
+    for p in sorted((d / "backups" / "cleared").glob("*")):
+        _add(p, "kept when the conversation was cleared or cut back")
+    for p in sorted((d / "backups").glob("conversation-*.jsonl")):
+        _add(p, "kept before an import or restore")
+    for p in sorted((d / "telegram_archive").glob("*")):
+        _add(p, "a Telegram chat, kept by /new, /clear, /reset or the cap")
+    for p in sorted((d / "discord_archive").glob("*")):
+        _add(p, "a Discord channel, kept by the cap")
+    if CONVOS_DIR.exists():
+        pat = _re.compile(r"^(convo_)?%s_(telegram_new_|\d)" % _re.escape(name))
+        for p in sorted(CONVOS_DIR.glob("*.json")):
+            if pat.match(p.name):
+                _add(p, "kept by New conversation or Telegram's /new",
+                     check_owner=True)
+    found.sort(key=lambda c: c["when"] or datetime.datetime.min, reverse=True)
+    return found
+
+
 def keep_trimmed_rows(name, folder, key, rows):
     """Append rows a history cap is about to drop to
     <kin>/<folder>/<key>-older.jsonl, one per line, never rewritten.
