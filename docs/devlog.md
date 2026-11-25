@@ -53,6 +53,13 @@ installer.
   months got squeezed); Redistill does that when you choose. Clears and new
   conversations say how to bring the old one back. Undated messages at the
   start of a copy now go next to the message they led into, not to the front.
+- **You choose what rides along with every message.** Settings, Memory, What
+  rides along with every message: every text file in the kin's folder, flat,
+  with its size in words and a running total. The five that ride by default
+  are ticked (unticking the soul or memory asks first); tick any other file
+  and it's sent with every message, and to the memory notes. The kin asks,
+  you tick. Later, fronter files can be the same list with "only while this
+  person is fronting".
 - **The rules file for anyone working on Hearthkin is shorter.** CLAUDE.md,
   which loads at the start of every coding session, went from about 86,000
   characters to about 50,000. Every rule stayed, each with the test that

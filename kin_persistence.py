@@ -7527,6 +7527,91 @@ def save_now_note(kin_name, note):
         return False
 
 
+# ── What rides along with every message (24 Nov 2026) ─────────────────
+#
+# The person's list, agreed 23 Nov 2026: every text file in the kin's folder,
+# flat, with its size in words; the files that already ride shown ticked;
+# unticking the soul or the memory index only after a warning; the kin asks,
+# the person ticks. Kept in the kin's config as two lists:
+#   ride_along      extra files, paths relative to the kin's folder
+#   ride_along_off  built-in pieces the person switched off
+# Distillation gets the same, because it builds this same prompt.
+RIDE_ALONG_BUILTINS = (
+    ("practice.md", PRACTICE_FILE),
+    ("soul.md", "soul.md"),
+    ("identity.md", IDENTITY_FILE),
+    ("voice anchor", "anchor.md"),
+    ("memory.md", "memory.md"),
+)
+# Folders whose files are copies, logs or machinery, never something to keep
+# in front of a kin every turn.
+_RIDE_SKIP_DIRS = {"backups", "attachments", "now", "staging", "cron_history",
+                   "telegram_archive", "discord_archive", "__pycache__",
+                   "message-history", "voices"}
+
+
+def ride_along_candidates(kin_name):
+    """Every text file (.md, .txt) in the kin's folder and its subfolders that
+    could ride along, as [(relative path with forward slashes, words)],
+    sorted. Copies, logs and machinery folders are left out."""
+    out = []
+    d = agent_dir(kin_name)
+    if not d.is_dir():
+        return out
+    for root, dirs, files in os.walk(d):
+        rel_root = Path(root).relative_to(d)
+        dirs[:] = sorted(x for x in dirs
+                         if x not in _RIDE_SKIP_DIRS and not x.startswith("."))
+        for f in sorted(files):
+            if not f.lower().endswith((".md", ".txt")):
+                continue
+            rel = (rel_root / f).as_posix()
+            if rel.startswith("./"):
+                rel = rel[2:]
+            try:
+                words = len(_read_text_tolerant(Path(root) / f).split())
+            except Exception:
+                continue
+            out.append((rel, words))
+    return out
+
+
+def _ride_along_section(kin_name, cfg=None):
+    """The extra files the person ticked, each under its path. "" for none.
+    A path that leaves the kin's folder, or a file that's gone, is skipped."""
+    if not kin_name:
+        return ""
+    try:
+        cfg = cfg if cfg is not None else (load_agent_config(kin_name) or {})
+        paths = [str(p) for p in (cfg.get("ride_along") or []) if str(p).strip()]
+    except Exception:
+        return ""
+    if not paths:
+        return ""
+    d = agent_dir(kin_name).resolve()
+    blocks = []
+    for rel in paths:
+        try:
+            p = (d / rel).resolve()
+            p.relative_to(d)
+            text = _read_text_tolerant(p).strip() if p.is_file() else ""
+        except Exception:
+            continue
+        if text:
+            blocks.append(f"{rel}:\n\n{text}")
+    if not blocks:
+        return ""
+    return ("Files you keep in front of you (your person ticked these to ride "
+            "along with every message):\n\n" + "\n\n".join(blocks))
+
+
+def _ride_off(kin_name):
+    try:
+        return set((load_agent_config(kin_name) or {}).get("ride_along_off") or [])
+    except Exception:
+        return set()
+
+
 def build_system_prompt(soul, memory, room_block=None, enabled_tools=None,
                         kin_name=None):
     """Combine the universal base prompt + the kin's practice.md + soul +
@@ -7577,18 +7662,24 @@ def build_system_prompt(soul, memory, room_block=None, enabled_tools=None,
                 pass
         if base and base.strip():
             parts.append(base.strip())
-    practice = _practice_section(kin_name)
+    off = _ride_off(kin_name) if kin_name else set()
+    practice = _practice_section(kin_name) if "practice.md" not in off else ""
     if practice:
         parts.append(practice)
-    if soul and soul.strip():
+    if soul and soul.strip() and "soul.md" not in off:
         parts.append(soul.strip())
-    identity = _identity_section(kin_name)
+    identity = _identity_section(kin_name) if "identity.md" not in off else ""
     if identity:
         parts.append(identity)
-    anchor = load_voice_anchor(kin_name)
+    anchor = load_voice_anchor(kin_name) if "voice anchor" not in off else ""
     if anchor:
         parts.append(VOICE_ANCHOR_HEADER + "\n\n" + anchor)
-    if memory and memory.strip():
+    # The files the person ticked: after the stable pieces, before memory,
+    # which changes more often (each edit costs one cold turn either way).
+    riding = _ride_along_section(kin_name)
+    if riding:
+        parts.append(riding)
+    if memory and memory.strip() and "memory.md" not in off:
         parts.append("What you remember from before:\n\n" + memory.strip())
     if room_block:
         parts.append(room_block)

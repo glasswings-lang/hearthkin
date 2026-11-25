@@ -964,6 +964,13 @@ class EditKinDialog(wx.Dialog):
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(at_pct_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
+        # What rides along with every message (24 Nov 2026): the person's
+        # tick list of the kin's files (dialogs/ride_along.py).
+        self.ride_along_btn = wx.Button(
+            host, label="&What rides along with every message…")
+        self.ride_along_btn.Bind(wx.EVT_BUTTON, self._on_ride_along)
+        memory_sizer.Add(self.ride_along_btn,
+                         flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(compact_row,
                          flag=wx.LEFT | wx.RIGHT | wx.TOP, border=8)
         memory_sizer.Add(self.kin_led_compact_check,
@@ -4205,6 +4212,16 @@ class EditKinDialog(wx.Dialog):
                                      kin_name=self.kin)
         try:
             dlg.ShowModal()
+        finally:
+            dlg.Destroy()
+
+    def _on_ride_along(self, _event):
+        from dialogs.ride_along import RideAlongDialog
+        dlg = RideAlongDialog(self, self.kin, self._save_param)
+        try:
+            if dlg.ShowModal() == wx.ID_OK:
+                self.frame._set_status(
+                    f"Saved what rides along with {self.kin}'s messages.")
         finally:
             dlg.Destroy()
 
