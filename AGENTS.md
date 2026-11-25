@@ -26,6 +26,11 @@ what changed.
   build, not on every change. Between changes, run only the tests a change
   touches.
 - **Build a release:** `build.bat` (PyInstaller onedir → `dist/Hearthkin/`).
+  Run it from a clean virtual environment holding only Hearthkin's
+  requirements, never an everyday Python: PyInstaller bundles whatever is
+  importable, so other projects' packages (pytest, tf_keras, …) ride in and
+  the licence check stops the build. The maintainer's machine has one set up
+  for this; `docs/private/` says where.
   Don't hand-bump `app_version.py`; the build stamps the version from the git
   tag.
 
