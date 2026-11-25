@@ -7161,6 +7161,21 @@ def proactive_on_for(cfg):
     off = set((cfg or {}).get("proactive_tools_off") or [])
     return sorted(t for t in _PROACTIVE_TOOLS if t in have and t not in off)
 
+def tool_result_cap_of(cfg):
+    """The kin's tool-result cap, the same on every surface: unset means the
+    default 8000, and 0 means no limit. Discord and wake-ups used to read 0
+    as 8000 (`... or 8000`), so the setting meant one thing on the desktop
+    and Telegram and another there (the person, 24 Nov 2026: "unchanged
+    behavior, transparent setting")."""
+    v = (cfg or {}).get("tool_result_cap", 8000)
+    if v is None or v == "":
+        return 8000
+    try:
+        return max(0, int(v))
+    except (TypeError, ValueError):
+        return 8000
+
+
 def load_kin_tools(name):
     """Load the kin's enabled-tools list from
     `~/.hearthkin/kin/<name>/tools.json`. Empty list when the file

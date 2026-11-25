@@ -193,13 +193,14 @@ class ToolSettingsDialog(wx.Dialog):
                 panel, value=cfg.get("tool_result_cap", 8000),
                 min_val=0, max_val=65536, size=(100, -1),
                 on_commit=lambda v: self._save_param("tool_result_cap", v)))
-        # What 0 really does (accuracy audit, 24 Nov 2026): Discord and
-        # wake-ups read 0 as the default 8000.
+        # 0 means no limit on every surface (kin_persistence.
+        # tool_result_cap_of; 24 Nov 2026, Discord and wake-ups used to
+        # read 0 as 8000).
         help("Each tool result (e.g. read_file output) is truncated to this "
              "many characters before the kin sees it. Default 8000 (~2000 "
-             "tokens). Raise for kin reading big files. 0 = no truncation "
-             "on the desktop, in rooms and on Telegram; Discord and wake-ups "
-             "still cut at 8000. The context window still applies.")
+             "tokens). Raise for kin reading big files. 0 = no limit, "
+             "everywhere, including wake-ups and Discord. The context window "
+             "still applies.")
 
         self.max_tool_iter_field = row(
             "&Max tool rounds per reply:",

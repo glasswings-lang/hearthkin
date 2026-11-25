@@ -46,6 +46,12 @@ docs/private/message-accuracy-audit-2026-11-24.md.
   curious.md, the inbox, message_kin or writing to other kin when that kin
   can. The note about narrating a read names only the reading tools the kin
   has.
+- **"0 = no limit" for tool results now means it everywhere.** Discord and
+  wake-ups used to turn 0 into 8000. The default stays 8000, so nothing
+  changes unless you set it. *Why:* the person: "unchanged behavior,
+  transparent setting."
+- **Voice speed slider stops at 120.** ElevenLabs documents speeds 0.7 to
+  1.2; faster could be refused.
 - **Prompt wording made plain.** Ten built-in prompts lost hedges and
   pretty-but-empty lines ("the moment is yours", "a good keeper moves on").
   Versions were bumped, so any you've saved your own copy of will be offered

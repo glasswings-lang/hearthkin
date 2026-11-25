@@ -34,7 +34,7 @@ import re
 import asyncio
 import threading
 
-from kin_persistence import append_failure_log
+from kin_persistence import append_failure_log, tool_result_cap_of
 
 # Cap on image attachments pulled from one message, and per-image size.
 DISCORD_MAX_IMAGES = 4
@@ -2325,7 +2325,7 @@ class DiscordBot:
                 max_tool_calls=_remote_cap or None,
                 on_content=ed.feed, on_turn=_on_turn,
                 surface=f"{self._surface_label}-tool",
-                tool_result_cap=int(cfg.get("tool_result_cap", 8000) or 8000),
+                tool_result_cap=tool_result_cap_of(cfg),
                 max_iterations=int(cfg.get("max_tool_iterations", 8) or 8),
                 **common)
             text = (result.content or "").strip()
