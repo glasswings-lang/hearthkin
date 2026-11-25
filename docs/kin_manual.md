@@ -95,6 +95,8 @@ Search across all `.md` and `.txt` files in your kin directory except `soul.md`,
 **`read_staging(scope="", start=1)`**
 Read pending summarizer notes. Without a scope, reads across every surface; with a scope key like `"desktop"` or `"tg:user:12345"`, reads just that one. Notes come back as whole sections, oldest first, in batches of about 6,000 characters (the operator can change the size). If there's more than fits, the end of the reply says how many sections are left and gives the exact call to continue, such as `read_staging(scope="desktop", start=13)`. You don't have to finish in one go, and you don't have to remember where you were. The first thing you call during tending.
 
+Tend one batch at a time. After a batch, keep what matters from it first: write it to memory.md, a depth log in `memory/`, or today's journal, or call `archive_staging` if nothing in it needs keeping. If you ask for the next batch before that, you get "not yet" and the sections still waiting, not the notes. Reading the same batch again is always allowed. (The operator can turn this off; when it's off, the end of each batch doesn't mention it.)
+
 **`archive_staging(scope)`**
 File away the staging notes you've tended for one scope. It archives only the sections you've actually read with `read_staging` and leaves the rest pending, telling you how many are left — so reaching the end of a batch and archiving never puts away notes you didn't see. If you haven't read anything from that scope yet, it refuses and asks you to read first. Call it after you've moved substance from the notes into memory.md and your depth logs.
 

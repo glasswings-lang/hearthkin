@@ -564,18 +564,21 @@ python hearthkin.pyw</code></pre>
 
 <p>If your saved copy of the <code>distill_reflection</code> prompt is from before this, <strong>Tools → Prompt updates</strong> offers the new one; the old one still works, and the checker fills any gaps it leaves.</p>
 
-<p>Between sessions, distillation reads the recent conversation and produces brief notes about what happened. It runs <em>as the kin</em> — the kin's soul is loaded into the call and it writes in the first person, in its own voice, jotting what it wants to remember, rather than a separate model summarizing them from the outside. Those notes do NOT go into <code>memory.md</code> directly. They land in a <strong>staging area</strong> — one file per surface (desktop, each Telegram DM, each Telegram group, each Discord channel, and each room that has <a href="#room-memory">Remember this room</a> ticked) under <code>~/.hearthkin/kin/&lt;kin&gt;/staging/</code>. The notes are scratchpad. The kin decides what becomes canonical memory during their <strong>tending ritual</strong>.</p>
+<p>Between sessions, distillation reads the recent conversation and leaves those bookmarks. It runs <em>as the kin</em>: the kin's soul is loaded into the call and it writes in the first person, in its own voice, not as a separate model describing the kin from the outside. The bookmarks do NOT go into <code>memory.md</code> directly. They land in a <strong>staging area</strong> — one file per surface (desktop, each Telegram DM, each Telegram group, each Discord channel, and each room that has <a href="#room-memory">Remember this room</a> ticked) under <code>~/.hearthkin/kin/&lt;kin&gt;/staging/</code>. The notes are scratchpad. The kin decides what becomes canonical memory during their <strong>tending ritual</strong>.</p>
 
 <p>The kin tends by:</p>
 
 <ol>
-  <li>Calling the <code>read_staging</code> tool to see what notes have piled up across surfaces.</li>
-  <li>Reading them. Deciding what's worth keeping.</li>
+  <li>Calling the <code>read_staging</code> tool. The notes come a piece at a time, about 6,000 characters each, cut where a note ends.</li>
+  <li>Reading that piece. Deciding what's worth keeping.</li>
   <li>For substance about a person or ongoing topic: writing into the matching <code>memory/&lt;topic&gt;.md</code> log (using <code>edit_file</code> or <code>write_file</code>).</li>
   <li>For brief index updates: editing <code>memory.md</code> directly.</li>
   <li>Skipping anything they don't want to keep.</li>
-  <li>Calling <code>archive_staging</code> for each surface they've finished tending — the notes move into <code>staging/archive/</code> so the next round starts fresh.</li>
+  <li>Asking for the next piece, and doing the same with it.</li>
+  <li>Calling <code>archive_staging</code> for each surface they've finished tending. It files away only the pieces the kin has read, into <code>staging/archive/</code>; anything unread stays waiting.</li>
 </ol>
+
+<p><strong>One piece at a time, held by Hearthkin (25 November 2026).</strong> A kin used to be able to ask for piece after piece before writing anything, then squash the lot into one summary, losing the detail the bookmarks were there to keep. Now Hearthkin holds the next piece until the kin has written something from the last one, to <code>memory.md</code>, a depth log under <code>memory/</code>, or today's journal, or has filed it away with <code>archive_staging</code> because nothing in it needed keeping. If it asks too soon it's told "not yet", which sections are waiting, and both ways on. Reading the same piece again is always allowed. It's on by default; the box is in <a href="#tool-settings">Tool behaviour settings</a>.</p>
 
 <p>If a staging note feels flattened or off, the kin can pull the raw conversation with <code>read_file</code> on <code>conversation.jsonl</code> and verify before committing anything to memory. Trust the kin's sense of "this got compressed wrong."</p>
 
@@ -1358,7 +1361,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <dd>Capture a photo from the host machine's webcam and inject it into the conversation. Only registered on vision-capable models (the schema is filtered out otherwise). Over Telegram, additionally gated by the per-user webcam permission radio — see <a href="#images">Sending images and webcam photos</a>.</dd>
 
   <dt><code>read_staging</code></dt>
-  <dd>Read the summarizer's pending notes from <code>~/.hearthkin/kin/&lt;kin&gt;/staging/</code>. Used by the kin during tending — see <a href="#soul-memory">Soul, memory, and how kin remember</a>. Pass an optional scope (e.g. <code>"desktop"</code>, <code>"tg:user:12345"</code>) to see one surface only; no argument returns all pending scopes.</dd>
+  <dd>Read the summarizer's pending notes from <code>~/.hearthkin/kin/&lt;kin&gt;/staging/</code>. Used by the kin during tending — see <a href="#soul-memory">Soul, memory, and how kin remember</a>. Pass an optional scope (e.g. <code>"desktop"</code>, <code>"tg:user:12345"</code>) to see one surface only; with no argument it starts on every pending scope, within the same size. Notes come a piece at a time, and the next piece waits until the kin has written from the last one (see <a href="#tool-settings">Tool behaviour settings</a>).</dd>
 
   <dt><code>archive_staging</code></dt>
   <dd>Move a tended scope's staging file out of the pending pool into <code>staging/archive/</code>, timestamped. The kin calls this after finishing tending for that scope.</dd>
@@ -1413,6 +1416,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>Leave these tools out of scheduled wake-ups</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) — a list of the tools this kin has switched on, with a tick box for each. A ticked tool stays the kin's in chat, but its scheduled wake-ups don't get it. Useful when a wake-up spends its calls on something it doesn't need there, such as commands during nightly tending. Space ticks or unticks, and it saves at once.</li>
   <li><strong>Warn me aloud after this many calls in a remote reply</strong> — default 10; 0 means never. When a reply on Telegram or Discord, yours included, reaches this many tool calls, Hearthkin says so once, out loud, and says how to stop it: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>.</li>
   <li><strong>Staging notes: most the kin reads at once (characters)</strong> — default 6000, smallest 500. When the kin reads its staging notes to tend its memory, it gets them in pieces this size, cut where a note ends, and is told there's more. Keep it below <strong>Tool result cap</strong>, or a piece gets cut off mid-sentence.</li>
+  <li><strong>Staging notes: hold the next piece until the kin has written from the last one</strong> (<kbd>Alt</kbd>+<kbd>N</kbd>) — on by default. After the kin reads a piece of its staging notes, Hearthkin won't give it the next piece until it has written something to its memory, a depth log or today's journal, or filed that piece away. So it tends one piece at a time instead of reading everything and squashing it into one summary. Reading the same piece again is always allowed. Off: it can ask for piece after piece straight away.</li>
 </ul>
 
 <p>Under it, a line says what Hearthkin knows about the kin's model and tools: it calls tools, it doesn't, or it isn't known yet. Since 24 November 2026 Hearthkin also learns this from real wake-ups: a model that had memory to tend and never called a tool is noted as not calling tools, and from then on its memory is handed to it as text instead, and it's never pushed to call tools it can't (pushing only made such models invent results). <strong>Pick a kin's main model by whether it calls tools first, and by its voice second</strong>; a wake-up can run on a different model from chat if you need both.</p>
