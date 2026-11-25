@@ -1331,6 +1331,11 @@ DEFAULT_AGENT_CONFIG = {
     # Characters, and the key says so, for the same reason as
     # memory_log_index_max_chars: a bare number is not actionable.
     "staging_read_max_chars": 6000,
+    # The next batch of staging notes waits until the kin has kept something
+    # from the last one (25 Nov 2026). A kin was reading batch after batch
+    # before writing anything, then squashing the lot into one summary; the
+    # person had asked it not to, and asking didn't hold.
+    "staging_keep_between_batches": True,
     "memory_log_index_max_chars": 1500,
     # How many CHARACTERS of the KIN-WRITTEN part of memory.md may ride
     # along in the system prompt before the kin is asked to prune it. The
@@ -3713,11 +3718,119 @@ def clear_staging_read_mark(name, scope):
         data = _json.loads(_read_text_tolerant(p) or "{}") or {}
         data.pop(scope, None)
         atomic_write_text(p, _json.dumps(data, indent=2))
+        _clear_staging_batch_given(name, scope)
         return True
     except Exception as e:
         append_failure_log(
             "save_failures.log", name, f"clear_staging_read_mark({scope})", e)
         return False
+
+
+# --- One batch at a time (25 Nov 2026) --------------------------------------
+# A kin could ask for staging batch after batch in one go, then write one
+# squashed summary of the lot. Hearthkin now remembers the last NEW batch it
+# handed over (when, and which sections), and holds the next one until the
+# kin has written to memory.md or anything under memory/ (depth logs, the
+# journal) since then, or archived. Re-reading sections already shown is
+# never held.
+
+def _staging_given_path(name):
+    return staging_dir(name) / ".batch_given.json"
+
+
+def _load_staging_given(name):
+    import json as _json
+    try:
+        p = _staging_given_path(name)
+        if not p.exists():
+            return {}
+        data = _json.loads(_read_text_tolerant(p) or "{}")
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def staging_batch_given(name, scope):
+    """{"at": epoch seconds, "from": n, "to": n} for the last new batch of
+    this scope, or None."""
+    entry = _load_staging_given(name).get(scope)
+    if not isinstance(entry, dict):
+        return None
+    try:
+        return {"at": float(entry["at"]), "from": int(entry["from"]),
+                "to": int(entry["to"])}
+    except Exception:
+        return None
+
+
+def note_staging_batch_given(name, scope, shown_from, shown_to):
+    import json as _json
+    try:
+        data = _load_staging_given(name)
+        data[scope] = {"at": time.time(), "from": int(shown_from),
+                       "to": int(shown_to)}
+        atomic_write_text(_staging_given_path(name), _json.dumps(data, indent=2))
+        return True
+    except Exception as e:
+        append_failure_log(
+            "save_failures.log", name, f"note_staging_batch_given({scope})", e)
+        return False
+
+
+def _clear_staging_batch_given(name, scope):
+    import json as _json
+    try:
+        data = _load_staging_given(name)
+        if scope in data:
+            data.pop(scope, None)
+            atomic_write_text(_staging_given_path(name),
+                              _json.dumps(data, indent=2))
+    except Exception as e:
+        append_failure_log(
+            "save_failures.log", name, f"_clear_staging_batch_given({scope})", e)
+
+
+def kin_kept_since(name, since):
+    """True when the kin has written to memory.md, or to any file under
+    memory/ (depth logs, the journal), at or after `since`."""
+    base = agent_dir(name)
+    try:
+        mem = base / "memory.md"
+        if mem.exists() and mem.stat().st_mtime >= since:
+            return True
+        logs = base / "memory"
+        if logs.is_dir():
+            for root, _dirs, files in os.walk(logs):
+                for f in files:
+                    try:
+                        if os.path.getmtime(os.path.join(root, f)) >= since:
+                            return True
+                    except OSError:
+                        continue
+    except Exception:
+        return False
+    return False
+
+
+def staging_keep_between_batches(name):
+    try:
+        cfg = load_agent_config(name) or {}
+        return bool(cfg.get("staging_keep_between_batches", True))
+    except Exception:
+        return True
+
+
+def staging_batch_held(name, scope, shown_to):
+    """None when a batch reaching section `shown_to` may be handed over;
+    otherwise (from, to), the sections handed over last and not yet kept."""
+    if not staging_keep_between_batches(name):
+        return None
+    last = staging_batch_given(name, scope)
+    if not last or shown_to <= last["to"]:
+        return None
+    if kin_kept_since(name, last["at"]):
+        return None
+    return (last["from"], last["to"])
 
 
 def archive_staging_prefix(name, scope, count):
@@ -4414,7 +4527,9 @@ DEFAULT_COMPACT_REQUEST = (
     "things are between you and {user} right now. Say how you feel about "
     "where things are, plainly, and anything the next you needs that wasn't "
     "said out loud. Write it for the you who will read it next, with no "
-    "memory of this conversation. Just the note; no tools.]"
+    "memory of this conversation. Write it in full sentences, the way you "
+    "talk to your person, not shorthand or abbreviations: the next you reads "
+    "this note first and picks up its style. Just the note; no tools.]"
 )
 # Kin-led compaction (24 Nov 2026, from an outside review: the kin compacts
 # itself when its conversation is full, after updating its own memory, in its
@@ -5460,7 +5575,9 @@ APP_PROMPT_REGISTRY = {
     "compact_request": {
         "default": DEFAULT_COMPACT_REQUEST,
         # 2 (24 Nov 2026): asks how the kin feels and what went unsaid.
-        "version": 2,
+        # 3 (25 Nov 2026): full sentences, no shorthand. The person saw a
+        # clipped note's shorthand carry into the whole next stretch.
+        "version": 3,
         "placeholders": ["{user}"],
         "title": "Compacting: asking the kin for its note",
         "desc": "Sent when you choose Chat, Compact this conversation. The "

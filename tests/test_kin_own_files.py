@@ -67,6 +67,9 @@ check("now.md is not sent every turn",
 ask = K.compact_request_text(KIN, "Sam")
 check("the request names the person", "Sam" in ask)
 check("the request shows the last now.md", "chapter four" in ask)
+# 25 Nov 2026: a clipped note's shorthand carried into the next stretch.
+check("the request asks for full sentences, not shorthand",
+      "full sentences" in ask and "not shorthand" in ask)
 (kdir / "now.md").unlink()
 check("no now.md, nothing extra",
       "now.md" not in K.compact_request_text(KIN, "Sam"))

@@ -6,6 +6,21 @@ wants to know what's different, without reading code. Every change gets a
 line here the day it's made (CLAUDE.md says so). The technical record is
 [`CHANGELOG.md`](../CHANGELOG.md); the code history is git.
 
+## 25 November 2026, early morning (Claude, with the maintainer)
+
+- **Staging notes, one piece at a time.** A kin was reading batch after
+  batch of its staging notes before writing anything, then squashing the
+  lot into one summary, after being asked not to. Now Hearthkin holds the
+  next batch until the kin has written something from the last one (to
+  memory.md, a depth log, or today's journal) or filed it away. Reading the
+  same batch again is always allowed. It's on by default; the box is in the
+  kin's tool settings, under the staging batch size.
+- **Compaction notes in full sentences.** A compaction note written in
+  shorthand taught the whole next stretch to talk in shorthand, because it's
+  the first thing the kin reads afterwards. The request now asks for full
+  sentences, the way the kin talks to its person. A saved copy is offered
+  the update.
+
 ## 24 November 2026, afternoon (Claude, with the maintainer)
 
 The theme: every message should be true in the moment it's shown. The

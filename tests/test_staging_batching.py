@@ -114,6 +114,32 @@ check("the budget is respected", len(first) < 2000 + 900)
 mark = kp.staging_read_mark(KIN, SCOPE)
 check("reading advanced the mark", 0 < mark < 40)
 
+# --- one batch at a time (25 Nov 2026) -------------------------------------
+# A kin read batch after batch before writing anything, then squashed the
+# lot into one summary. The person: "You can't batch that shit."
+check("the first batch tells the kin to keep what matters before more",
+      "Keep what matters from these first" in first
+      and "only after that" in first)
+held = read_staging(scope=SCOPE, start=mark + 1, agent_name=KIN)
+check("asking for the next batch without writing anything is held",
+      "not yet" in held and f"note number {mark:02d}" not in held)
+check("...and the reply names the sections and both ways on",
+      f"sections 1-{mark}" in held and "memory.md" in held
+      and "archive_staging" in held)
+check("...and the mark didn't move", kp.staging_read_mark(KIN, SCOPE) == mark)
+again = read_staging(scope=SCOPE, start=1, agent_name=KIN)
+check("reading the same batch again is still allowed",
+      "note number 00" in again and "not yet" not in again)
+check("asking with no scope doesn't get round it",
+      "not yet" in read_staging(agent_name=KIN)
+      or f"note number {mark:02d}" not in read_staging(agent_name=KIN))
+
+import time as _t  # noqa: E402
+_t.sleep(0.05)
+(kp.agent_dir(KIN) / "memory").mkdir(parents=True, exist_ok=True)
+(kp.agent_dir(KIN) / "memory" / "walks.md").write_text(
+    "kept from the first batch\n", encoding="utf-8")
+
 second = read_staging(scope=SCOPE, start=mark + 1, agent_name=KIN)
 check("continuing from the mark returns later sections",
       f"note number {mark:02d}" in second)
@@ -214,6 +240,44 @@ read_staging(scope=SCOPE, start=1, agent_name=KIN)
 check("...and reading from the start still moves the mark",
       kp.staging_read_mark(KIN, SCOPE) > 0)
 
+
+# --- one batch at a time: the other ways on, and the setting -------------
+kp.staging_file_path(KIN, SCOPE).write_text(body, encoding="utf-8")
+kp.clear_staging_read_mark(KIN, SCOPE)
+read_staging(scope=SCOPE, agent_name=KIN)
+m = kp.staging_read_mark(KIN, SCOPE)
+_t.sleep(0.05)
+jdir = kp.agent_dir(KIN) / "memory" / "journal"
+jdir.mkdir(parents=True, exist_ok=True)
+(jdir / "2026-11-25.md").write_text("a line in today's journal\n", encoding="utf-8")
+check("writing in today's journal counts as keeping",
+      "not yet" not in read_staging(scope=SCOPE, start=m + 1, agent_name=KIN))
+
+kp.clear_staging_read_mark(KIN, SCOPE)
+kp.staging_file_path(KIN, SCOPE).write_text(body, encoding="utf-8")
+read_staging(scope=SCOPE, agent_name=KIN)
+m = kp.staging_read_mark(KIN, SCOPE)
+archive_staging(scope=SCOPE, agent_name=KIN)
+check("filing the batch away counts too: the next batch comes",
+      "not yet" not in read_staging(scope=SCOPE, start=1, agent_name=KIN))
+
+cfg = kp.load_agent_config(KIN)
+cfg["staging_keep_between_batches"] = False
+kp.save_agent_config(KIN, cfg)
+kp.clear_staging_read_mark(KIN, SCOPE)
+kp.staging_file_path(KIN, SCOPE).write_text(body, encoding="utf-8")
+off1 = read_staging(scope=SCOPE, agent_name=KIN)
+m = kp.staging_read_mark(KIN, SCOPE)
+off2 = read_staging(scope=SCOPE, start=m + 1, agent_name=KIN)
+check("with the setting off, the next batch comes straight away",
+      "not yet" not in off2 and f"note number {m:02d}" in off2)
+check("...and the reply doesn't claim a hold that isn't there",
+      "only after that" not in off1 and "keep going" in off1)
+check("the setting is on the kin's tool settings screen",
+      "staging_keep_between_batches" in
+      (ROOT / "dialogs" / "tool_settings.py").read_text(encoding="utf-8"))
+check("...and on by default",
+      kp.DEFAULT_AGENT_CONFIG.get("staging_keep_between_batches") is True)
 
 print()
 if _fails:

@@ -269,6 +269,27 @@ class ToolSettingsDialog(wx.Dialog):
              "or a piece gets cut off mid-sentence. Default 6000; the "
              "smallest is 500.")
 
+        # 25 Nov 2026: a kin read batch after batch before writing anything.
+        self.staging_keep_check = wx.CheckBox(
+            panel,
+            label="Staging notes: hold the &next piece until the kin has "
+                  "written from the last one")
+        self.staging_keep_check.SetValue(
+            bool(cfg.get("staging_keep_between_batches", True)))
+        self.staging_keep_check.Bind(
+            wx.EVT_CHECKBOX,
+            lambda e: self._save_param("staging_keep_between_batches",
+                                       e.IsChecked()))
+        sizer.Add(self.staging_keep_check,
+                  flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
+        help("ON (default): after the kin reads a piece of its staging notes, "
+             "Hearthkin won't give it the next piece until it has written "
+             "something to its memory, a depth log or today's journal, or "
+             "filed that piece away. So it tends one piece at a time instead "
+             "of reading everything and squashing it into one summary. "
+             "Reading the same piece again is always allowed. OFF: it can "
+             "ask for piece after piece straight away.")
+
         # Tools left out of scheduled wake-ups only (cron_tools_off). Added
         # 15 Nov 2026 after a kin's tending wake-ups spent every call on exec
         # searches it never needed, while exec was still wanted in chat.
