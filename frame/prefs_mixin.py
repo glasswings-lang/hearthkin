@@ -24,7 +24,8 @@ class PrefsMixin:
         intro = wx.TextCtrl(
             parent,
             value=("These are app-wide settings. For per-kin settings — model, "
-                   "temperature, soul, memory, Telegram — see the Kin tab."),
+                   "temperature, soul, memory, Telegram — use the Kin "
+                   "settings button next to the kin list."),
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP | wx.TE_NO_VSCROLL,
         )
         intro.SetName("What these preferences cover")
@@ -324,8 +325,9 @@ class PrefsMixin:
                 "kin can tell who the human is, same way they see each "
                 "other tagged with [KinName]. This is what the kin will "
                 "call you. Leave blank to send room messages without a "
-                "name tag. Only used in rooms (1-on-1 chat doesn't need "
-                "it; the kin already knows who they're talking to)."
+                "name tag. It's also used in notes Hearthkin writes to "
+                "your kin (compaction, a model change), and to label your "
+                "messages in the chat."
             ),
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP | wx.TE_NO_VSCROLL,
         )
@@ -748,7 +750,13 @@ class PrefsMixin:
             ok, err = llm_backend.pull_ollama_model(
                 model, progress_cb=progress, host=embed_host)
             if ok:
-                msg = f"{model} downloaded — semantic memory search is ready."
+                # "ready" only when it's switched on (accuracy audit,
+                # 24 Nov 2026).
+                on = bool(self.config.get("semantic_memory"))
+                msg = (f"{model} downloaded — semantic memory search is ready."
+                       if on else
+                       f"{model} downloaded. Turn on semantic memory search "
+                       f"to use it.")
             else:
                 msg = f"Download failed: {err}"
             wx.CallAfter(self._set_status, msg)

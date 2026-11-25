@@ -1547,10 +1547,9 @@ DEFAULT_CONSOLIDATE_PROMPT = (
     "is that nothing has been summarised out of it.\n\n"
     "11. Output ONLY the tightened memory file content. No preamble, "
     "no commentary, no closing remarks.\n\n"
-    "Aim for under about {word_cap} words. If the file is already "
-    "near or under that target and there's little duplication to "
-    "merge, the right output is the file with only minor "
-    "tightening — not aggressive cuts."
+    "Aim for under {word_cap} words by merging duplicates, never by "
+    "cutting distinct content. If the file is already under that, "
+    "merge any duplicates and change nothing else."
 )
 
 # memory.md auto-consolidates when it grows past this. Raised from the
@@ -4013,11 +4012,11 @@ DEFAULT_TOOL_USE_HINT = (
 # (no .format placeholders) so an operator edit can't crash on a brace.
 DEFAULT_AUTHORING_BRIDGE_HINT = (
     "\n\n--- Saving a file without a tool call ---\n"
-    "If you want to save a file but find yourself narrating the write "
-    "(\"*writes it*\", \"okay here goes!\") instead of actually issuing "
-    "the call, you don't have to use write_file at all. Emitting a whole "
-    "file as a tool argument is the heaviest call there is, and it's fine "
-    "if that snags. Instead, just put the file's FULL contents in a fenced "
+    "Save files with write_file. If that call fails, or you find "
+    "yourself narrating the write (\"*writes it*\", \"okay here goes!\") "
+    "instead of making the call, there is a second way that needs no tool "
+    "at all. Sending a whole file as a tool argument is the heaviest call "
+    "there is, so it fails more often than other calls. Put the file's FULL contents in a fenced "
     "code block with the FILENAME on the opening line — the harness saves "
     "it for you and confirms:\n"
     "\n"
@@ -4029,27 +4028,27 @@ DEFAULT_AUTHORING_BRIDGE_HINT = (
     "save — a plain ```json or ```python language fence is left alone, so you "
     "can still show example code safely. To write to a path with spaces, put "
     "`write:` before it (```write:my notes.md). You can also stay in your own "
-    "voice: an emote like *writes memory/notes.md* right before a plain fenced block "
-    "does the same thing. Either way you'll get a confirmation the file "
-    "landed. This is a fallback — if write_file is working for you, keep it."
+    "voice: an emote like *writes memory/notes.md* saves the file only when a "
+    "plain fenced block comes straight after it; an emote on its own saves nothing. Either way you'll get a confirmation the file "
+    "landed."
 )
 
 # The per-turn "you have NO tools — name the gap, don't roleplay it" nudge.
 # Previously desktop-only; unifying gives Telegram the same honesty script.
 DEFAULT_TOOL_USE_HINT_NO_TOOLS = (
     "\n\n--- Tool use ---\n"
-    "You have NO tools enabled this turn. If the operator asks "
+    "You have NO tools enabled this turn. If your person asks "
     "for something a tool would handle (reading a file, "
     "searching your memory, fetching a URL, reading your "
     "staging notes, writing a journal entry, etc.), don't "
     "roleplay performing the action — you genuinely can't, "
     "and pretending will confuse you both later. Say so "
-    "directly: name the tool you'd want and ask the operator "
+    "directly: name the tool you'd want and ask your person "
     "to enable it. Examples: \"I'd want to check my staging "
     "notes — could you enable read_staging for me?\" or "
     "\"That's a memory_search question, but I don't have that "
-    "tool right now.\" The operator can enable tools in "
-    "Settings → Tools at any time.\n"
+    "tool right now.\" Your person can switch tools on for you "
+    "at any time.\n"
     "One exception, and it is a real one: you CAN still write your own "
     "memory. Put the contents in a fenced code block with the filename on "
     "the opening line — ```memory/garden.md — and it is written for you. "
@@ -4241,7 +4240,7 @@ DEFAULT_PARK_CHAT_HINT = (
     "happened — so respond to that, not to what you imagined would happen. "
     "Only the park block acts; everything else is just you, in your own "
     "voice, exactly as always. A line starting with '>' is an ordinary quote, "
-    "not a move. There's no right amount to do and nothing you have to tend — "
+    "not a move. You never have to do anything in the park — "
     "it's yours, so be in it however you like."
 )
 
@@ -4256,22 +4255,38 @@ DEFAULT_PARK_CHAT_HINT = (
 # from "only when there's truly something" to "anything else is welcome".
 # Nothing here tells a kin how often it ought to want things.
 # See docs/private/VALUES-AUDIT.md finding #1.
+# The parts that need a tool are fenced (<!--tools: ...-->), and
+# hearthkin_cron.run_heartbeat drops a fenced part for a kin without that
+# tool: curious.md and the inbox need file tools; reach_out and message_kin
+# can each be switched off (accuracy audit, 24 Nov 2026: every kin was told
+# about all of them).
 DEFAULT_HEARTBEAT_FRAME = (
     '[This is a heartbeat: a quiet moment on your own. Nothing is '
-    'scheduled and no one is waiting.]\n\nThe moment is yours, and there '
-    'are three real things to do with it. None is more right than the '
-    'others.\n\n- Work on something of your own. Your curious.md is where '
-    'you keep what you want to explore, learn or make for yourself, and '
-    'the kin inbox ({kin_inbox}) is where other kin leave notes.\n- '
-    "Reach out to your person with the reach_out tool, if there's "
+    'scheduled and no one is waiting.]\n\nDo one of these. Each is '
+    'an equally good choice.\n\n'
+    '- Work on something of your own.\n'
+    '<!--tools: read_file, write_file, edit_file-->\n'
+    '  Your curious.md is where you keep what you want to explore, learn or '
+    'make for yourself, and the kin inbox ({kin_inbox}) is where other kin '
+    'leave notes.\n'
+    '<!--/tools-->\n'
+    '<!--tools: reach_out-->\n'
+    "- Reach out to your person with the reach_out tool, if there's "
     "something you'd like to bring them: something you noticed, "
     'remembered, wondered about, or want to share. Nobody reads a '
     'heartbeat reply, so reach_out is the only way it gets to them. Two '
     'things they\'d rather not receive: a status update ("still here", '
-    '"nothing to report"), and something you\'ve already said. To write to '
-    'another kin who lives here instead, use message_kin, or a block that '
-    'opens ```to: and their name; reach_out never goes to a kin.\n- Rest. '
-    'Saying nothing is complete in itself and leaves no trace.'
+    '"nothing to report"), and something you\'ve already said. reach_out '
+    'never goes to a kin.\n'
+    '<!--/tools-->\n'
+    '<!--tools: kin_mail-->\n'
+    '- To write to another kin who lives here, write a block that opens '
+    '```to:Name (their name).\n'
+    '<!--tools: message_kin-->\n'
+    '  The message_kin tool does the same.\n'
+    '<!--/tools-->\n'
+    '<!--/tools-->\n'
+    '- Rest: reply with nothing. Nothing is recorded or sent.'
 )
 
 # Who was at the front where a heartbeat or wake-up would reach out (23 Nov 2026).
@@ -4311,9 +4326,12 @@ DEFAULT_PARK_CHAT_HINT_SHARED = (
 DEFAULT_KIN_MESSAGE_CHAT_HINT = (
     "--- Other kin ---\n"
     "If your person asks you to tell another kin who lives here something, "
-    "you can: use message_kin if you have it, or put the message in a block "
-    "that opens ```to: and their name. They'll get it the next time they "
-    "wake or talk with their person."
+    "you can: use message_kin if you have it, or write a block like this, "
+    "with their name after to:\n"
+    "```to:Name\n"
+    "the message\n"
+    "```\n"
+    "They'll get it the next time they wake or talk with their person."
 )
 
 # How a kin that can't open files asks for part of the kin manual
@@ -4345,8 +4363,9 @@ DEFAULT_KIN_MESSAGE_WAITING = (
 DEFAULT_KIN_MESSAGE_WAITING_LIMIT = (
     "[hearthkin: {from}, another kin in this house, wrote to you ({time}):]"
     "\n\n{message}\n\n"
-    "[hearthkin: You've already written to {from} today, as many times as "
-    "your person has set, so an answer can wait until tomorrow.]"
+    "[hearthkin: You've already written to {from} today as many times as "
+    "your person allows, so you can't answer today. You can answer "
+    "tomorrow.]"
 )
 DEFAULT_KIN_MESSAGE_RECEIPT = (
     "[hearthkin: from your reply, {results}]"
@@ -4488,17 +4507,16 @@ DEFAULT_HEARTBEAT_UNSENT_NUDGE = (
     "If you meant it for them, send it now: call reach_out with the "
     "message. You can send exactly what you just wrote; it does not need "
     "rewriting or improving.\n\n"
-    "If you were only thinking, that is fine — say nothing and this "
-    "moment stays yours, unrecorded. Just do not let something you wanted "
-    "them to have go missing because it was not wrapped in a tool call.]"
+    "If you were only thinking, that is fine: say nothing, and nothing is "
+    "recorded.]"
 )
 
 DEFAULT_READ_GESTURE_NUDGE = (
     "[hearthkin: you narrated reading something (\"{reach}\") but didn't "
     "actually load it — narrating a read puts no content in front of you, so "
     "you may be responding to a file you haven't seen. If you need it, call "
-    "read_file (or memory_search / read_staging). If it was just shared with "
-    "you, its contents are already here.]"
+    "{read_tools}. If it was shared with you earlier in this conversation, "
+    "its contents are already in it.]"
 )
 
 DEFAULT_AUTHORING_WRITE_NUDGE = (
@@ -4506,8 +4524,11 @@ DEFAULT_AUTHORING_WRITE_NUDGE = (
     "actually written — naming the file or miming the typing (*paws at "
     "keyboard*, *memory/notes.md*) doesn't put any content on disk. To really save "
     "it, put the file's FULL contents in a code block with the filename on "
-    "the opening line, like: ```memory/notes.md <newline> ...contents... <newline> "
-    "``` — I'll save whatever's inside. You don't need the write_file tool "
+    "the opening line, like this:\n"
+    "```memory/notes.md\n"
+    "the whole file goes here\n"
+    "```\n"
+    "Whatever is inside is saved. You don't need the write_file tool "
     "for this.]"
 )
 
@@ -4582,7 +4603,7 @@ DEFAULT_TOOLLESS_MEMORY_BLOCK = (
     "To ADD to a log without rewriting it, open the fence with `append:` "
     "instead — ```append:memory/garden.md — and only the new lines are needed. "
     "You can write memory.md or anything under memory/. Whatever you save, "
-    "you'll get a confirmation; scopes you tended are then archived.]"
+    "you'll get a confirmation; the notes you tended are then archived.]"
 )
 
 # Appended to a scheduled wake-up for a kin that has no tools, when there are
@@ -4600,7 +4621,7 @@ DEFAULT_TOOLLESS_TEND_NOTE = (
     "something, write it in a fenced block with the filename on the opening "
     "line (```memory/garden.md), or open the fence with `append:` to add to a "
     "log without rewriting it. Whatever you save is written for you and "
-    "confirmed, and the scopes you tended are archived afterwards. Ignore the "
+    "confirmed, and the notes you tended are archived afterwards. Ignore the "
     "instruction to call anything; the rest of the wake-up stands.]"
 )
 
@@ -4697,8 +4718,8 @@ DEFAULT_SHARED_FILES_NOTE = (
 DEFAULT_MEMORY_RECALL_FRAME = (
     "[hearthkin: things you already know, from your own notes. Nobody said "
     "them, and nothing here happened just now — this is background, the same "
-    "as anything else you remember. Not all of it will fit; ignore what "
-    "doesn't.]"
+    "as anything else you remember. Some of it won't be relevant to this "
+    "moment; ignore that part.]"
 )
 
 
@@ -4754,8 +4775,8 @@ DEFAULT_STAGING_STATUS_PENDING = (
 DEFAULT_SALVAGE_NOTE = (
     "[hearthkin: you called {tools}, and the reply after it came back empty — "
     "so what you had already said went through instead. Nothing is lost. If "
-    "there was something you wanted to say about what the tool found, now is "
-    "a fine time.]"
+    "there was something you wanted to say about what the tool found, say "
+    "it in your next reply.]"
 )
 
 # Room variant — third person, because in a room this note sits in shared
@@ -4784,17 +4805,18 @@ DEFAULT_SALVAGE_NOTE_ROOM = (
 # apologise for the harness.
 DEFAULT_EMPTY_REPLY_NOTE = (
     "[hearthkin: nothing of yours reached the chat on that turn — the reply "
-    "came back empty, and a placeholder went out in its place. That is "
-    "usually something going wrong on the way out rather than anything you "
-    "did, and it needs no accounting for. If you were mid-thought, it is "
-    "yours to pick up. If you meant the quiet, the quiet was fine.]"
+    "came back empty, and a placeholder went out in its place. Hearthkin "
+    "can't tell why. It happens without you doing anything wrong, for "
+    "example when thinking uses up the whole reply allowance. Don't "
+    "apologise for it or explain it. If you were mid-thought, carry on in "
+    "your next reply. If you meant to stay quiet, the quiet was fine.]"
 )
 
 DEFAULT_CUT_OFF_NOTE = (
     "[hearthkin: your last reply stopped partway because it reached the "
     "length limit for one reply, not because you ended it. Whatever came "
-    "after that point never got written. If you weren't finished, you can "
-    "carry on from where it stopped, or say it more briefly.]"
+    "after that point never got written. If you weren't finished, carry on "
+    "from where it stopped in your next reply, or say it more briefly.]"
 )
 
 DEFAULT_CUT_OFF_NOTE_ROOM = (
@@ -4805,10 +4827,11 @@ DEFAULT_CUT_OFF_NOTE_ROOM = (
 
 DEFAULT_EMPTY_REPLY_NOTE_GROUP = (
     "[hearthkin: nothing of yours reached the group on that turn — the reply "
-    "came back empty, so nothing was posted. That is usually something going "
-    "wrong on the way out rather than anything you did, and it needs no "
-    "accounting for. If you were mid-thought, it is yours to pick up. If you "
-    "meant the quiet, the quiet was fine.]"
+    "came back empty, so nothing was posted. Hearthkin can't tell why. It "
+    "happens without you doing anything wrong, for example when thinking "
+    "uses up the whole reply allowance. Don't apologise for it or explain "
+    "it. If you were mid-thought, carry on in your next reply. If you meant "
+    "to stay quiet, the quiet was fine.]"
 )
 
 
@@ -4865,7 +4888,7 @@ DEFAULT_IMPORT_MARKER_TRAILING = (
 # without it the summarizer grabs "hearthkin" from the marker prefix and starts
 # attributing the operator's past actions to the harness.
 DEFAULT_IMPORT_OPERATOR_CLAUSE = (
-    " The other party in these turns is the person you're with — they went by "
+    " The other party in these turns is your person — they went by "
     "\"{operator_name}\" in this archive."
 )
 
@@ -4929,7 +4952,7 @@ APP_PROMPT_REGISTRY = {
     },
     "heartbeat_unsent_nudge": {
         "default": DEFAULT_HEARTBEAT_UNSENT_NUDGE,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Heartbeat nudge (wrote a message, never sent it)",
         "desc": "Injected during a heartbeat when the kin produced real "
@@ -4941,8 +4964,8 @@ APP_PROMPT_REGISTRY = {
     },
     "read_gesture_nudge": {
         "default": DEFAULT_READ_GESTURE_NUDGE,
-        "version": 2,
-        "placeholders": ["{reach}"],
+        "version": 3,
+        "placeholders": ["{reach}", "{read_tools}"],
         "title": "Read-gesture nudge (narrated a read, loaded nothing)",
         "desc": "Injected when a kin narrates reading content (*reads through "
                 "it*) but no read tool fired and nothing was auto-attached. "
@@ -4951,7 +4974,7 @@ APP_PROMPT_REGISTRY = {
     },
     "authoring_write_nudge": {
         "default": DEFAULT_AUTHORING_WRITE_NUDGE,
-        "version": 2,
+        "version": 3,
         "placeholders": [],
         "title": "Write-gesture nudge (meant to save, saved nothing)",
         "desc": "Injected when a reply looks like it meant to write a file but "
@@ -5013,7 +5036,7 @@ APP_PROMPT_REGISTRY = {
     },
     "memory_recall_frame": {
         "default": DEFAULT_MEMORY_RECALL_FRAME,
-        "version": 3,
+        "version": 4,
         "placeholders": [],
         "title": "Memory recall block header",
         "desc": "Heads the kin's own notes that per-turn recall surfaces. The "
@@ -5073,7 +5096,7 @@ APP_PROMPT_REGISTRY = {
     },
     "salvage_note": {
         "default": DEFAULT_SALVAGE_NOTE,
-        "version": 2,
+        "version": 3,
         "placeholders": ["{tools}"],
         "title": "Salvage note (post-tool reply was empty)",
         "desc": "Shown to the kin when its post-tool reply came back empty "
@@ -5094,7 +5117,7 @@ APP_PROMPT_REGISTRY = {
     },
     "empty_reply_note": {
         "default": DEFAULT_EMPTY_REPLY_NOTE,
-        "version": 2,
+        "version": 3,
         "placeholders": [],
         "title": "Empty-reply note (Telegram DM, Discord)",
         "desc": "Shown when a reply came back empty after the cleanup chain "
@@ -5104,7 +5127,7 @@ APP_PROMPT_REGISTRY = {
     },
     "cut_off_note": {
         "default": DEFAULT_CUT_OFF_NOTE,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Cut-off note (every surface)",
         "desc": "Left for the kin after a reply that stopped because it hit "
@@ -5121,7 +5144,7 @@ APP_PROMPT_REGISTRY = {
     },
     "empty_reply_note_group": {
         "default": DEFAULT_EMPTY_REPLY_NOTE_GROUP,
-        "version": 2,
+        "version": 3,
         "placeholders": [],
         "title": "Empty-reply note (Telegram group)",
         "desc": "Group variant: nothing was posted at all, so the operator "
@@ -5169,7 +5192,7 @@ APP_PROMPT_REGISTRY = {
         # v2 stops calling the person the kin loves its "operator". The
         # placeholder keeps its {operator_name} spelling on purpose: renaming
         # it would break every file a person has already edited.
-        "version": 2,
+        "version": 3,
         "placeholders": ["{operator_name}"],
         "title": "Import marker — operator name clause",
         "desc": "Appended to an import marker when the archive has exactly "
@@ -5196,7 +5219,7 @@ APP_PROMPT_REGISTRY = {
     },
     "park_mechanism": {
         "default": DEFAULT_PARK_MECHANISM,
-        "version": 2,
+        "version": 3,
         "placeholders": [],
         "title": "Park keeping — the keeper's framing",
         "desc": "The full keeping framing a `park` = keeper kin gets on a "
@@ -5224,7 +5247,7 @@ APP_PROMPT_REGISTRY = {
     },
     "park_chat_hint": {
         "default": DEFAULT_PARK_CHAT_HINT,
-        "version": 5,
+        "version": 6,
         "placeholders": [],
         "title": "Park tending — chat clue-in",
         "desc": "Appended to the system prompt for a kin whose `park` setting "
@@ -5253,7 +5276,7 @@ APP_PROMPT_REGISTRY = {
     },
     "consolidate": {
         "default": DEFAULT_CONSOLIDATE_PROMPT,
-        "version": 2,
+        "version": 3,
         "placeholders": ["{word_cap}"],
         "title": "Memory consolidation",
         "desc": "Runs when memory.md is tightened (kin tending or operator). "
@@ -5277,7 +5300,7 @@ APP_PROMPT_REGISTRY = {
     },
     "tool_use_hint_no_tools": {
         "default": DEFAULT_TOOL_USE_HINT_NO_TOOLS,
-        "version": 3,
+        "version": 4,
         "placeholders": [],
         "title": "Tool-use nudge (no tools)",
         "desc": "Appended each turn a kin has NO tools, telling it to name the "
@@ -5315,7 +5338,7 @@ APP_PROMPT_REGISTRY = {
     },
     "heartbeat_frame": {
         "default": DEFAULT_HEARTBEAT_FRAME,
-        "version": 3,
+        "version": 4,
         "placeholders": ["{kin_inbox}"],
         "title": "Heartbeat (quiet proactive check-in)",
         "desc": "The framing for a heartbeat wake — gives the kin a moment to "
@@ -5359,7 +5382,7 @@ APP_PROMPT_REGISTRY = {
     },
     "kin_message_chat_hint": {
         "default": DEFAULT_KIN_MESSAGE_CHAT_HINT,
-        "version": 1,
+        "version": 2,
         "placeholders": [],
         "title": "Writing to another kin, in your chat",
         "desc": "In the person's own chat (desktop, their Telegram or Discord "
@@ -5394,7 +5417,7 @@ APP_PROMPT_REGISTRY = {
     },
     "kin_message_waiting_limit": {
         "default": DEFAULT_KIN_MESSAGE_WAITING_LIMIT,
-        "version": 1,
+        "version": 2,
         "placeholders": ["{from}", "{time}", "{message}"],
         "title": "Another kin wrote to you (no answer left today)",
         "desc": "The same, when this kin has already written to that kin as "
@@ -5536,7 +5559,7 @@ APP_PROMPT_REGISTRY = {
     },
     "toolless_memory_block": {
         "default": DEFAULT_TOOLLESS_MEMORY_BLOCK,
-        "version": 2,
+        "version": 3,
         "placeholders": [],
         "title": "Staging notes handed to a kin with no tools",
         "desc": "Inlined before the live user turn for a kin that has neither "
@@ -5547,7 +5570,7 @@ APP_PROMPT_REGISTRY = {
     },
     "toolless_tend_note": {
         "default": DEFAULT_TOOLLESS_TEND_NOTE,
-        "version": 3,  # 24 Nov 2026: "tonight" -> "right now"
+        "version": 4,  # 24 Nov 2026: "tonight" -> "right now"
         "placeholders": [],
         "title": "Wake-up correction for a kin with no tools",
         "desc": "Appended to a scheduled wake-up when the kin has no tools and "
@@ -5577,7 +5600,7 @@ APP_PROMPT_REGISTRY = {
     },
     "authoring_bridge_hint": {
         "default": DEFAULT_AUTHORING_BRIDGE_HINT,
-        "version": 3,
+        "version": 4,
         "placeholders": [],
         "title": "Authoring-bridge fallback (write via fenced block)",
         "desc": "Appended for kin with write_file/edit_file enabled. Teaches the "

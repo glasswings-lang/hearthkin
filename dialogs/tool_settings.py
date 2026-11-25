@@ -90,8 +90,10 @@ class ToolSettingsDialog(wx.Dialog):
         help("Affects REMOTE surfaces only (Telegram, Discord) — never changes "
              "how exec behaves in the desktop chat. OFF (default): a command "
              "that arrives over Telegram/Discord asks for your OK first — in "
-             "the Telegram chat, or a desktop dialog for Discord — even when "
-             "the kin's trust level is Trusted or Full. ON: a Trusted or Full "
+             "the Telegram chat if that person is marked This is me, "
+             "otherwise in a window on this computer — even when the kin's "
+             "trust level is Trusted or Full. A person's own Commands "
+             "setting (Edit person) overrides this box. ON: a Trusted or Full "
              "kin runs remote commands with no prompt, exactly like it already "
              "does on the desktop. Either way the denylist (rm -rf /, drive "
              "wipes, force-push to main) is ALWAYS enforced. Turn this ON when "
@@ -191,10 +193,13 @@ class ToolSettingsDialog(wx.Dialog):
                 panel, value=cfg.get("tool_result_cap", 8000),
                 min_val=0, max_val=65536, size=(100, -1),
                 on_commit=lambda v: self._save_param("tool_result_cap", v)))
+        # What 0 really does (accuracy audit, 24 Nov 2026): Discord and
+        # wake-ups read 0 as the default 8000.
         help("Each tool result (e.g. read_file output) is truncated to this "
              "many characters before the kin sees it. Default 8000 (~2000 "
-             "tokens). Raise for kin reading big files; 0 = no truncation "
-             "here (num_ctx still applies downstream).")
+             "tokens). Raise for kin reading big files. 0 = no truncation "
+             "on the desktop, in rooms and on Telegram; Discord and wake-ups "
+             "still cut at 8000. The context window still applies.")
 
         self.max_tool_iter_field = row(
             "&Max tool rounds per reply:",

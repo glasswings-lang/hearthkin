@@ -1155,10 +1155,12 @@ def maybe_kin_led_compaction(kin, cfg):
     max_ctx = max(2048, int(cfg.get("num_ctx", 8192) or 8192) - 2000)
     # 1. The memory pass, with tools.
     schemas, executor, safe = _load_cron_tools(kin, model)
+    memory_pass = False
     if schemas and not _tools_known_dead(model):
         ask = load_app_prompt("kin_compaction_memory_pass", kin).replace(
             "{pct}", str(min(pct, 100)))
         msgs = _build_messages(kin, ask, enabled_tools=safe)
+        memory_pass = True
         _cron_tool_loop(
             model, msgs, tools=schemas, tool_executor=executor,
             options=options, max_context_tokens=max_ctx, kin_name=kin,
@@ -1189,9 +1191,14 @@ def maybe_kin_led_compaction(kin, cfg):
                               kin=kin), source="wake-up")
     append_agent_conversation_turn(kin, row, raise_on_failure=True)
     save_now_note(kin, note)
-    return ("Kin-led compaction: the conversation was %d%% full; %s kept what "
-            "mattered, wrote its note, and compacted it. Nothing was deleted."
-            % (pct, kin))
+    # Says the memory pass happened only when it did (accuracy audit, 24 Nov
+    # 2026: "kept what mattered" was said even when the pass was skipped for
+    # a kin with no tools, or a model on record as not calling them).
+    return ("Kin-led compaction: the conversation was %d%% full; %s %swrote "
+            "its note, and the conversation was compacted. Nothing was "
+            "deleted."
+            % (pct, kin, "had a memory pass with its tools, " if memory_pass
+               else ""))
 
 
 def _after_wake_compaction(kin, cfg, time_label):
@@ -2155,6 +2162,24 @@ def run_heartbeat(kin, cfg, should_stop=None):
     if not schemas:
         _log_heartbeat(kin, "skipped=no-tools")
         return False
+    # The heartbeat names curious.md and the kin inbox only to a kin that
+    # can open or write files (its <!--tools:--> fence), as the base prompt
+    # does (accuracy audit, 24 Nov 2026: "When these settings are going on,
+    # print this message").
+    try:
+        from kin_persistence import apply_tool_fences
+        # "kin_mail" isn't a tool: it stands for "may write to other kin
+        # today at all" (its per-day setting above 0), for the ```to: line.
+        _fence = list(names)
+        try:
+            import kin_mail
+            if kin_mail.per_day(kin) > 0:
+                _fence.append("kin_mail")
+        except Exception:
+            _fence.append("kin_mail")
+        framed = apply_tool_fences(framed, _fence)
+    except Exception:
+        pass
     # Carry only the recent tail. See _build_messages: a heartbeat was
     # loading the kin's whole conversation -- 22,000 tokens, ~280 seconds of
     # prefill -- to ask one question whose usual answer is "no thanks". It was

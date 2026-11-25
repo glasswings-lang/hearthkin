@@ -237,8 +237,8 @@ class InputAttachMixin:
         else:
             tip = (
                 "This kin's model doesn't support image input. "
-                "Change to a vision-capable model in Settings → "
-                "Model && generation to enable."
+                "Change to a vision-capable model in Kin settings, "
+                "Model and generation tab, to enable."
             )
             self.attach_btn.SetToolTip(tip)
             if hasattr(self, "take_photo_btn"):

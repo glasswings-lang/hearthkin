@@ -80,18 +80,18 @@ def golden_tool_use_hint(tool_names):
 
 GOLDEN_TOOL_USE_HINT_NO_TOOLS = (
     "\n\n--- Tool use ---\n"
-    "You have NO tools enabled this turn. If the operator asks "
+    "You have NO tools enabled this turn. If your person asks "
     "for something a tool would handle (reading a file, "
     "searching your memory, fetching a URL, reading your "
     "staging notes, writing a journal entry, etc.), don't "
     "roleplay performing the action — you genuinely can't, "
     "and pretending will confuse you both later. Say so "
-    "directly: name the tool you'd want and ask the operator "
+    "directly: name the tool you'd want and ask your person "
     "to enable it. Examples: \"I'd want to check my staging "
     "notes — could you enable read_staging for me?\" or "
     "\"That's a memory_search question, but I don't have that "
-    "tool right now.\" The operator can enable tools in "
-    "Settings → Tools at any time.\n"
+    "tool right now.\" Your person can switch tools on for you "
+    "at any time.\n"
     # v2 (no-tools memory): the paragraph above used to end here, telling the
     # kin flatly that it could not write. That stopped being true when
     # toolless_memory.py gave it the fenced-block path, and a kin told it
@@ -508,7 +508,7 @@ _RL = _RECALL.lower()
 check("recall frame: notes are the kin's own", "your own notes" in _RL)
 check("recall frame: not spoken by anyone (impersonation guard)",
       "nobody said them" in _RL)
-check("recall frame: kin may disregard", "ignore what doesn't" in _RL)
+check("recall frame: kin may disregard", "ignore that part" in _RL)
 # v3's whole point. v1 and v2 both announced an arrival ("surfaced
 # automatically for this moment"), and a kin told something just arrived says
 # something arrived -- six times out of six in sampling, describing "a glowing
@@ -597,10 +597,12 @@ for _slug in ("empty_reply_note", "empty_reply_note_group"):
     # ...and must not ask the kin to make good for it. Most empty replies are
     # not the kin's doing -- a reasoning model spending the whole reply
     # allowance on thinking produces one, and no kin chose or can see that.
-    check(f"{_slug}: says it is probably not the kin's doing",
-          "rather than anything you did" in _t)
+    # v3 (24 Nov 2026): says Hearthkin can't tell why, rather than guessing
+    # a cause, and names one real cause that is no fault of the kin's.
+    check(f"{_slug}: says it is not the kin's fault, without guessing why",
+          "can't tell why" in _t and "without you doing anything wrong" in _t)
     check(f"{_slug}: asks for no accounting",
-          "no accounting for" in _t
+          "don't apologise for it or explain it" in _t
           and "acknowledge the gap" not in _t)
     # v1 quoted the placeholder back at the kin -- a string that calls it a
     # model and reports it as absent, handed over as what its person saw
@@ -639,7 +641,7 @@ _GOLD_LEADING = (
     "[hearthkin: imported 247 turns from a Telegram DM, 09-2021 to 03-2024. "
     "This is your own history, carried over. The turns that are yours are "
     "yours — your voice and your phrasing, not an approximation of it. The "
-    "other party in these turns is the person you're with — they went by "
+    "other party in these turns is your person — they went by "
     "\"SpeakerFifteen\" in this archive.]"
 )
 _GOLD_HAND = (

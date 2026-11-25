@@ -91,7 +91,8 @@ check("...and you're told what was heard first",
 b = tg_bot()
 b._handle_update(voice_update("BAD"))
 check("...a voice message that can't be made out is explained, not dropped",
-      b.normal == [] and b.sent and "couldn't make out" in b.sent[-1])
+      b.normal == [] and b.sent and "couldn't turn that voice message into "
+      "words" in b.sent[-1])
 
 b = tg_bot(transcribe=None)
 b._handle_update(voice_update())
@@ -285,7 +286,8 @@ check("...and you're told what was heard first",
 d, ch = dc_bot(), _Chan()
 run(d, _Msg(ch, b"bad"))
 check("...one that can't be made out is explained, not dropped",
-      d.generated == [] and "couldn't make out" in ch.sent[-1])
+      d.generated == [] and "couldn't turn that voice message into words"
+      in ch.sent[-1])
 
 d, ch = dc_bot(), _Chan()
 heard_calls.clear()

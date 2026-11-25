@@ -158,7 +158,7 @@ def exec(
         "\n[backed up first, in case you need them back: "
         + ", ".join(_saved[:10])
         + (f" and {len(_saved) - 10} more" if len(_saved) > 10 else "")
-        + ". Copies are in your backups/files folder.]"
+        + ". Copies are in your backups folder.]"
     ) if _saved else ""
 
     if background:

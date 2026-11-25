@@ -96,7 +96,11 @@ def kill_background_process(agent_name, pid):
     try:
         proc.kill()
     except Exception:
-        pass
+        # Couldn't stop it: keep tracking it, and don't say "killed"
+        # (accuracy audit, 24 Nov 2026).
+        with _PROCESSES_LOCK:
+            _PROCESSES.setdefault(agent_name, {})[pid] = info
+        return "kill-failed"
     return "killed"
 
 

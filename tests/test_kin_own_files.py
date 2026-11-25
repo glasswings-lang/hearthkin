@@ -102,10 +102,24 @@ check("a kin with no tools isn't told about files it can't write",
 # --- heartbeat
 hb = K.DEFAULT_HEARTBEAT_FRAME
 check("the heartbeat offers own work, reaching out and rest",
-      "something of your own" in hb and "reach_out" in hb and "Rest." in hb)
+      "something of your own" in hb and "reach_out" in hb and "Rest:" in hb)
 check("the heartbeat points to curious.md and the inbox",
       "curious.md" in hb and "{kin_inbox}" in hb)
 check("the heartbeat no longer says 'operator'", "operator" not in hb)
+# 24 Nov 2026 (accuracy audit): each part that needs a tool is shown only to
+# a kin that has it.
+_bare = K.apply_tool_fences(hb, ["reach_out"])
+check("a kin with no file tools isn't told about curious.md or the inbox",
+      "curious.md" not in _bare and "{kin_inbox}" not in _bare)
+check("...nor about message_kin or the to: block when it can't use them",
+      "message_kin" not in _bare and "```to:" not in _bare)
+_full = K.apply_tool_fences(hb, ["reach_out", "read_file", "message_kin",
+                                 "kin_mail"])
+check("a kin with them is told all of it",
+      "curious.md" in _full and "message_kin" in _full and "```to:" in _full)
+check("the heartbeat applies the fences with the kin's real tools",
+      "apply_tool_fences(framed" in open(
+          os.path.join(HERE, "hearthkin_cron.py"), encoding="utf-8").read())
 check("{kin_inbox} is declared for the editing screen",
       "{kin_inbox}" in K.APP_PROMPT_REGISTRY["heartbeat_frame"]["placeholders"])
 cron = open(os.path.join(HERE, "hearthkin_cron.py"), encoding="utf-8").read()

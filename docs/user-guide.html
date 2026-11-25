@@ -1305,7 +1305,7 @@ Willow would end up with 1200 turns in all.</code></pre>
 <p>Smaller models sometimes try to impersonate other kin or invent characters when they see a bracketed-name transcript format. Hearthkin defends against this with a stop sequence in every room call, post-stream cleanup that removes leaked name tags, and explicit rules in the system prompt. You don't have to do anything about this; it's automatic.</p>
 
 <div class="note">
-  <p><strong>Different models in a room:</strong> if the room's kin don't all use the same model, Hearthkin adds a note to the room when you load it: <em>"Note: members use different models"</em>, with the models named, and then why turns may pause. Kin on Ollama make it swap models in and out of memory, which takes a few seconds per change. Kin on an online service wait on the network. A room with both gets both. If every kin uses the same model, there's no note and no swapping.</p>
+  <p><strong>Different models in a room:</strong> kin in one room can use different models. When you load a room where two or more kin use different models on the same Ollama machine, Hearthkin gives you a heads-up naming them and the machine: if that machine can't hold those models at once, Ollama loads each one before its kin's turn, so those turns start more slowly. Kin on an online service, or on different Ollama machines, don't wait on each other, so they never get the heads-up.</p>
 </div>
 
 <h2 id="tools">Tools</h2>

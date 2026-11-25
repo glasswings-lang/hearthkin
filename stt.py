@@ -878,10 +878,13 @@ def self_check(settings=None, get_api_key=None):
             f"offline. It handled a second of audio in {elapsed:.1f} seconds."
         )
         if where and where[0] != "cuda":
-            msg += (
-                " That is the processor rather than a graphics card, which "
-                "is normal and quite fast enough to dictate with."
-            )
+            # "fast enough" only when the measurement says so (accuracy
+            # audit, 24 Nov 2026: it was said whatever the time was).
+            msg += (" That is the processor rather than a graphics card"
+                    + (", which is quick enough to dictate with."
+                       if elapsed <= 1.0 else
+                       ". It's slower than real time here, so a long "
+                       "message takes a while to come back."))
         if load_secs is not None:
             msg += (
                 f" Getting the model ready took another {load_secs:.0f} "

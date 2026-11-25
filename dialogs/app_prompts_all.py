@@ -148,7 +148,8 @@ class AllAppPromptsDialog(wx.Dialog):
                 "Hearthkin's built-in text (it does not save until you press "
                 "OK). Any {curly_brace} slots are filled in at send time; keep "
                 "them where you want those values to appear.\n\n"
-                "A single kin can override this in its own Settings → Prompts."
+                "A single kin can override this in its own Kin settings, "
+                "Prompts tab."
             ),
         )
         try:

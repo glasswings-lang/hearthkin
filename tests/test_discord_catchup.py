@@ -370,7 +370,7 @@ async def scenario_busy():
     try:
         await b._on_message(_Client(), _Msg("one", ch))
         await b._on_message(_Client(), _Msg("two", ch))
-        n_busy = sum("in the queue" in s for s in ch.sent)
+        n_busy = sum("same Ollama" in s for s in ch.sent)
         label[0] = ""
         await b._on_message(_Client(), _Msg("three", ch))
         label[0] = "Bracken is running a scheduled wake-up"
@@ -382,10 +382,12 @@ async def scenario_busy():
 
 n_busy, sent = drive(scenario_busy())
 check("Discord says when a message waits behind background work",
-      any(s.startswith("Bracken is writing a memory note.") for s in sent))
+      any(s.startswith("Bracken is writing a memory note, on the same "
+                       "Ollama") for s in sent))
 check("...once per busy stretch, not per message", n_busy == 1)
 check("...and again in the next busy stretch",
-      any(s.startswith("Bracken is running a scheduled wake-up.") for s in sent))
+      any(s.startswith("Bracken is running a scheduled wake-up, on the same "
+                       "Ollama") for s in sent))
 
 
 # --- 3. reading back its own tool steps --------------------------------

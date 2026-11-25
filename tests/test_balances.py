@@ -106,7 +106,7 @@ def test_every_service_gets_a_line():
     check("ollama found under any name, with its own key",
           (balances.OLLAMA_BALANCE_URL, "k2") in seen)
     check("a service with no check says so, not silence",
-          "doesn't offer a balance check" in lines[1])
+          "Hearthkin has no balance check" in lines[1])
 
 
 def test_failures_read_as_sentences():
@@ -164,12 +164,13 @@ def test_amounts_and_warnings():
     check("above the line: nothing said", msgs == [] and w == {})
     msgs, w = balances.low_warnings(at(0.84), 1.0, w)
     check("below the line: said once, with the amount",
-          msgs == ["Ollama is down to $0.84. Replies stop when it runs out."])
+          msgs == ["Ollama is down to $0.84. Replies from its paid models "
+                   "stop when it runs out."])
     msgs, w = balances.low_warnings(at(0.60), 1.0, w)
     check("still low half an hour later: not said again", msgs == [])
     msgs, w = balances.low_warnings(at(0.0), 1.0, w)
     check("running out is a new level, so it is said",
-          len(msgs) == 1 and "out of credit" in msgs[0])
+          len(msgs) == 1 and "no credit left" in msgs[0])
     msgs, w = balances.low_warnings(at(0.0), 1.0, w)
     check("still out: not said again", msgs == [])
     msgs, w = balances.low_warnings(at(None), 1.0, w)
@@ -255,7 +256,8 @@ def test_frame_watch():
     s = Stand()
     s._on_balance_results([{"label": "Ollama", "left": 0.5}])
     check("a low balance is said aloud on the Activity line",
-          s.said == [("Ollama is down to $0.50. Replies stop when it runs out.", True)])
+          s.said == [("Ollama is down to $0.50. Replies from its paid models "
+                      "stop when it runs out.", True)])
     check("...and the check is marked finished", s._balance_checking is False)
     s._on_balance_results([{"label": "Ollama", "left": 0.5}])
     check("the next check stays quiet", len(s.said) == 1)

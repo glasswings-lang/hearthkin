@@ -210,8 +210,9 @@ class CronEntryDialog(wx.Dialog):
                 "Tick specific places to send this scheduled message exactly "
                 "there — a Telegram group, a Telegram or Discord DM, a "
                 "Discord channel. Leave everything unticked to "
-                "keep the old behavior (it goes to whoever has 'mirror to "
-                "Telegram' turned on). 'Desktop only' records it in the kin's "
+                "keep the old behavior (it goes to everyone who has 'Mirror "
+                "desktop messages' on, on Telegram or Discord). 'Desktop "
+                "only' records it in the kin's "
                 "chat and journal and sends it nowhere outward."
             ),
         )
@@ -392,8 +393,9 @@ class CronEntryDialog(wx.Dialog):
             )
             return
         # Overlap warning. An enabled entry firing at the same minute as
-        # another kin's enabled cron will queue behind it on the shared GPU
-        # and can time out. Warn once (naming who), then let the user keep it
+        # another kin's enabled cron can queue behind it if both use the same
+        # Ollama, and time out. (Until 24 Nov 2026 this said "the kin share one
+        # GPU" as fact; Hearthkin can't know where a kin's model runs.) Warn once (naming who), then let the user keep it
         # if they mean to. Disabled entries never fire, so skip the check.
         if self.enabled_check.GetValue():
             # Check every fire-time; collect which times clash with whom.
@@ -414,10 +416,11 @@ class CronEntryDialog(wx.Dialog):
                     for t, ks in sorted(clashes_by_time.items())
                 ]
                 msg = (
-                    "Heads up — " + "; ".join(bits) + ". On this machine the "
-                    "kin share one GPU, so they take turns and the later one "
-                    "can time out. Change the times above, or press OK again "
-                    "to keep them anyway."
+                    "Heads up — " + "; ".join(bits) + ". If these kin use "
+                    "the same Ollama, one waits for the other and can time "
+                    "out. Kin on an online provider don't wait for each "
+                    "other. Change the times above, or press OK again to "
+                    "keep them anyway."
                 )
                 self.overlap_warning.SetValue(msg)
                 if not self.overlap_warning.IsShown():

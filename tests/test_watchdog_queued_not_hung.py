@@ -157,14 +157,18 @@ f = _Frame(_distilling={"Bracken": object()})
 line = f._compose_in_flight_status()
 check("a queued turn says what it is waiting on",
       "Bracken is saving notes to its memory" in line)
-check("...and says the message is not lost, which is the actual worry",
-      "queued" in line and "nothing is lost" in line.lower())
+# 24 Nov 2026 (accuracy audit): "queued… nothing is lost" was a promise the
+# code can't keep (Ollama may run both; Hearthkin may close). Now: "may wait".
+check("...and says the reply may be waiting for it, not that it's queued",
+      "may be waiting" in line and "nothing is lost" not in line.lower())
 check("...instead of the bare generic waiting line",
-      "Cold starts and big prefills" not in line)
+      "no reply text yet" in line.lower() and "If nothing arrives" not in line)
 
 f = _Frame()
-check("with nothing of ours running, the ordinary wait line is unchanged",
-      "Cold starts and big prefills" in f._compose_in_flight_status())
+_plain = f._compose_in_flight_status()
+check("with nothing of ours running, the wait line says only what's known",
+      "no reply text yet" in _plain and "loading" not in _plain
+      and "prefill" not in _plain)
 
 f = _Frame(_distilling={"Bracken": object()}, _stream_chunks_seen=3)
 check("once the reply is actually arriving, it says so and stops explaining",
@@ -192,7 +196,7 @@ idle = f._compose_default_status()
 check("the idle line warns before a message is even typed",
       "busy: Bracken is saving notes to its memory" in idle)
 check("...and says plainly what sending now would mean",
-      "queue behind it" in idle)
+      "may wait for it" in idle)
 
 f = _IdleFrame()
 check("a quiet app says nothing extra - silence when idle is the feature",
@@ -225,6 +229,44 @@ check("the re-arm reuses the window the turn was given, so the room path "
       "_stream_watchdog_minutes" in src[_hold:_real])
 check("a genuine hang is still reported",
       "streaming_hangs.log" in inspect.getsource(ChatStreamMixin))
+
+# 24 Nov 2026 (accuracy audit): a turn busy with tools, or waiting on the
+# person's approval, isn't a hang either.
+from frame.chat_send_mixin import ChatSendMixin  # noqa: E402
+_wd = inspect.getsource(ChatStreamMixin._on_stream_watchdog_fire)
+check("a recent tool step holds the watchdog off",
+      "_stream_last_tool_at" in _wd
+      and "_stream_last_tool_at" in inspect.getsource(
+          ChatSendMixin._on_tool_call_display))
+check("...and so does a command waiting for approval",
+      "_pending_approvals" in _wd)
+check("the hang message gives the real time waited, not the window",
+      "_stream_started_at" in _wd)
+check("...and guesses no cause",
+      "likely slow prefill" not in _wd and "provider hang" not in _wd)
+
+
+# --- only work on the SAME Ollama counts (accuracy audit, 24 Nov 2026) ---
+import kin_persistence as _kp  # noqa: E402
+for _n, _cfg in {
+        "Online": {"model": "openrouter/anthropic/claude-x"},
+        "Local": {"model": "qwen3:8b"},
+        "Local2": {"model": "gemma3:12b"},
+        "Remote": {"model": "qwen3:8b",
+                   "ollama_host_name": "http://192.168.1.50:11434"}}.items():
+    (_kp.agent_dir(_n)).mkdir(parents=True, exist_ok=True)
+    _kp.save_agent_config(_n, {**_kp.DEFAULT_AGENT_CONFIG, **_cfg})
+
+f = _Frame(_distilling={"Local2": object()})
+check("a kin on an online provider is never told it waits on local work",
+      f._own_background_on_the_model(for_kin="Online") == "")
+check("a kin on the same Ollama is told",
+      "Local2" in f._own_background_on_the_model(for_kin="Local"))
+check("a kin on a different Ollama machine is not",
+      f._own_background_on_the_model(for_kin="Remote") == "")
+f = _Frame(_distilling={"Online": object()})
+check("work on an online provider never holds up a local kin",
+      f._own_background_on_the_model(for_kin="Local") == "")
 
 
 print()

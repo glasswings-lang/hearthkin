@@ -403,10 +403,13 @@ class KinMgmtMixin:
                 # silently cloned was the bug this release fixes.
                 reset_items = clone_agent(self.current_agent, new_name)
                 if reset_items is None:
+                    # clone_agent logs nothing, so name the real causes
+                    # (accuracy audit, 24 Nov 2026).
                     wx.MessageBox(
                         f"Couldn't clone '{self.current_agent}' to "
-                        f"'{new_name}' — see the logs folder for "
-                        f"details.",
+                        f"'{new_name}': a kin called '{new_name}' already "
+                        f"exists, or the copy couldn't be finished, so "
+                        f"nothing was made.",
                         "Clone failed",
                         wx.OK | wx.ICON_ERROR,
                     )
@@ -599,8 +602,10 @@ class KinMgmtMixin:
             f"memory, journals, conversation, settings and every copy kept "
             f"of them) moves to the kin-archive folder in your .hearthkin "
             f"folder, and they leave Hearthkin. Nothing is erased: to bring "
-            f"them back, move the folder back into the kin folder; to erase "
-            f"them for good, delete it there yourself.",
+            f"them back, move the folder back into the kin folder and "
+            f"rename it to {self.current_agent} (it's archived with the "
+            f"date added to its name); to erase them for good, delete it "
+            f"there yourself.",
             "Delete kin",
             wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT | wx.ICON_WARNING,
         )
@@ -685,14 +690,23 @@ class KinMgmtMixin:
         has_blocker = any(n.is_blocker() for n in compat_notes)
         dlg = wx.Dialog(self, title="Model change")
 
+        # Memory is written by the chat model only when no separate
+        # distillation model is set (accuracy audit, 24 Nov 2026).
+        _mem_model = str((getattr(self, "agent_cfg", None) or {}).get(
+            "memory_model") or "").strip()
         intro_lines = [
             "Changing this kin's model can change their voice.",
             "",
             f"From: {current or '(none)'}",
             f"To:   {new_clean}",
             "",
+        ] + ([
+            f"Its memory notes are written by {_mem_model}, its separate",
+            "distillation model, so they don't change.",
+        ] if _mem_model else [
             "It also changes who writes this kin's memory. Notes written",
             "before today keep the old model's habits.",
+        ]) + [
             "",
             "Recorded in this kin's model_history.md.",
         ]
@@ -729,7 +743,7 @@ class KinMgmtMixin:
             dlg,
             label=(
                 "&Don't show the voice-change warning again "
-                "(uncheck via Preferences if you want it back)"
+                "(turn it back on in Preferences)"
             ),
         )
         # Phrase the action button to reflect urgency when blockers exist.
@@ -918,13 +932,15 @@ class KinMgmtMixin:
     def _on_swap_probe_failed(self, kin, model, rec):
         """UI-thread report for a model that swapped in and can't call tools."""
         try:
-            nvda_speak("Heads up. %s does not make tool calls. %s has tools "
-                       "enabled and they will not run." % (model, kin))
+            # "when tested just now": it's one test request, not proof
+            # (accuracy audit, 24 Nov 2026).
+            nvda_speak("Heads up. %s didn't make a tool call when tested just "
+                       "now, so %s's tools may not run." % (model, kin))
         except Exception:
             pass
         try:
-            self._set_status("%s does not make tool calls — %s's tools won't run."
-                             % (model, kin))
+            self._set_status("%s didn't make a tool call when tested — %s's "
+                             "tools may not run." % (model, kin))
         except Exception:
             pass
         try:

@@ -39,7 +39,10 @@ class BasePromptDialog(wx.Dialog):
         # NVDA hits it on Tab — explains what this prompt does, where
         # it lives, and the cost shape.
         header_text = (
-            "This prompt prepends every kin's soul.md on every send.\n"
+            # Not "every kin": a kin with its own base prompt ignores this
+            # one (accuracy audit, 24 Nov 2026).
+            "This prompt comes before the soul.md of every kin that "
+            "doesn't have its own base prompt, on every send.\n"
             "Lives at: " + str(BASE_PROMPT_FILE) + "\n"
             "Cost shape: every character here is sent on every turn for "
             "every kin (cached on cache-supporting providers when "
@@ -149,9 +152,9 @@ class BasePromptDialog(wx.Dialog):
                 names = ", ".join(title for (_s, _h, _sh, title) in stale)
                 self.status_field.SetValue(
                     "Heads-up: a newer built-in default shipped for: "
-                    + names + ". Your edited files in ~/.hearthkin/prompts/ "
-                    "are kept as-is; delete a prompt's .md to re-seed its "
-                    "new default (back it up first if you want your wording)."
+                    + names + ". Your own copies are kept as they are. "
+                    "To take the new wording, use Tools, Prompt updates "
+                    "(your old copy is backed up first)."
                 )
         except Exception:
             pass
@@ -192,7 +195,8 @@ class BasePromptDialog(wx.Dialog):
         self._original_text = text
         self.save_btn.Disable()
         self.status_field.SetValue(
-            "Saved. Next send for every kin will use the new prompt."
+            "Saved. The next send for every kin without its own base "
+            "prompt will use it."
         )
         try:
             from audio import nvda_speak

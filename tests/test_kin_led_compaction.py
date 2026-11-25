@@ -80,7 +80,10 @@ check("...then one compaction row is appended, with the note",
 check("...saying the kin did it", "your kin-led compaction is switched on" in rows[-1]["content"])
 check("...and nothing is deleted", rows[:60] == talk or [r["content"] for r in rows[:60]] == [t["content"] for t in talk])
 check("the note becomes now.md", note_text[0] in (d / "now.md").read_text(encoding="utf-8"))
-check("the person gets one line about it", "compacted it" in line and "Nothing was deleted" in line)
+check("the person gets one line about it",
+      "was compacted" in line and "Nothing was deleted" in line)
+check("...which names the memory pass, since it ran (accuracy audit)",
+      "had a memory pass" in line and calls[0][0] == "tools")
 
 calls.clear()
 note_text[0] = ""
@@ -92,9 +95,11 @@ check("no note, no compaction", "nothing was compacted" in line
 calls.clear()
 note_text[0] = "A note."
 hc._tools_known_dead = lambda model: True
-hc.maybe_kin_led_compaction(KIN, cfg)
+line = hc.maybe_kin_led_compaction(KIN, cfg)
 check("a model that doesn't call tools skips the memory pass",
       calls and calls[0][0] == "note")
+check("...and the line doesn't claim one happened",
+      "had a memory pass" not in line and "kept what mattered" not in line)
 
 src = (ROOT / "dialogs" / "edit_kin.py").read_text(encoding="utf-8")
 check("there's a switch for it in Memory settings", '"kin_led_compaction"' in src)

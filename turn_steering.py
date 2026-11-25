@@ -151,6 +151,25 @@ def roleplay_corrective_note(kin, reply, tools, added_turns, *,
         return ""
 
 
+def fill_read_gesture_nudge(kin, reach, tools):
+    """The read_gesture_nudge text with {reach} and {read_tools} filled in.
+
+    {read_tools} names only the reading tools this kin has switched on
+    ("read_file", "read_file or memory_search", ...). Until 24 Nov 2026 the
+    prompt said "read_file (or memory_search / read_staging)" to every kin,
+    then "if you have them": a hedge about something the program knows. The
+    person: "When these settings are going on, print this message." Every
+    surface builds the note here, so they can't drift apart."""
+    have = set(tools or [])
+    names = [t for t in ("read_file", "memory_search", "read_staging")
+             if t in have] or ["read_file"]
+    joined = (names[0] if len(names) == 1
+              else ", ".join(names[:-1]) + " or " + names[-1])
+    return (load_app_prompt("read_gesture_nudge", kin)
+            .replace("{reach}", str(reach[:60]))
+            .replace("{read_tools}", joined))
+
+
 def read_gesture_note(kin, reply, tools, added_turns, *,
                       shared_this_turn=False):
     """A note for a kin that narrated reading CONTENT it never opened, or "".
@@ -170,8 +189,7 @@ def read_gesture_note(kin, reply, tools, added_turns, *,
         reach = reading_bridge.looks_like_read_gesture(reply)
         if not reach:
             return ""
-        return load_app_prompt("read_gesture_nudge", kin).replace(
-            "{reach}", str(reach[:60]))
+        return fill_read_gesture_nudge(kin, reach, tools)
     except Exception:
         return ""
 
@@ -282,9 +300,11 @@ def authoring_bridge_notes(kin, reply, tools, shown_scopes=(), confine=False):
                 f"{os.path.basename(str(p))} ({n} bytes)" for p, n in saved))
         for path, err in failed:
             note_bits.append(f"could NOT save {path!r} — {err}")
-        if failed:
+        # The reason itself: nothing writes it to a log, so "(see logs)"
+        # sent the person nowhere (accuracy audit, 24 Nov 2026).
+        for path, err in failed:
             human_bits.append(
-                f"{len(failed)} file(s) couldn't be saved (see logs)")
+                f"couldn't save {os.path.basename(str(path))} ({err})")
         note = (load_app_prompt("authoring_bridge_result", kin)
                 .replace("{results}", "; ".join(note_bits))
                 if note_bits else None)
@@ -324,8 +344,12 @@ def toolless_memory_notes(kin, reply, tools, shown_scopes=()):
             human_bits.append("saved " + ", ".join(
                 f"{os.path.basename(str(p))} ({n} bytes)" for p, n in saved))
         if failed:
+            # Named, and the kin's note says why; no log holds it
+            # (accuracy audit, 24 Nov 2026).
             human_bits.append(
-                f"{len(failed)} file(s) couldn't be saved (see logs)")
+                "couldn't save " + ", ".join(
+                    os.path.basename(str(p)) for p in failed)
+                + f"; {kin} was told why")
         if archived:
             human_bits.append(f"tended {len(archived)} staging scope(s)")
         return note, ("[no-tools memory] " + "; ".join(human_bits)

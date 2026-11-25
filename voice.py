@@ -137,7 +137,7 @@ class VoiceEngine:
         if not key:
             raise VoiceEngineError(
                 "ElevenLabs API key not set. Add one under "
-                "Tools → Preferences → Connections."
+                "File, Preferences, Connections."
             )
         return key
 
@@ -499,9 +499,11 @@ class VoiceEngine:
         local Whisper: free, offline, no account."""
         wav_bytes, _rate = self._finish_recording()
         if not wav_bytes:
+            # Hearthkin can't tell why nothing arrived (accuracy audit,
+            # 24 Nov 2026: it blamed pressing Stop too early).
             raise VoiceEngineError(
-                "Empty recording — press Stop talking after speaking, "
-                "not before."
+                "Nothing was recorded: no sound reached Hearthkin from the "
+                "microphone."
             )
         try:
             return stt.transcribe(

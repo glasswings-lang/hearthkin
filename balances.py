@@ -112,7 +112,8 @@ def _failure(e):
             return "the key was refused. Check it in Manage providers or Preferences."
         return f"the service answered with an error ({e.code})."
     if isinstance(e, urllib.error.URLError):
-        return "couldn't reach it. Check the internet connection."
+        # The reason, not a guessed cause (accuracy audit, 24 Nov 2026).
+        return f"couldn't reach it ({getattr(e, 'reason', e)})."
     return f"the check failed ({type(e).__name__})."
 
 
@@ -186,8 +187,8 @@ def check_all_detailed(fetch=_fetch_json):
                 left_ollama)
         else:
             results.append({"label": name, "left": None,
-                            "line": f"{name}: this service doesn't offer a balance check. "
-                                    f"Look on its own website."})
+                            "line": f"{name}: Hearthkin has no balance check for "
+                                    f"this service. Look on its own website."})
     return results
 
 
@@ -210,12 +211,14 @@ def low_warnings(results, threshold, warned):
             continue
         if left <= 0.005:
             level = "out"
-            text = (f"{label} is out of credit. Replies from it will fail "
-                    f"until you add more.")
+            # "Paid models": free ones keep answering at no credit
+            # (accuracy audit, 24 Nov 2026).
+            text = (f"{label} has no credit left. Replies from its paid "
+                    f"models will fail until you add more.")
         elif threshold and threshold > 0 and left < threshold:
             level = "low"
             text = (f"{label} is down to {_money(left)}. "
-                    f"Replies stop when it runs out.")
+                    f"Replies from its paid models stop when it runs out.")
         else:
             still.pop(label, None)
             continue

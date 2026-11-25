@@ -192,6 +192,14 @@ check(RE.members_without_auto_distill(["ByCount", "NoTrigger"]) == ["NoTrigger"]
 check(RE.members_without_auto_distill(["Junk"]) == [],
       "an unreadable trigger is skipped, not guessed at (no false warning)")
 
+# 24 Nov 2026 (accuracy audit): off, but copied into each kin's private chat,
+# the room CAN reach memory, so it doesn't say "nothing reaches".
+_shared_off = RE.distill_help_text(False, 30, ["NoTrigger"], [],
+                                   private_sees=True)
+check("nothing said in this room reaches" not in _shared_off
+      and "can reach its memory" in _shared_off,
+      "off with private chats including the room doesn't claim nothing "
+      "reaches memory")
 off = RE.distill_help_text(False, 30, ["NoTrigger"], [])
 check("⚠" not in off and "Off:" in off,
       "the off-state text carries no warning")

@@ -619,10 +619,10 @@ class DiscordBot:
             if not allow and not self._warned_empty_allow:
                 self._warned_empty_allow = True
                 self._status(
-                    "Discord: no allow_from configured, so every message is "
-                    "ignored (deny-by-default for safety). Add Discord user "
-                    "IDs, or \"*\" to allow anyone, in the kin's Discord "
-                    "settings.")
+                    "Discord: nobody is on this kin's list of people who "
+                    "can message it, so a message just now was ignored. "
+                    "Add someone in Kin settings, Discord tab, Add person "
+                    "(a Discord user ID, or * for anyone).")
             # In a direct message, say why and how to be added, as Telegram
             # does (a silent drop leaves the person no way to ask); at most
             # once per person every ten minutes. Never in a channel.
@@ -886,8 +886,8 @@ class DiscordBot:
         try:
             await self._send_chunked(
                 message.channel,
-                f"{label}. Your message is in the queue and will be answered "
-                f"when that finishes, as long as Hearthkin stays open.")
+                f"{label}, on the same Ollama as {self.agent_name}, so your "
+                f"reply may wait until that finishes.")
         except Exception:
             pass
 
@@ -1224,9 +1224,14 @@ class DiscordBot:
                 return
             from kin_persistence import save_now_note
             save_now_note(who, note)
+            # Shared with the desktop: the desktop reads from this note too,
+            # so say so, as /undo and /clear do (accuracy audit, 24 Nov 2026).
             await self._send_chunked(
                 ch, f"Compacted. From now on {who} reads "
-                    f"{compact_sent_words(_keep)} here. Nothing was deleted.")
+                    f"{compact_sent_words(_keep)} here. Nothing was deleted."
+                    + (" This conversation is shared with the desktop, so "
+                       "the desktop reads from this note too." if share
+                       else ""))
             return
         if word not in ("", "again"):
             await self._send_chunked(
@@ -1355,7 +1360,11 @@ class DiscordBot:
                  "This conversation: " + (
                      "shared with the Hearthkin desktop" if share
                      else "kept on Discord only"),
-                 "Messages stored here (not all are sent each time): "
+                 # What the count is: the history the kin reads from here
+                 # (after any compaction, with the desktop's rows when
+                 # shared), not "stored here" (accuracy audit, 24 Nov 2026).
+                 f"Messages {self.agent_name} reads from in this "
+                 f"conversation: "
                  f"{len(self._channel_history(message.channel.id, share))}"]
         try:
             import llm_backend
@@ -1363,7 +1372,9 @@ class DiscordBot:
         except Exception:
             real = None
         if real:
-            lines.append(f"Last send used {real} tokens of context")
+            lines.append(f"{self.agent_name}'s last send anywhere (here, the "
+                         f"desktop or another chat) used {real} tokens of "
+                         f"context")
         return "\n".join(lines)
 
     async def _handle_command(self, message, name, arg):
@@ -1427,18 +1438,25 @@ class DiscordBot:
                     "To go ahead, send: /clear confirm")
                 return
             try:
-                self._clear_channel(ch.id, share)
+                gone = self._clear_channel(ch.id, share)
             except Exception:
                 await self._send_chunked(
                     ch,
                     "Couldn't clear: a copy couldn't be kept first, so "
                     "nothing was taken away.")
                 return
+            if not gone:
+                # Nothing went, so no copy was made (audit, 24 Nov 2026).
+                await self._send_chunked(
+                    ch, "There was nothing here to clear.")
+                return
             await self._send_chunked(
                 ch,
-                f"Cleared. {self.agent_name} won't remember anything said "
-                "here before this. A copy is kept on the computer. Its "
-                "memory is untouched.")
+                f"Cleared. This conversation starts fresh from here; "
+                f"{self.agent_name}'s memory and journals are untouched, so "
+                f"it still knows what it saved there. A copy is kept on the "
+                f"computer, in {self.agent_name}'s backups, in the cleared "
+                f"folder.")
         elif name == "compact":
             await self._cmd_compact(message, arg, share)
         elif name in ("regen", "regenerate", "retry"):
@@ -1457,6 +1475,15 @@ class DiscordBot:
             self._cut_from_last_user(ch.id, share)
             # The reply is written fresh, as if the message had just come in.
             await self._generate_in_turn(message, words, [], [])
+            # Anything said mid-reply that the reply never got to, answered
+            # now, as after any other reply: the "Got it" promise covers
+            # /regen too (accuracy audit, 24 Nov 2026: it waited for the
+            # person's next message).
+            leftovers = self._take_leftovers(ch.id)
+            while leftovers:
+                await self._generate_in_turn(
+                    message, "\n\n".join(leftovers), [], [])
+                leftovers = self._take_leftovers(ch.id)
 
     def _generate(self, message, content, image_paths=None, text_docs=None):
         """BLOCKING — runs in the executor, never on the event loop.
@@ -1889,9 +1916,24 @@ class DiscordBot:
                 return ""
 
         if not text:
-            # Stopped before a single word arrived. Nothing to show and
-            # nothing to store — but say so, or the stop looks like a crash.
-            self._post_sync(channel, "[stopped before anything was written]")
+            # Stopped before the final reply. Any tool steps the kin finished,
+            # and anything the person said mid-reply, are still kept, as on
+            # Telegram (24 Nov 2026: this returned without storing them, while
+            # the stop message said "Keeping what was written so far").
+            _kept = 0
+            for _turn in added_turns:
+                if not isinstance(_turn, dict):
+                    continue
+                if _turn.get("role") in ("assistant", "tool"):
+                    self._persist_tool_turn(channel_id, _turn, share)
+                    _kept += 1
+                elif _turn.get("role") == "user" and _turn.get("interjected"):
+                    self._persist_person_row(channel_id, _turn, share)
+            self._post_sync(
+                channel,
+                "[stopped before the reply was written; the steps it had "
+                "finished are kept]" if _kept else
+                "[stopped before anything was written]")
             return ""
 
         # Write the cleaned reply into the streamed message. If that edit
@@ -2494,9 +2536,11 @@ class DiscordBot:
         except Exception as e:
             append_failure_log("discord_failures.log", self.agent_name,
                                "voice message", e)
+            # Download, decoder or key failures land here too, not only
+            # unclear audio (accuracy audit, 24 Nov 2026).
             await self._send_chunked(ch, (
-                f"I couldn't make out that voice message ({e}). Please try "
-                "again, or type it."))
+                f"I couldn't turn that voice message into words: {e}. "
+                f"Please type it."))
             return None
         await self._send_chunked(ch, f"🎙 Heard: {heard}")
         return heard
@@ -2556,11 +2600,13 @@ class DiscordBot:
                 # _send_chunked.
                 append_failure_log("discord_failures.log", self.agent_name,
                                    f"send channel={channel.id} piece={i}", e)
+                # Only what's known: this helper sends notices and errors
+                # too, not only the kin's reply, and a timeout may still
+                # deliver (accuracy audit, 24 Nov 2026).
                 try:
                     asyncio.run_coroutine_threadsafe(channel.send(
-                        "(Part of this reply couldn't be sent: Discord "
-                        "refused it. The rest is missing here, though "
-                        f"{self.agent_name} still has the whole of it.)"),
+                        "(Part of this message may not have reached Discord, "
+                        "so the rest could be missing here.)"),
                         self._loop).result(timeout=20)
                 except Exception:
                     pass
@@ -2619,9 +2665,8 @@ class DiscordBot:
                                    f"send channel={channel.id} piece={i}", e)
                 try:
                     await channel.send(
-                        "(Part of this reply couldn't be sent: Discord "
-                        "refused it. The rest is missing here, though "
-                        f"{self.agent_name} still has the whole of it.)")
+                        "(Part of this message couldn't be sent to Discord, "
+                        "so the rest is missing here.)")
                 except Exception:
                     pass
                 return

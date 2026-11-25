@@ -126,7 +126,8 @@ def build_report(path, limit=300):
             add(f"  That is costing about {cold_secs:.0f} seconds of silence")
             add(f"  per turn, against {warm_secs:.0f} seconds when it hits.")
             add("")
-            add("  Most likely cause: too few parallel slots on the machine")
+            # A possible cause, not a known one (accuracy audit, 24 Nov 2026).
+            add("  One possible cause: too few parallel slots on the machine")
             add("  running the model, so each kin's cached context is thrown")
             add("  away by the next kin's turn. Background work counts —")
             add("  heartbeats, scheduled wake-ups and distillation all take a")
@@ -173,7 +174,9 @@ def build_report(path, limit=300):
     # when I was only talking to one kin" answerable: a conversation shares the
     # machine with every heartbeat, scheduled wake-up and distillation run, and
     # each of those evicts somebody's cached context.
-    add("What's been using the machine")
+    # Every call in usage.log, online providers and other machines included
+    # (accuracy audit, 24 Nov 2026: it said "the machine").
+    add("Calls by surface (all models, all machines)")
     counts = {}
     for r in rows:
         counts[r["surface"]] = counts.get(r["surface"], 0) + 1
@@ -186,8 +189,9 @@ def build_report(path, limit=300):
     if background:
         add("")
         add(f"  {background/len(rows):.0%} of all work was background — heartbeats,")
-        add("  scheduled wake-ups and memory distillation. Every one of those")
-        add("  takes a slot, and takes it while you may be waiting.")
+        add("  scheduled wake-ups and memory distillation. On a shared Ollama")
+        add("  machine, each of those takes a slot while you may be waiting;")
+        add("  on an online provider, they don't.")
     add("")
     add("Raw data: logs/usage.log")
     return "\n".join(out)

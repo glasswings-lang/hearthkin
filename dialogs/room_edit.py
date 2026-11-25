@@ -47,7 +47,8 @@ def members_without_auto_distill(members):
     return out
 
 
-def distill_help_text(enabled, turn_count, members, no_trigger):
+def distill_help_text(enabled, turn_count, members, no_trigger,
+                      private_sees=False):
     """The words under the "Remember this room" checkbox.
 
     Pure so it can be tested without building a dialog: `no_trigger` is the
@@ -55,6 +56,17 @@ def distill_help_text(enabled, turn_count, members, no_trigger):
     looked up here.
     """
     if not enabled:
+        # With "private chats include this room" on, what's said here is
+        # copied into each member's own conversation and can reach memory
+        # from there (accuracy audit, 24 Nov 2026: "nothing reaches anyone's
+        # memory" was false then).
+        if private_sees:
+            return (
+                "Off: this room isn't distilled on its own. But \"Each "
+                "kin's private chats include this room\" is on, so what's "
+                "said here is copied into each member's own conversation, "
+                "and can reach its memory from there."
+            )
         return (
             "Off: nothing said in this room reaches anyone's memory. "
             "It stays in the room transcript and nowhere else. Members "
@@ -85,10 +97,11 @@ def distill_help_text(enabled, turn_count, members, no_trigger):
             who = _and_list(no_trigger)
         lines.append(
             f"⚠ {who} distill anything automatically right now — their "
-            "auto-distillation triggers are off (Settings → Memory, per kin), "
-            "so ticking this alone won't make the room reach them. It makes "
-            "the room eligible; to actually fold it in, use Settings → Memory "
-            "→ \"Distill selected surface now\" and pick this room. Turning a "
+            "auto-distillation triggers are off (Kin settings, Memory tab, per "
+            "kin), so ticking this alone won't make the room reach them. It "
+            "makes the room eligible; to actually fold it in, use Kin "
+            "settings, Memory tab, \"Distill selected surface now\" and pick "
+            "this room. Turning a "
             "trigger on instead would also start auto-distilling that kin's "
             "other surfaces, which may not be what you want."
         )
@@ -340,6 +353,9 @@ class RoomEditDialog(wx.Dialog):
                          "said here reaches each member's own conversation, "
                          "marked as said in this room)")
         self.private_sees_check.SetValue(bool(cfg.get("private_sees", False)))
+        # The memory explainer depends on this box too, so keep it true.
+        self.private_sees_check.Bind(
+            wx.EVT_CHECKBOX, lambda e: self._refresh_distill_help())
         self.sees_private_check = wx.CheckBox(
             panel, label="This room &gets each kin's private chats (each "
                          "member here also has its own conversation with "
@@ -397,11 +413,13 @@ class RoomEditDialog(wx.Dialog):
         paragraph the user has to go find isn't much of a choice, and one
         that describes a DIFFERENT roster than the one ticked is worse."""
         members = self._current_members()
+        _ps = getattr(self, "private_sees_check", None)
         return distill_help_text(
             self.distill_check.GetValue(),
             self._existing_turn_count,
             members,
             members_without_auto_distill(members) if self.distill_check.GetValue() else [],
+            private_sees=bool(_ps.GetValue()) if _ps is not None else False,
         )
 
     def _refresh_distill_help(self):

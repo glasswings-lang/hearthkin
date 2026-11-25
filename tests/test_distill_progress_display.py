@@ -123,7 +123,7 @@ def main():
 
     idle = line(bookmark=400, total=1000, walking=False, pct=880.0, at_pct=70)
     check("does say it'll fire when nothing's walking",
-          "fires on the next turn" in idle)
+          "fires on a coming turn" in idle)
     under = line(bookmark=950, total=1000, walking=False, pct=12.0, at_pct=70)
     check("under threshold says when it would fire",
           "auto-fires at 70%" in under)

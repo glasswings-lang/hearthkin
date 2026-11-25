@@ -81,12 +81,9 @@ class RoomsMixin:
             self._set_status(f"Loaded room: {name} [{members_str}]{warn}")
             self._update_round_label()
 
-            mismatched, delay_reason = self._mixed_models_warning()
-            if mismatched:
-                self._append_block_plain(
-                    f"Note: members use different models ({mismatched}). "
-                    f"{delay_reason}"
-                )
+            shared_note = self._shared_ollama_note()
+            if shared_note:
+                self._append_block_plain(shared_note)
 
             # Mode radio + selectors: switch to room mode
             if hasattr(self, "mode_kin_radio"):
@@ -159,45 +156,46 @@ class RoomsMixin:
         except Exception:
             pass
 
-    def _mixed_models_warning(self):
-        """Return (models_csv, delay_reason) when the room's members use
-        different models, else ("", "").
+    def _shared_ollama_note(self):
+        """The heads-up shown when a room is loaded, or "" when it doesn't
+        apply.
 
-        The reason string explains *why* turns may have delays — local
-        Ollama models swap weights in/out of GPU memory (a few seconds
-        per model change), OpenRouter models hit a remote API (network
-        latency + provider load), and a mix of the two combines both.
-        Previously this said "Each turn will pause briefly while ollama
-        swaps" regardless of provider — but if the room has OpenRouter
-        kin in it, Ollama isn't doing anything for those turns; the
-        pause is network round-trips. Spelling it out lets the user
-        understand what they're actually waiting for."""
-        models = set()
-        for m in self._room_round_order:
-            cfg = load_agent_config(m)
-            models.add(strip_model_annotation(cfg.get("model", "")))
-        if len(models) <= 1:
-            return "", ""
-        # Any API provider counts as "over the network", not just OpenRouter.
-        has_or = any(llm_backend.is_hosted_model(m) for m in models)
-        has_ollama = any(m and not llm_backend.is_hosted_model(m) for m in models)
-        if has_or and has_ollama:
-            reason = (
-                "Each turn pauses briefly: Ollama swaps weights for local "
-                "kin (a few seconds per model change), and kin on an online "
-                "provider go over the network (varies by provider load)."
-            )
-        elif has_or:
-            reason = (
-                "Each turn makes a network call to an online provider — "
-                "delays depend on provider load and routing."
-            )
-        else:
-            reason = (
-                "Each turn pauses briefly while Ollama swaps the next "
-                "kin's model weights into GPU memory."
-            )
-        return ", ".join(sorted(models)), reason
+        It applies only when two or more of the room's kin use DIFFERENT
+        models on the SAME Ollama machine: then that machine may have to load
+        one model before each of those kin's turns. Kin on an online provider,
+        or on different Ollama machines, never wait on each other, so they
+        never trigger it. Hearthkin knows each kin's model and Ollama machine
+        (its settings); it does not know whether the machine can hold both
+        models at once, so the note says "if".
+
+        Until 24 Nov 2026 this fired whenever models differed and said
+        "Ollama swaps the next kin's model weights into GPU memory" as fact,
+        even for kin on another machine or an online provider."""
+        by_host = {}
+        for kin in self._room_round_order:
+            cfg = load_agent_config(kin) or {}
+            model = strip_model_annotation(cfg.get("model", ""))
+            if not model or llm_backend.is_hosted_model(model):
+                continue
+            host = (resolve_kin_ollama_host(cfg.get("ollama_host_name", ""))
+                    or llm_backend._resolve_ollama_host())
+            label = cfg.get("ollama_host_name") or (
+                "this computer" if "localhost" in host or "127.0.0.1" in host
+                else host)
+            by_host.setdefault(host, (label, {}))[1].setdefault(
+                model, []).append(kin)
+        lines = []
+        for host, (label, models) in by_host.items():
+            if len(models) < 2:
+                continue
+            who = "; ".join(f"{', '.join(kins)} on {m}"
+                            for m, kins in sorted(models.items()))
+            lines.append(
+                f"Heads-up: these kin use different models on the same Ollama "
+                f"({label}): {who}. If that machine can't hold those models "
+                f"at once, Ollama loads each one before its kin's turn, so "
+                f"those turns start more slowly.")
+        return "\n".join(lines)
 
     def _room_shows(self, what):
         """This room's "Show tool calls" / "Show what reply blocks did"
@@ -286,12 +284,12 @@ class RoomsMixin:
             elif (ROOMS_DIR / name).exists():
                 wx.MessageBox(f"A room named '{name}' already exists.", "Error", wx.OK | wx.ICON_WARNING)
             elif not normalized:
+                # Members are ticked in a list, and the button is "Check
+                # all" (accuracy audit, 24 Nov 2026: "You typed", "Insert all").
                 wx.MessageBox(
-                    f"None of those names matched a kin.\n\n"
-                    f"You typed: {', '.join(res['members']) or '(nothing)'}\n"
-                    f"Available: {', '.join(kin)}\n\n"
-                    f"Tip: hit the 'Insert all' button next to the available list, then trim to taste.",
-                    "Members not recognized",
+                    "No kin are ticked as members.\n\n"
+                    "Tick at least one, or use Check all.",
+                    "No members",
                     wx.OK | wx.ICON_WARNING,
                 )
             else:
@@ -356,10 +354,9 @@ class RoomsMixin:
             normalized, unknown = self._normalize_member_names(res["members"], kin)
             if not normalized:
                 wx.MessageBox(
-                    f"A room needs at least one valid member.\n\n"
-                    f"You typed: {', '.join(res['members']) or '(nothing)'}\n"
-                    f"Available: {', '.join(kin)}",
-                    "No valid members",
+                    "A room needs at least one member.\n\n"
+                    "Tick at least one, or use Check all.",
+                    "No members",
                     wx.OK | wx.ICON_WARNING,
                 )
             else:
@@ -823,6 +820,14 @@ class RoomsMixin:
         except Exception as e:
             append_failure_log("save_failures.log", self.current_room or "?",
                                "save_room_conversation (compact)", e)
+            # Not saved: take the note back out and say so, rather than
+            # count it as done (accuracy audit, 24 Nov 2026), as the
+            # desktop compaction does.
+            self.room_conversation.remove(row)
+            self._compact_say(f"Couldn't save {kin}'s note, so it wasn't "
+                              f"compacted. Details are in "
+                              f"logs/save_failures.log.")
+            return
         self._room_compact_done.append(kin)
 
     def _room_history_for(self, kin_name):
@@ -1965,7 +1970,10 @@ class RoomsMixin:
                 self._update_round_label()
                 return
             # Schedule next round
-            self._set_status("Auto-continuing in 1.5s — type or hit Stop to interrupt.")
+            # What actually stops it: Stop is disabled here and typing alone
+            # doesn't (accuracy audit, 24 Nov 2026).
+            self._set_status("Next round in 1.5 seconds. Untick Auto-continue "
+                             "rounds, or send a message, to stop it.")
             wx.CallLater(1500, self._auto_continue_if_still_on)
         else:
             self._set_status(f"Round {self._room_round_count} complete. Continue or type to send.")

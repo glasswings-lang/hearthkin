@@ -101,9 +101,9 @@ def recent_thinking(n: int = 3, agent_name: str = "") -> str:
             "No thinking blocks found in your recent history. Either you "
             "haven't produced any (your model doesn't emit a reasoning "
             "channel, or thinking is off in your config), or none of your "
-            "recent assistant turns had non-empty reasoning. Check Settings "
-            "→ Model & generation → Thinking effort if you expected to see "
-            "reasoning here."
+            "recent assistant turns had non-empty reasoning. If you expected "
+            "reasoning here, your person can check Thinking effort in Kin "
+            "settings, Model and generation tab."
         )
 
     lines = [f"Your {len(found)} most recent thinking block(s), newest first:\n"]

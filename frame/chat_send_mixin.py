@@ -876,7 +876,8 @@ class ChatSendMixin:
         actually fired. See reading_bridge.py. Best-effort; never raises."""
         try:
             kin = self.current_agent
-            if not kin or "read_file" not in set(load_kin_tools(kin) or []):
+            kin_tools_now = (load_kin_tools(kin) or []) if kin else []
+            if not kin or "read_file" not in set(kin_tools_now):
                 return
             if getattr(self, "_shared_files_this_turn", None):
                 return  # content was placed in front of it — no nudge
@@ -890,11 +891,11 @@ class ChatSendMixin:
             import reading_bridge
             reach = reading_bridge.looks_like_read_gesture(reply_text)
             if reach:
+                from turn_steering import fill_read_gesture_nudge
                 self.conversation.append({
                     "role": "system",
-                    "content": load_app_prompt(
-                        "read_gesture_nudge", kin).replace(
-                            "{reach}", str(reach[:60])),
+                    "content": fill_read_gesture_nudge(kin, reach,
+                                                       kin_tools_now),
                     "ts": ts,
                 })
         except Exception as e:
@@ -1230,6 +1231,14 @@ class ChatSendMixin:
             return
         if gen != self._stream_id:
             return
+        # A finished tool step is progress: the hang watchdog reads this, so
+        # a turn busy with tools isn't torn down as "no response" (accuracy
+        # audit, 24 Nov 2026). Recorded even when tool calls aren't shown.
+        try:
+            import time as _time
+            self._stream_last_tool_at = _time.monotonic()
+        except Exception:
+            pass
         if not self._shows_here("tool_calls"):
             return
         try:

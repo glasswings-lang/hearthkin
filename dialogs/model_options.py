@@ -204,8 +204,10 @@ class MoreModelOptionsDialog(wx.Dialog):
                     "preload_on_switch", self.preload_check.GetValue()))
             self._add(self.preload_check)
             self._help(panel,
-                       "Keep model loaded: Ollama unloads after 5 min idle, so "
-                       "the next reply pays a 20-60s cold load. Raise it for a "
+                       "Keep model loaded: Ollama unloads an idle model after "
+                       "its keep-alive time (5 minutes unless changed), and "
+                       "the next reply waits while it loads again. Raise it "
+                       "for a "
                        "kin you use regularly (costs RAM/VRAM held longer). "
                        "Warm up on switch: start loading the model in the "
                        "background when you switch to this kin, so it's ready "
@@ -214,7 +216,9 @@ class MoreModelOptionsDialog(wx.Dialog):
         # ── Reliability (always) ───────────────────────────────────────
         self._header(panel, "Reliability")
         wd_row = wx.BoxSizer(wx.HORIZONTAL)
-        wd_lbl = wx.StaticText(panel, label="Watchdog t&imeout (minutes, 0 = auto):")
+        # Values under 5 are raised to 5 (llm_backend BASE_MIN), so say so
+        # (accuracy audit, 24 Nov 2026).
+        wd_lbl = wx.StaticText(panel, label="Watchdog t&imeout (minutes, 0 = auto, at least 5):")
         self.watchdog_field = _IntField(
             panel, value=cfg.get("watchdog_timeout_minutes", 0),
             min_val=0, max_val=120, size=(80, -1),
@@ -222,7 +226,7 @@ class MoreModelOptionsDialog(wx.Dialog):
             # never announced, and 0 is the DEFAULT here — so the one value
             # most kin are actually set to had its meaning reach sighted
             # users only.
-            name="Watchdog timeout in minutes (0 = auto)",
+            name="Watchdog timeout in minutes (0 = auto, at least 5)",
             on_commit=lambda v: self._save_param("watchdog_timeout_minutes", v))
         wd_row.Add(wd_lbl, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=6)
         wd_row.Add(self.watchdog_field)

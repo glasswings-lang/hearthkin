@@ -93,8 +93,10 @@ class _DiscordChannelDialog(wx.Dialog):
         hint = wx.TextCtrl(
             self,
             value=("Everyone in this channel can talk to the kin except the "
-                   "people muted here. Your people list is for direct "
-                   "messages only. With either switch on, what's said here is "
+                   "people muted here. Your people list doesn't decide who "
+                   "can talk here, but each person's settings there (name, "
+                   "tools, webcam) still apply here. With either switch on, "
+                   "what's said here is "
                    "kept with your desktop chat, so clearing the desktop chat "
                    "clears it too. To find an ID, turn on Developer Mode in "
                    "Discord (Settings, Advanced), then right-click the "

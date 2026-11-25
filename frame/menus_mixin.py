@@ -701,7 +701,9 @@ class MenusMixin:
                     f"Hearthkin {latest} is available "
                     f"(you have {__version__})."
                 )
-                self._set_status(msg + " Opening the Releases page.")
+                # It asks first (below), so don't say it's opening
+                # (accuracy audit, 24 Nov 2026).
+                self._set_status(msg)
                 try:
                     nvda_speak(msg)
                 except Exception:
@@ -800,7 +802,7 @@ class MenusMixin:
             msg = (
                 f"Hearthkin {latest} is available "
                 f"(you have {__version__}). "
-                f"Use Help, Check for updates to download."
+                f"Help, Check for updates offers to open its download page."
             )
             self._set_status(msg)
             try:

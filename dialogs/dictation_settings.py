@@ -137,11 +137,13 @@ class DictationSettingsDialog(wx.Dialog):
             _DEVICE_CHOICES, self._d.get("device"), 0))
         device_note = wx.TextCtrl(
             panel,
+            # Hearthkin doesn't know this computer's hardware (accuracy
+            # audit, 24 Nov 2026: it called the processor "quite fast
+            # enough" and guessed at what the card was doing). The test
+            # below measures the real speed.
             value=("Left to choose for itself it uses the graphics card when "
-                   "there is room and the processor otherwise, which is "
-                   "normal and quite fast enough. A card busy holding a "
-                   "language model is the ordinary state of a machine like "
-                   "this, not a fault."),
+                   "there is room and the processor otherwise. Check "
+                   "dictation, below, tells you how fast it is here."),
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP
                   | wx.TE_NO_VSCROLL)
         device_note.SetMinSize((-1, 66))

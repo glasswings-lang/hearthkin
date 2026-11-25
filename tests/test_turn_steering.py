@@ -202,6 +202,22 @@ check("...and neither folds it into the streamed message",
       "finalize(_block" not in tg_src and "finalize(_block" not in dc_src)
 
 
+# The reading note names only the reading tools this kin has (24 Nov 2026).
+_only = ts.read_gesture_note(KIN, READ_GESTURE, ["read_file"], [])
+check("a kin with only read_file is told only read_file",
+      "read_file." in _only and "memory_search" not in _only
+      and "read_staging" not in _only and "if you have" not in _only)
+_all = ts.read_gesture_note(
+    KIN, READ_GESTURE, ["read_file", "memory_search", "read_staging"], [])
+check("a kin with all three is told all three",
+      "read_file, memory_search or read_staging" in _all)
+check("no unfilled placeholder", "{read_tools}" not in _only + _all)
+check("Telegram and desktop build it the same way",
+      "fill_read_gesture_nudge" in tg_src
+      and "fill_read_gesture_nudge" in inspect.getsource(
+          __import__("frame.chat_send_mixin", fromlist=["x"])))
+
+
 print()
 if _fails:
     print(f"test_turn_steering: {len(_fails)} FAILED")

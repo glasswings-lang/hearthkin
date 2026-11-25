@@ -337,7 +337,8 @@ class ChatStreamMixin:
                 except Exception:
                     pass
 
-    def _notify_cron_failure(self, kin_name, user_text, reason):
+    def _notify_cron_failure(self, kin_name, user_text, reason,
+                             journal_written=False):
         """Push a one-liner "your scheduled wake-up failed" message to
         every Telegram user with mirror-to-Telegram enabled for this
         kin. Used by the active-kin watchdog / error paths so a cron
@@ -365,12 +366,32 @@ class ChatStreamMixin:
         # prefix gets us the HH:MM without parsing the whole frame.
         m = re.search(r"fired at (\d{1,2}:\d{2})", user_text or "")
         time_label = m.group(1) if m else "(unknown time)"
+        # The journal line this message promises is written here, unless the
+        # caller already wrote it (the isolated path does). Until 24 Nov 2026
+        # the active-kin hang and error paths said it was noted and wrote
+        # nothing (accuracy audit).
+        noted = journal_written
+        if not noted:
+            try:
+                # The journal line points at cron_errors.log for details;
+                # this path didn't write there either, so it does now.
+                cron_helpers.log_cron_error(kin_name, "WakeUpFailed",
+                                            str(reason))
+            except Exception:
+                pass
+            try:
+                cron_helpers.append_journal_error_marker(
+                    kin_name, time_label, user_text or "", str(reason))
+                noted = True
+            except Exception:
+                noted = False
         msg = (
             f"⚠️ Hearthkin: {kin_name}'s scheduled wake-up at "
             f"{time_label} didn't complete.\n\n"
-            f"Reason: {reason}\n\n"
-            f"Its prompt is noted in {kin_name}'s journal for today; you "
-            f"can send it again from Hearthkin's chat when you get back."
+            f"Reason: {reason}"
+            + (f"\n\nIts prompt is noted in {kin_name}'s journal for today; "
+               f"you can send it again from Hearthkin's chat when you get "
+               f"back." if noted else "")
         )
         # Discord's half of the mirror box (12 Nov 2026).
         import discord_mirror
@@ -940,16 +961,16 @@ class ChatStreamMixin:
         # first chunk lands — but the chunk handlers cancel this
         # timer, so the transient message naturally falls off when
         # the model starts producing output).
-        self._set_status(
-            "(still loading… cold-start can take 30-60s for idle "
-            "models or first-call provider routing)"
-        )
+        # Only what's known (accuracy audit, 24 Nov 2026): it used to say
+        # "still loading… cold-start can take 30-60s", a guess that also fired
+        # while tools ran or an approval box waited.
+        self._set_status("(no reply text yet)")
         # Speak once via NVDA — the spoken-phase guard treats this as
         # its own phase name so it won't fire twice if the timer somehow
         # ran more than once, and a real first chunk that follows will
         # still announce "Thinking" or "Typing" because the phase name
         # differs.
-        self._speak_status_phase("Still loading")
+        self._speak_status_phase("Still waiting")
 
     def _cancel_cold_start_timer(self):
         """Cancel the pending cold-start hint timer if it hasn't fired
@@ -981,6 +1002,8 @@ class ChatStreamMixin:
         # can't make elapsed go negative.
         if elapsed_ms == 0:
             self._stream_started_at = time.monotonic()
+            # A new turn: no tool step of THIS turn yet (the watchdog reads it).
+            self._stream_last_tool_at = None
         delay_ms = 60000 if elapsed_ms == 0 else 30000
         self._still_waiting_timer = wx.CallLater(
             delay_ms,
@@ -1132,13 +1155,31 @@ class ChatStreamMixin:
         # still caught, just not one we caused.
         holding = ""
         try:
-            holding = self._own_background_on_the_model()
+            holding = self._own_background_on_the_model(
+                for_kin=getattr(self, "current_agent", None))
         except Exception:
             holding = ""
+        # Also not a hang (accuracy audit, 24 Nov 2026): the kin finished a
+        # tool step within this window, or a command is waiting for the
+        # person's own approval. Before this, a turn running tools for longer
+        # than the window, with no reply text yet, was torn down as "no
+        # response" and blamed on prefill.
+        if not holding:
+            try:
+                minutes_now = max(1, int(getattr(
+                    self, "_stream_watchdog_minutes", 5) or 5))
+                last_tool = getattr(self, "_stream_last_tool_at", None)
+                if (last_tool is not None
+                        and time.monotonic() - last_tool < minutes_now * 60):
+                    holding = "a tool step finished recently"
+                elif getattr(self, "_pending_approvals", None):
+                    holding = "a command is waiting for your approval"
+            except Exception:
+                pass
         if holding:
             try:
-                self._log(f"watchdog held off: {holding} has the model; "
-                          f"this turn is queued, not hung")
+                self._log(f"watchdog held off: {holding}; "
+                          f"this turn is busy, not hung")
             except Exception:
                 pass
             # Re-arm for the SAME window this turn was given, rather than
@@ -1189,7 +1230,16 @@ class ChatStreamMixin:
                 pass
         # Compute the model + provider category up-front so both the
         # user-facing chat message and the log entry can use them.
-        elapsed_min = getattr(self, "_stream_watchdog_minutes", 5)
+        # The real time since the turn began, not the watchdog window: the
+        # hold-off above can re-arm several times, and a turn that waited 15
+        # minutes was reported as "after 5" (accuracy audit, 24 Nov 2026).
+        try:
+            _started = getattr(self, "_stream_started_at", None)
+            elapsed_min = (max(1, round((time.monotonic() - _started) / 60))
+                           if _started else
+                           getattr(self, "_stream_watchdog_minutes", 5))
+        except Exception:
+            elapsed_min = getattr(self, "_stream_watchdog_minutes", 5)
         model_clean = (
             getattr(self, "_current_room_model", "") or
             self._current_chat_model_clean() or "?"
@@ -1200,33 +1250,35 @@ class ChatStreamMixin:
         # case really is "provider hung or network died." The Ollama case
         # is usually "model is still prefilling a huge prompt on CPU,
         # which the watchdog cut off."
+        # Only what's known: nothing arrived in that time. No guessed cause,
+        # and no "your message is saved" (a room round started by Continue
+        # has no message of the person's). Accuracy audit, 24 Nov 2026.
+        _retry = ("Send again to retry." if hung_user_text
+                  else "Press Continue to retry.")
         if is_openrouter:
             chat_msg = (
-                f"\n[no response from {model_clean} after {elapsed_min} "
-                f"minutes. The provider or network may have hung. Your "
-                f"message is preserved; try sending again. If this keeps "
-                f"happening on this model, the provider may be down — try "
-                f"a different model. See logs/streaming_hangs.log.]\n"
+                f"\n[nothing arrived from {model_clean} in {elapsed_min} "
+                f"minutes, so Hearthkin stopped waiting. {_retry} If it "
+                f"keeps happening on this model, try a different one. "
+                f"Details are in logs/streaming_hangs.log.]\n"
             )
             status_msg = (
-                f"Stream timed out after {elapsed_min} min (provider hang "
-                f"or network drop). Your message is saved; try again."
+                f"Nothing arrived from {model_clean} in {elapsed_min} min; "
+                f"stopped waiting. {_retry}"
             )
         else:
             chat_msg = (
-                f"\n[no response from Ollama after {elapsed_min} minutes. "
-                f"If you're running a large model mostly on CPU at a high "
-                f"num_ctx, prefill (reading the prompt) can take longer "
-                f"than the watchdog allows. Your message is preserved; "
-                f"try sending again. To wait longer per attempt, raise "
-                f"Watchdog timeout in the kin's settings: Model and "
-                f"generation tab, More model options. "
-                f"See logs/streaming_hangs.log.]\n"
+                f"\n[nothing arrived from Ollama in {elapsed_min} minutes, "
+                f"so Hearthkin stopped waiting. {_retry} If the model is "
+                f"large or runs mostly on the processor, reading a long "
+                f"conversation can take longer than this; to wait longer, "
+                f"raise Watchdog timeout in Kin settings, Model and "
+                f"generation tab, More model options. Details are in "
+                f"logs/streaming_hangs.log.]\n"
             )
             status_msg = (
-                f"Stream timed out after {elapsed_min} min (likely slow "
-                f"prefill on a large context). Your message is saved; "
-                f"try again or raise the per-kin Watchdog timeout."
+                f"Nothing arrived from Ollama in {elapsed_min} min; stopped "
+                f"waiting. {_retry}"
             )
         try:
             self.chat_display.AppendText(chat_msg)
@@ -1760,7 +1812,7 @@ class ChatStreamMixin:
             # 24 Nov 2026: a failed save was logged, then "cleared" shown).
             from kin_persistence import keep_room_copy
             try:
-                keep_room_copy(self.current_room)
+                room_copy = keep_room_copy(self.current_room)
                 save_room_conversation(self.current_room, [])
             except Exception as e:
                 append_failure_log(
@@ -1781,17 +1833,24 @@ class ChatStreamMixin:
             self._update_round_label()
             # Empty again, so the kin can be let to begin.
             self._refresh_continue_button()
-            self._set_status(f"Room '{self.current_room}' cleared. A copy is "
-                             f"kept in the room's backups, in the cleared "
-                             f"folder.")
+            self._set_status(
+                f"Room '{self.current_room}' cleared. A copy is kept in the "
+                f"room's backups, in the cleared folder." if room_copy else
+                f"Room '{self.current_room}' cleared. Nothing of it had been "
+                f"saved yet, so there was nothing to copy.")
             return
-        if self.conversation:
-            dlg = wx.MessageDialog(self, "Clear the current conversation?",
-                                   "Confirm", wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT)
-            r = dlg.ShowModal()
-            dlg.Destroy()
-            if r != wx.ID_YES:
-                return
+        if not self.conversation:
+            # Nothing to clear and no copy made; saying one was would be
+            # false (audit, 24 Nov 2026).
+            self.chat_display.Clear()
+            self._set_status("There was nothing to clear.")
+            return
+        dlg = wx.MessageDialog(self, "Clear the current conversation?",
+                               "Confirm", wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT)
+        r = dlg.ShowModal()
+        dlg.Destroy()
+        if r != wx.ID_YES:
+            return
         before, before_file = list(self.conversation), getattr(self, "current_convo_file", None)
         self.conversation.clear()
         self.chat_display.Clear()

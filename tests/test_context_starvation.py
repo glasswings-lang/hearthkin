@@ -237,10 +237,12 @@ def test_preflight_warns_before_it_bites():
     check("a small window with tools is flagged in Settings", len(small) == 1)
     if small:
         hint = small[0].action_hint or ""
-        check("...with an actual number to type", "num_ctx to" in hint)
+        check("...with an actual number to type", "Context window to" in hint)
         # The advice has to be big enough to FIX it — a warning that
         # sends you to a setting which still fails is worse than none.
-        suggested = int(hint.split("num_ctx to ")[1].split(" ")[0].replace(",", ""))
+        # The hint names the setting as the person sees it (accuracy audit,
+        # 24 Nov 2026): "Context window", not the internal "num_ctx".
+        suggested = int(hint.split("Context window to ")[1].split(" ")[0].replace(",", ""))
         check("...and that number clears the warning it just gave",
               not notes_for(suggested))
     check("a roomy window is not flagged", not notes_for(65536))

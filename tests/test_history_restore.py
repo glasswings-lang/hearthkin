@@ -269,8 +269,10 @@ def main():
         parse_history(native, "SomeKin")
         check("parse_history refuses a hearthkin conversation.jsonl", False)
     except HkImportError as e:
+        # Points the person at the menu, not a code function (accuracy
+        # audit, 24 Nov 2026).
         check("parse_history refuses a hearthkin conversation.jsonl",
-              "restore_from_file" in str(e))
+              "Restore a kin's history" in str(e))
     except Exception as e:  # noqa: BLE001
         check("parse_history refuses a hearthkin conversation.jsonl "
               "(got %s)" % type(e).__name__, False)

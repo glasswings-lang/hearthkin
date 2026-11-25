@@ -6,6 +6,51 @@ wants to know what's different, without reading code. Every change gets a
 line here the day it's made (CLAUDE.md says so). The technical record is
 [`CHANGELOG.md`](../CHANGELOG.md); the code history is git.
 
+## 24 November 2026, afternoon (Claude, with the maintainer)
+
+The theme: every message should be true in the moment it's shown. The
+person's words: "When these settings are going on, print this message."
+Five readers went through every message in the app; each flag was checked
+in the code and fixed by hand. About 110 places. The full list is in
+docs/private/message-accuracy-audit-2026-11-24.md.
+
+- **No more guesses stated as facts.** Error lines, "your message is
+  queued", "still loading, cold start can take 30-60s", "the machine itself
+  is fine": all said things Hearthkin can't see. Now they say what's known,
+  and "if" only about what isn't. A kin on an online service is never told
+  about "the machine". *Why:* a room told the person Ollama was swapping
+  models on a shared graphics card, for kin that weren't even on the same
+  computer.
+- **Heads-ups only where they apply.** The room note about different models
+  is back, but only when two or more kin use different models on the same
+  Ollama machine, naming them. "Your reply may wait" only names work on the
+  same machine as your kin.
+- **"A copy is kept" only when one was.** Clearing an empty chat now says
+  there was nothing to clear. Telegram's /clear, /new, /reset, /undo and
+  /regen now say so if they couldn't save to disk. Opening an old
+  conversation always keeps a copy of the current one first.
+- **Things that were really lost or stuck, fixed.** Stopping a Discord
+  reply now keeps the steps the kin had finished. A kin busy running tools,
+  or waiting for your approval, is no longer cut off as "no response". A
+  failed wake-up now really writes the journal line its message promises.
+  Importing a Hearthkin conversation no longer hangs on "Parsing…". A kin
+  jumping ahead in its staging notes no longer has unread ones filed away.
+- **Directions point to real places.** "Settings → Telegram → Users" and
+  friends never existed; messages now say "Kin settings, Telegram tab, Add
+  person" and so on.
+- **The settings windows say what the settings do.** Trust levels per
+  surface, thinking effort on Ollama (Low, Medium, High are all just "on"),
+  "Runs on this machine" no longer shown for online kin, removing a person
+  explains they can still talk in groups and channels, and more.
+- **Kin prompts follow each kin's settings.** The heartbeat only mentions
+  curious.md, the inbox, message_kin or writing to other kin when that kin
+  can. The note about narrating a read names only the reading tools the kin
+  has.
+- **Prompt wording made plain.** Ten built-in prompts lost hedges and
+  pretty-but-empty lines ("the moment is yours", "a good keeper moves on").
+  Versions were bumped, so any you've saved your own copy of will be offered
+  the update in Tools, Prompt updates; nothing is replaced unless you adopt it.
+
 ## 24 November 2026 (Claude, with the maintainer)
 
 The night's theme: a kin's memory kept getting flattened, invented and lost

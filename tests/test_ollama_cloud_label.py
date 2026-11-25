@@ -59,9 +59,13 @@ class _Stand:
     """Just enough of ModelBrowserDialog for the two render methods."""
     def __init__(self):
         self._ollama_caps_cache = {}
+        self._ollama_host = ""
 
     def _spawn_ollama_caps_fetch(self, mid):
         pass
+
+    def _list_host(self):
+        return None        # this computer
 
 
 def test_name_rule():
@@ -122,7 +126,9 @@ def test_labels_and_card():
     local_text = card(stand, by["mistral:latest"])
     check("local line keeps disk size", "GB on disk" in local_line)
     check("local line does not say CLOUD", "CLOUD" not in local_line)
-    check("local card still says it stays local", "stays on this machine" in local_text)
+    check("local card still says it stays local",
+          "conversations stay here" in local_text
+          and "on this computer" in local_text)
 
     # The card names the model's ceiling, and admits when it isn't known.
     known = dict(by["mistral:latest"], context_length=32768)

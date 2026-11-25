@@ -315,7 +315,10 @@ class RenderMixin:
         )
         try:
             if should_show:
-                remaining = total - self._render_window
+                # Shown messages only, not tool or system rows the chat
+                # never displays (accuracy audit, 24 Nov 2026).
+                remaining = self._shown_count(
+                    self.conversation[:total - self._render_window])
                 self.load_older_btn.SetLabel(
                     f"Load &older messages ({remaining} older)"
                 )
@@ -364,11 +367,27 @@ class RenderMixin:
         prev = self._render_window
         self._render_window = min(total, self._render_window + chunk)
         self._render_conversation()
-        added = self._render_window - prev
+        # Shown messages only (accuracy audit, 24 Nov 2026).
+        added = self._shown_count(
+            self.conversation[total - self._render_window:total - prev])
+        now_shown = self._shown_count(
+            self.conversation[total - self._render_window:])
         self._set_status(
             f"Loaded {added} older messages "
-            f"({self._render_window} of {total} now shown)."
+            f"({now_shown} of {self._shown_count(self.conversation)} now "
+            f"shown)."
         )
+
+    @staticmethod
+    def _shown_count(rows):
+        """How many of `rows` the chat actually shows: your messages and the
+        kin's replies with words in them, not tool steps or system notes."""
+        n = 0
+        for m in rows or []:
+            if (isinstance(m, dict) and m.get("role") in ("user", "assistant")
+                    and str(m.get("content") or "").strip()):
+                n += 1
+        return n
 
     def _render_conversation(self):
         """Repaint chat_display from self.conversation. Walks the message

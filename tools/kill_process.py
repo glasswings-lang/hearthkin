@@ -29,6 +29,11 @@ def kill_process(pid: int, agent_name: str = "") -> str:
     status = kill_background_process(agent_name, pid_int)
     if status == "killed":
         return f"kill_process: killed pid={pid_int}"
+    if status == "kill-failed":
+        return (
+            f"kill_process: couldn't stop pid={pid_int}; it may still be "
+            f"running, and it's still tracked."
+        )
     if status == "already-exited":
         return (
             f"kill_process: pid={pid_int} had already exited on its own; "

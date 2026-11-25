@@ -12,8 +12,9 @@ class WebcamApprovalDialog(wx.Dialog):
     Two outcomes:
       - Allow: capture this one time. The kin gets the photo on the
         next inference iteration; the user's webcam_permission setting
-        doesn't change. The operator can flip it to "auto" in
-        Settings → Telegram → Users if they want to stop being asked.
+        doesn't change. The operator can flip it to "auto" in Kin
+        settings, the Telegram or Discord tab, Edit person, if they want to
+        stop being asked.
       - Deny: refuse, tool returns a denial string the model can read.
 
     Default button is Deny — webcam access is privacy-sensitive,
@@ -24,7 +25,11 @@ class WebcamApprovalDialog(wx.Dialog):
     DECISION_ALLOW = "allow"
     DECISION_DENY = "deny"
 
-    def __init__(self, parent, kin_name, requester_label, requester_id):
+    def __init__(self, parent, kin_name, requester_label, requester_id,
+                 surface="Telegram"):
+        # `surface`: "Telegram" or "Discord", whichever the request came
+        # from; this window said Telegram for both (accuracy audit, 24 Nov
+        # 2026).
         super().__init__(
             parent,
             title=f"Webcam request from {kin_name}",
@@ -37,12 +42,11 @@ class WebcamApprovalDialog(wx.Dialog):
             self,
             value=(
                 f"{kin_name} is about to capture a photo from this "
-                f"machine's webcam and send it back to a Telegram user. "
-                f"Allow will trigger the capture this one time. Deny "
-                f"will refuse and the kin will tell the user it could "
-                f"not take a photo. To stop being asked for this user, "
-                f"switch their webcam permission to Auto in Settings, "
-                f"Telegram, Users."
+                f"machine's webcam and send it to a {surface} user. "
+                f"Allow takes the photo this one time. Deny refuses, and "
+                f"{kin_name} is told you declined. To stop being asked "
+                f"for this person, use Kin settings, {surface} tab, Edit "
+                f"person, and choose Auto-approve."
             ),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP,
         )
@@ -57,7 +61,7 @@ class WebcamApprovalDialog(wx.Dialog):
         # before you answer.
         who_field = wx.TextCtrl(
             self,
-            value=f"Telegram user {requester_id}{label_part}",
+            value=f"{surface} user {requester_id}{label_part}",
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP
             | wx.TE_NO_VSCROLL,
         )

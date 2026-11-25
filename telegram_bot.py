@@ -910,6 +910,28 @@ class TelegramBot:
         save_telegram_history(self.agent_name, self._histories,
                               rows_added=getattr(self, "_rows_added", None))
 
+    # Added to a command's reply when the change couldn't be written to disk
+    # (audit, 24 Nov 2026: /clear, /new, /reset, /undo and /regen in a
+    # private chat swallowed the failure and said it was done).
+    _NOT_SAVED_NOTE = (
+        "\n\nBut it couldn't be saved to disk, so after Hearthkin restarts "
+        "the old conversation comes back.")
+
+    def _try_save_histories(self):
+        """_save_histories, returning False instead of raising. Callers hold
+        _histories_lock and tell the person when it's False."""
+        try:
+            self._save_histories()
+            return True
+        except Exception as e:
+            try:
+                from kin_persistence import append_failure_log
+                append_failure_log("telegram_failures.log", self.agent_name,
+                                   "history save", str(e))
+            except Exception:
+                pass
+            return False
+
     def _count_added(self, key, existing_len, n):
         from history_rows import note_added
         if not hasattr(self, "_rows_added"):
@@ -2258,8 +2280,12 @@ class TelegramBot:
         try:
             self._send_chunked(
                 chat_id,
-                f"{label}. Your message is in the queue and will be "
-                f"answered when that finishes, as long as Hearthkin stays open.")
+                # Only work on the same Ollama as this kin is named
+                # (get_busy_label's for_kin, accuracy audit 24 Nov 2026), and
+                # "may": Hearthkin can't see whether that machine runs two at
+                # once.
+                f"{label}, on the same Ollama as {self.agent_name}, so your "
+                f"reply may wait until that finishes.")
         except Exception:
             pass
 
@@ -2598,8 +2624,8 @@ class TelegramBot:
                         f"Hi! You're not on {self.agent_name}'s allow list "
                         f"yet, so I can't chat with you. Your Telegram user "
                         f"ID is `{user_id}` — share that with the kin's "
-                        f"operator and ask to be added in Hearthkin's "
-                        f"Settings → Telegram → Users.\n\n"
+                        f"operator and ask to be added in Hearthkin: "
+                        f"Kin settings, Telegram tab, Add person.\n\n"
                         f"(/help and /whoami work even before you're added.)"
                     )
             return
@@ -2860,18 +2886,29 @@ class TelegramBot:
         if err is not None or not data:
             append_failure_log("telegram_failures.log", self.agent_name,
                                "download voice message", err or "no data")
-            self._send_chunked(chat_id, (
-                "I couldn't fetch that voice message from Telegram. Please "
-                "try again, or type it."))
+            # A file over the size limit will fail the same way every time,
+            # so "try again" only when it might help (accuracy audit,
+            # 24 Nov 2026).
+            if err and "MB" in str(err) and "over" in str(err):
+                self._send_chunked(chat_id, (
+                    f"That voice message is too long for Hearthkin to take "
+                    f"({err}). Please send a shorter one, or type it."))
+            else:
+                self._send_chunked(chat_id, (
+                    "I couldn't fetch that voice message from Telegram. "
+                    "Please try again, or type it."))
             return None
         try:
             heard = self.transcribe_voice(data)
         except Exception as e:
             append_failure_log("telegram_failures.log", self.agent_name,
                                "transcribe voice message", e)
+            # Any failure lands here (a missing decoder or key too), not
+            # only unclear audio, so say what happened, not "make out"
+            # (accuracy audit, 24 Nov 2026).
             self._send_chunked(chat_id, (
-                f"I couldn't make out that voice message ({e}). Please try "
-                "again, or type it."))
+                f"I couldn't turn that voice message into words: {e}. "
+                f"Please type it."))
             return None
         self._send_chunked(chat_id, f"🎙 Heard: {heard}")
         return heard
@@ -3295,19 +3332,30 @@ class TelegramBot:
 
     def _cmd_help(self, chat_id, *, is_private=True):
         if not is_private:
-            # In groups, only /help and /whoami have a meaningful
+            # In groups, only /help, /whoami and /front have a meaningful
             # response — keep the help short so it doesn't promise
-            # commands the user can't actually run from here.
+            # commands the user can't actually run from here. Whether the
+            # kin talks here at all depends on the group being added, so
+            # say which (accuracy audit, 24 Nov 2026: it said "just write
+            # in the group" in groups the kin ignores).
+            groups = (self.get_config() or {}).get("groups") or {}
+            if str(chat_id) in groups:
+                talk = (f"To talk with {self.agent_name} here, just write "
+                        "in the group. If this group is set to mention-only, "
+                        "mention the bot by its @username.")
+            else:
+                talk = (f"{self.agent_name} isn't set up to talk in this "
+                        "group yet, so it won't answer messages here. Its "
+                        "person can add it with /whoami's chat ID.")
             self._send_chunked(
                 chat_id,
                 f"Commands {self.agent_name} answers to in this group:\n\n"
                 "/help — this message\n"
                 "/whoami — show your Telegram user ID, this chat's ID, "
-                "and chat type (use this to find a group's chat_id)\n\n"
-                f"To talk with {self.agent_name} here, just write in "
-                "the group. If this group is set to mention-only, "
-                "mention the bot by its @username. The full command "
-                "list works in a direct message."
+                "and chat type (use this to find a group's chat_id)\n"
+                "/front — set who's fronting (only the account marked "
+                "\"This is me\")\n\n"
+                f"{talk} The full command list works in a direct message."
             )
             return
         msg = (
@@ -3355,8 +3403,8 @@ class TelegramBot:
                 "as your user ID."
             )
             lines.append(
-                "\nOperators paste user IDs into Settings → Telegram → "
-                "Users in Hearthkin to grant access."
+                "\nTo let someone message this kin, add their user ID in "
+                "Hearthkin: Kin settings, Telegram tab, Add person."
             )
         else:
             kind_label = {
@@ -3386,9 +3434,9 @@ class TelegramBot:
             else:
                 lines.append(
                     f"\n{self.agent_name} is NOT yet configured to "
-                    f"converse in this group — paste this chat ID "
-                    f"into Settings → Telegram → Groups in Hearthkin "
-                    f"to opt in."
+                    f"converse in this group. To add it, use this chat "
+                    f"ID in Hearthkin: Kin settings, Telegram tab, Add "
+                    f"group."
                 )
         self._send_chunked(chat_id, "\n".join(lines))
 
@@ -3423,6 +3471,14 @@ class TelegramBot:
             )
             try:
                 current = load_agent_conversation(self.agent_name)
+                if not current:
+                    # Nothing to clear, so no copy is made; saying one was
+                    # would be false (audit, 24 Nov 2026).
+                    self._send_chunked(
+                        chat_id,
+                        f"There was nothing to clear: the conversation with "
+                        f"{self.agent_name} is already empty.")
+                    return
                 save_agent_conversation_preserving_externals(
                     self.agent_name, [], len(current),
                 )
@@ -3454,32 +3510,37 @@ class TelegramBot:
         # lost (audit T1). Key via _hkey (audit DH1).
         with self._histories_lock:
             history = list(self._histories.get(_hkey(user_id)) or [])
-        if history:
-            try:
-                if not self._archive_telegram_history(user_id, history):
-                    raise OSError("archive not written")
-            except Exception:
-                self._send_chunked(
-                    chat_id,
-                    f"Couldn't clear your conversation with "
-                    f"{self.agent_name}: a copy couldn't be kept first, so "
-                    f"nothing was emptied."
-                )
-                return
+        if not history:
+            # Nothing to clear and no copy made (audit, 24 Nov 2026).
+            self._send_chunked(
+                chat_id,
+                f"There was nothing to clear: your conversation with "
+                f"{self.agent_name} is already empty.")
+            return
+        try:
+            if not self._archive_telegram_history(user_id, history):
+                raise OSError("archive not written")
+        except Exception:
+            self._send_chunked(
+                chat_id,
+                f"Couldn't clear your conversation with "
+                f"{self.agent_name}: a copy couldn't be kept first, so "
+                f"nothing was emptied."
+            )
+            return
         with self._histories_lock:
             self._histories.pop(_hkey(user_id), None)
-            try:
-                self._save_histories()
-            except Exception:
-                pass
+            saved = self._try_save_histories()
         self._last_thinking.pop(user_id, None)
         self._send_chunked(
             chat_id,
-            f"Cleared your conversation history with {self.agent_name}. "
-            "They won't remember anything from before this message. "
-            f"A copy is kept on the computer, in {self.agent_name}'s "
-            "backups, in the cleared folder (File, Restore a "
-            "kin's history brings it back). Memory is untouched."
+            f"Cleared your conversation with {self.agent_name}. It starts "
+            f"fresh from here; its memory and journals are untouched, so "
+            f"it still knows what it saved there. A copy is kept on the "
+            f"computer, in {self.agent_name}'s backups, in the cleared "
+            f"folder (File, Restore a kin's history can bring it back into "
+            f"the desktop conversation)."
+            + ("" if saved else self._NOT_SAVED_NOTE)
         )
 
     def _cmd_new(self, user_id, chat_id):
@@ -3562,11 +3623,17 @@ class TelegramBot:
         # simultaneously can't be lost (audit T1).
         with self._histories_lock:
             self._histories.pop(_hkey(user_id), None)
-            try:
-                self._save_histories()
-            except Exception:
-                pass
+            saved = self._try_save_histories()
         self._last_thinking.pop(user_id, None)
+        if not saved:
+            self._send_chunked(
+                chat_id,
+                f"Started a new conversation with {self.agent_name}."
+                + (f" The old one is saved as {archived_to.name}, in "
+                   f"{self.agent_name}'s backups, in the cleared folder."
+                   if archived_to else "")
+                + self._NOT_SAVED_NOTE)
+            return
         if archived_to:
             ack = (
                 f"Started a new conversation. The old one is saved on "
@@ -3596,20 +3663,19 @@ class TelegramBot:
         long-term memory, shared across every surface. Confirmation
         by the requester is not authorization — a chat-only guest on
         the allow list must not be able to irreversibly destroy it.
-        /reset therefore requires share-with-desktop OR the 'full'
-        tool bucket; everyone else gets a polite refusal pointing at
-        /clear (which only touches their OWN segregated DM slice)."""
+        /reset therefore requires "This is me" OR the 'full' tool
+        bucket (_user_is_privileged); everyone else gets a polite refusal
+        pointing at /clear (which only touches their OWN DM slice)."""
         if not self._user_is_privileged(user_id):
             self._send_chunked(
                 chat_id,
                 f"/reset wipes {self.agent_name}'s long-term memory "
-                f"(memory.md), which is shared with the operator and "
-                f"every other surface — so it's limited to users the "
-                f"operator has marked as share-with-desktop or given "
-                f"the 'full' tool bucket.\n\n"
-                f"To clear just YOUR conversation history with "
-                f"{self.agent_name}, use /clear (or /new to archive "
-                f"it first)."
+                f"(memory.md), which every surface shares, so it's only "
+                f"for the account marked \"This is me\" or given the "
+                f"'full' tool access.\n\n"
+                f"To empty just YOUR conversation with "
+                f"{self.agent_name}, use /clear or /new (both keep a copy "
+                f"first)."
             )
             return
         if arg.strip().lower() != "confirm":
@@ -3639,9 +3705,10 @@ class TelegramBot:
             # complete ... is gone" was sent over an untouched conversation).
             try:
                 current = load_agent_conversation(self.agent_name)
-                save_agent_conversation_preserving_externals(
-                    self.agent_name, [], len(current),
-                )
+                if current:
+                    save_agent_conversation_preserving_externals(
+                        self.agent_name, [], len(current),
+                    )
             except Exception:
                 self._send_chunked(
                     chat_id,
@@ -3650,7 +3717,9 @@ class TelegramBot:
                     f"reset, conversation or memory.")
                 return
             convo_where = (f"a copy is in {self.agent_name}'s backups, in the "
-                           f"cleared folder")
+                           f"cleared folder" if current
+                           else "it was already empty")
+            saved = True
         else:
             # Private chat: archived first, like /clear and /new (it used
             # to be wiped with no copy at all). No copy, no reset.
@@ -3672,12 +3741,10 @@ class TelegramBot:
             # _hkey (audit DH1).
             with self._histories_lock:
                 self._histories.pop(_hkey(user_id), None)
-                try:
-                    self._save_histories()
-                except Exception:
-                    pass
+                saved = self._try_save_histories()
             convo_where = (f"a copy is in {self.agent_name}'s "
-                           f"backups, in the cleared folder")
+                           f"backups, in the cleared folder" if history
+                           else "it was already empty")
         self._last_thinking.pop(user_id, None)
         # memory.md is copied into backups/cleared before it's emptied
         # (24 Nov 2026: it was wiped with no copy). No copy, no wipe.
@@ -3704,7 +3771,7 @@ class TelegramBot:
                 f"emptied ({convo_where}), and their memory.md is emptied"
                 + (f" (a copy is in their backups, in the cleared folder, "
                    f"as {memory_copy.name})" if memory_copy else "")
-                + ". They start the next message as a blank slate."
+                + ". Their journals and other memory files are untouched."
             )
         else:
             ack = (
@@ -3712,6 +3779,8 @@ class TelegramBot:
                 f"({convo_where}), but memory.md couldn't be copied or "
                 f"emptied, so it's unchanged."
             )
+        if not saved:
+            ack += self._NOT_SAVED_NOTE
         self._send_chunked(chat_id, ack)
 
     def _archive_telegram_history(self, user_id, history):
@@ -3775,9 +3844,12 @@ class TelegramBot:
             real = None
         if real:
             pct = int(round(100.0 * real / num_ctx)) if num_ctx else 0
+            # Per kin, across every surface: it may be the desktop's or
+            # another chat's send, so say so (accuracy audit, 24 Nov 2026).
             context_line = (
                 f"Context: {real} tokens of {num_ctx} cap ({pct}%) — "
-                f"last send, as reported by the provider"
+                f"{self.agent_name}'s last send anywhere (here, the desktop "
+                f"or another chat), as reported by the provider"
             )
         else:
             budget = self._max_context_tokens({"num_ctx": num_ctx})
@@ -3925,14 +3997,18 @@ class TelegramBot:
             from history_rows import note_end_cut
             if not hasattr(self, "_rows_added"):
                 self._rows_added = {}
+            counts_before = dict(self._rows_added)
             note_end_cut(self._rows_added, _hkey(user_id), len(history),
                          len(history) - len(truncated))
             _drop_leading_orphan_tools(truncated)
             self._histories[_hkey(user_id)] = truncated
-            try:
-                self._save_histories()
-            except Exception:
-                pass
+            if not self._try_save_histories():
+                # Couldn't be written: put the history back, so the caller's
+                # "nothing changed" is true now AND after a restart (audit,
+                # 24 Nov 2026: this said it was done and wasn't saved).
+                self._histories[_hkey(user_id)] = history
+                self._rows_added = counts_before
+                return False
         return True
 
     def _cmd_regen(self, user_id, chat_id):
@@ -4047,6 +4123,13 @@ class TelegramBot:
         except Exception:
             kin_tool_names = []
         effective = filter_tool_names(kin_tool_names, bucket)
+        # The same rules a real turn applies (_handle_normal_message), so the
+        # list is what a reply would really have (accuracy audit, 24 Nov
+        # 2026: it left out message_kin and didn't mention the park).
+        if (kin_tool_names and self._user_is_me(user_id)
+                and "message_kin" not in effective):
+            effective = list(effective) + ["message_kin"]
+        in_park = user_id in getattr(self, "_park_users", set())
 
         if effective:
             tool_lines = "\n".join(f"  • {name}" for name in effective)
@@ -4059,8 +4142,10 @@ class TelegramBot:
             f"Bucket: {bucket_label}\n"
             f"  {explainer}\n\n"
             f"Tools you can trigger:\n{tool_lines}\n\n"
-            "If something you'd expect isn't here, ask the operator to "
-            "either enable the tool on the kin or raise your bucket."
+            + ("While you're in the park, replies use no tools at all.\n\n"
+               if in_park else "")
+            + "If something you'd expect isn't here, ask the kin's person "
+            "to switch the tool on for the kin, or raise your access."
         )
 
     def _cmd_about(self, user_id, chat_id):
@@ -4139,9 +4224,11 @@ class TelegramBot:
         if not thinking:
             self._send_chunked(
                 chat_id,
-                "No reasoning to show. Either the last reply didn't "
-                "include a thinking block, the kin has thinking turned "
-                "off, or the model doesn't expose reasoning."
+                # All the reasons, not an "either… or" that leaves out
+                # the commonest (accuracy audit, 24 Nov 2026).
+                "No reasoning saved for your last reply. It's only kept "
+                "until Hearthkin restarts or you clear, undo or redo the "
+                "chat, and some models or settings don't produce any."
             )
             return
         # Telegram's per-message limit is 4096 chars; _send_chunked
@@ -4585,7 +4672,12 @@ class TelegramBot:
                 tagged = dict(turn)
                 tagged.setdefault("source", f"telegram:{uid_str}")
                 try:
-                    append_agent_conversation_turn(self.agent_name, tagged)
+                    # raise_on_failure: without it the append swallows its own
+                    # error, saved_ok stays True, and /compact says
+                    # "Compacted" over a note that never landed (audit,
+                    # 24 Nov 2026).
+                    append_agent_conversation_turn(self.agent_name, tagged,
+                                                   raise_on_failure=True)
                 except Exception as e:
                     saved_ok = False
                     append_failure_log(
@@ -4698,12 +4790,14 @@ class TelegramBot:
         """Tell the sender their image can't be seen by the kin's
         current (non-vision) model. Shared by the DM and group
         handlers — the wording must stay identical across surfaces."""
+        # "couldn't confirm": model_supports_images is False whenever it
+        # can't tell, not only when the model is known to be blind
+        # (accuracy audit, 24 Nov 2026).
         self._send_chunked(
             chat_id,
-            "I got the image, but my current model can't see "
-            "images yet — could you describe what's in it? "
-            "(Or ask the operator to switch me to a vision-"
-            "capable model.)"
+            "I got the image, but Hearthkin couldn't confirm my current "
+            "model can see images, so it wasn't passed on. Could you "
+            "describe what's in it?"
         )
 
     def _handle_normal_message(self, text, user_id, chat_id, *, message_date=None, attachments=None, msg=None):
@@ -7293,7 +7387,9 @@ class TelegramBot:
         # happened, short enough that ten tool calls don't drown the
         # phone screen.
         if len(s) > 400:
-            s = s[:400] + " …(truncated for display; model sees full output)"
+            # Not "full output": the kin's copy is cut at tool_result_cap
+            # too (accuracy audit, 24 Nov 2026).
+            s = s[:400] + " …(shortened here; the kin sees more of it)"
         return s
 
     def _hint_scope(self, user_id, chat_id):
@@ -7504,14 +7600,12 @@ class TelegramBot:
                     if name in ("read_file", "memory_search", "read_staging"):
                         return None
             import reading_bridge
-            from kin_persistence import load_app_prompt
+            from turn_steering import fill_read_gesture_nudge
             reach = reading_bridge.looks_like_read_gesture(content)
             if not reach:
                 return None
-            return (
-                load_app_prompt("read_gesture_nudge", self.agent_name)
-                .replace("{reach}", str(reach[:60]))
-            )
+            return fill_read_gesture_nudge(self.agent_name, reach,
+                                           effective_tools)
         except Exception:
             return None
 

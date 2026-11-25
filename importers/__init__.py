@@ -132,10 +132,10 @@ def parse_history(source_path, kin_display_name, **opts):
     # That's what restore_from_file is for.
     if hearthkin_jsonl.detect(raw):
         raise ImportError(
-            "This is a Hearthkin conversation.jsonl — a kin's own turns, not "
-            "foreign history. Importing it would relabel them as carried-in "
-            "seed history and overwrite where each turn came from. Use "
-            "restore_from_file() to bring it back as the kin's own."
+            "This is a Hearthkin conversation file — a kin's own turns, not "
+            "history from somewhere else. Importing it would relabel them as "
+            "carried-in history. To bring it back as the kin's own, use "
+            "File, Restore a kin's history."
         )
     return text_log.parse(source_path, kin_display_name)
 

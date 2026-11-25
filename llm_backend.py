@@ -4356,8 +4356,8 @@ def _raise_openrouter_error_from_status(status, body, headers):
             retry_after = None
         raise OpenRouterRateLimitError(f"Rate limited: {detail}", retry_after=retry_after)
     if status == 401:
-        raise OpenRouterAuthError(f"OpenRouter auth error {status}: {detail}")
-    raise LLMBackendError(f"OpenRouter error {status}: {detail}")
+        raise OpenRouterAuthError(f"The provider refused the key (error {status}): {detail}")
+    raise LLMBackendError(f"Provider error {status}: {detail}")
 
 
 def _openrouter_request(payload, *, stream, provider="openrouter"):
@@ -4431,8 +4431,8 @@ def _raise_openrouter_error(http_err):
         # Same typed error the blocking path raises, so callers'
         # "no/bad API key" handling works regardless of which path
         # the request took.
-        raise OpenRouterAuthError(f"OpenRouter auth error {status}: {detail}")
-    raise LLMBackendError(f"OpenRouter error {status}: {detail}")
+        raise OpenRouterAuthError(f"The provider refused the key (error {status}): {detail}")
+    raise LLMBackendError(f"Provider error {status}: {detail}")
 
 
 # Wall-clock deadline for a stream that's alive but not progressing:

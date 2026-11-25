@@ -61,6 +61,15 @@ check("...once", not ok)
 ok, _ = kin_mail.send("Kimi", "Opal", "Good morning.", day2)
 check("the next day the pair can talk again", ok)
 
+# The line the PERSON sees about a refused message is worded for them, not
+# for the kin (accuracy audit, 24 Nov 2026: it said "you've already written").
+_shown = []
+kin_mail.handle_reply("Kimi", "```to:Opal\nanother one\n```", day2,
+                      shown=_shown)
+check("the person is told the kin hit its limit, in words about the kin",
+      _shown and "Kimi has already written to Opal" in _shown[-1]
+      and "you've" not in _shown[-1])
+
 # --- the person can read all of it ------------------------------------------
 rec = kin_mail.pair_file("Opal", "Kimi").read_text(encoding="utf-8")
 check("one plain file for the pair, both directions, in order",

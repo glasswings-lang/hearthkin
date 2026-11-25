@@ -193,13 +193,14 @@ class UsageMixin:
             lines.append(f"{'─' * 32}")
             lines.append(f"Total:          ~{total:>7,} tokens")
             lines.append("")
-            lines.append("Room context limits vary by kin; see each kin's config "
-                         "for their num_ctx setting.")
+            lines.append("Room context limits vary by kin; see each kin's "
+                         "Context window in its Kin settings.")
             return "\n".join(lines)
 
         if not self.current_agent:
             return ("No kin or room loaded.\n\n"
-                    "Pick a kin from the Chat tab to see token usage estimates.")
+                    "Pick a kin or room at the top of the window to see token "
+                    "usage estimates.")
 
         cfg = self.agent_cfg or {}
         model = strip_model_annotation(str(cfg.get("model", "") or "")).strip()
@@ -225,7 +226,7 @@ class UsageMixin:
         if max_ctx:
             lines.append(f"Model max context: {max_ctx:,} tokens (provider-declared)")
         else:
-            lines.append("Model max context: (unknown — cache miss or local model)")
+            lines.append("Model max context: unknown")
         lines.append("")
         # The authoritative number: the provider's reported prompt-tokens
         # from the most recent send. That's what actually went out on the
@@ -280,23 +281,24 @@ class UsageMixin:
         if gauge is not None and effective_ceiling > 0:
             pct = gauge / effective_ceiling * 100
             if pct >= 100:
+                # Only what happens: the marker is in the send, not shown in
+                # the chat, and distillation depends on settings (accuracy
+                # audit, 24 Nov 2026).
                 lines.append(
-                    "At or over the effective cap — sends trim the "
-                    "oldest turns to fit, and the chat shows a small "
-                    "system marker above the most recent user message "
-                    "noting that older turns rolled out of the send. "
-                    "This is the normal steady state for a long-running "
-                    "conversation, not an error; the full archive stays "
-                    "on disk and distillation has already been turning "
-                    "older turns into staging notes. Tending — your "
-                    "kin's review of those notes — is what brings "
-                    "substance forward into curated memory.md and depth "
-                    "logs so it rides every future send."
+                    "At or over the effective cap — sends leave out the "
+                    "oldest turns to fit, with a note to the kin that "
+                    "older turns were left out. This is normal for a "
+                    "long conversation, not an error; the full history "
+                    "stays on disk. If distillation is on, it turns older "
+                    "turns into staging notes, and tending brings what "
+                    "matters into memory.md and depth logs, which ride "
+                    "every send."
                 )
             elif pct >= 85:
                 lines.append(
-                    "Close to the effective cap. Raise num_ctx in the "
-                    "kin's Settings (if the model has room), or let "
+                    "Close to the effective cap. Raise Context window in "
+                    "Kin settings, Model and generation tab (if the model "
+                    "has room), or let "
                     "tending bring substance into the depth logs so it "
                     "carries forward without depending on chat-window "
                     "fit."
@@ -306,8 +308,8 @@ class UsageMixin:
                 lines.append("")
                 lines.append(
                     f"Note: cap is at {headroom_pct:.1f}% of the model's declared max "
-                    f"({num_ctx:,} / {max_ctx:,}). Raise num_ctx in the kin's "
-                    f"Settings if you want more room."
+                    f"({num_ctx:,} / {max_ctx:,}). Raise Context window in Kin "
+                    f"settings, Model and generation tab, if you want more room."
                 )
         return "\n".join(lines)
 

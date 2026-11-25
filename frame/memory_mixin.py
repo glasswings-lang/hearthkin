@@ -1889,7 +1889,10 @@ class MemoryMixin:
                 elif cost > 0:
                     cost_str = f"~${cost:.4f}"
                 else:
-                    cost_str = "(local — no charge)"
+                    # "local" only when it is: a free hosted model prices
+                    # at 0 too (accuracy audit, 24 Nov 2026).
+                    cost_str = ("(no charge)" if llm_backend.is_hosted_model(model)
+                                else "(local — no charge)")
                 cost_line = (
                     f"Staged {agent_name}'s notes ({scope_key}) · "
                     f"{p_tok:,} in / {c_tok:,} out · "

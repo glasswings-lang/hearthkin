@@ -22,19 +22,55 @@ import datetime as _datetime
 import re
 
 
-def humanize_error(msg, *, kin=None, host=None, redact=False):
+def _where_kin_runs(kin):
+    """("online", model) when the kin's model is on an online provider,
+    ("ollama", machine name or "") when it's on Ollama, (None, "") when the
+    kin's settings can't be read. Read from the kin's own settings, so the
+    error line says what's true for THIS kin (24 Nov 2026: the lines used to
+    talk about "the machine" to kin on an online provider)."""
+    if not kin:
+        return None, ""
+    try:
+        from kin_persistence import load_agent_config
+        import llm_backend
+        cfg = load_agent_config(kin) or {}
+        model = str(cfg.get("model", "") or "")
+        if not model:
+            return None, ""
+        if llm_backend.is_hosted_model(model):
+            return "online", model
+        return "ollama", str(cfg.get("ollama_host_name", "") or "")
+    except Exception:
+        return None, ""
+
+
+def humanize_error(msg, *, kin=None, host=None, redact=False, runs=None):
     """Turn a raw backend error into a plain-language line a non-technical,
     screen-reader user can understand and act on. Known causes get a helpful
     sentence; unknown ones fall back to a trimmed copy of the real message so
     nothing is hidden — unless `redact` is set (group/guest surfaces where the
-    raw text could leak file paths or provider bodies). Pure string work."""
+    raw text could leak file paths or provider bodies).
+
+    The line depends on where THIS kin's model runs (`runs`: "online",
+    "ollama", or None to look it up from the kin's settings): a kin on an
+    online provider is never told about "the machine", and nothing claims a
+    cause Hearthkin can't see. The person, 24 Nov 2026: "When these settings
+    are going on, print this message.\""""
     s = str(msg or "").strip()
     low = s.lower()
     who = kin or "The kin"
+    if runs is None:
+        runs, machine = _where_kin_runs(kin)
+        host = host or (machine if runs == "ollama" else None)
     where = f" on {host}" if host else ""
     if "model" in low and "not found" in low:
-        return (f"{who}'s model isn't loaded{where} yet — the machine may be "
-                "down, still loading it, or the model was removed.")
+        if runs == "online":
+            return (f"{who}'s provider says it has no model by that name. "
+                    "Check the model in Kin settings.")
+        if runs == "ollama":
+            return (f"{who}'s Ollama{where} doesn't have that model. It may "
+                    "not be downloaded there, or its name changed.")
+        return f"{who}'s model wasn't found where it was asked for."
     # A READ timeout is NOT an unreachable machine, and must be checked before
     # the connection family below — the connection succeeded, the request was
     # accepted, and the server simply didn't answer in time. On a local model
@@ -47,31 +83,47 @@ def humanize_error(msg, *, kin=None, host=None, redact=False):
     # because that one really is a machine you can't get to.
     if any(k in low for k in (
             "read timed out", "read timeout", "readtimeout")):
-        return (f"{who}'s machine answered, but the model didn't start "
-                f"replying in time{where}. The machine itself is fine — "
-                "usually another model is holding it, or a big one is loading "
-                "from cold. Worth retrying; if it keeps happening, something "
-                "else is using that machine.")
+        if runs == "online":
+            return (f"{who}'s provider took the request but didn't start "
+                    "replying in time. Try again.")
+        if runs == "ollama":
+            return (f"{who}'s Ollama{where} took the request, but the model "
+                    "didn't start replying in time. That happens if the "
+                    "machine is busy with another model or loading a big "
+                    "one. Try again.")
+        return (f"{who}'s model took the request but didn't start replying "
+                "in time. Try again.")
     if any(k in low for k in (
             "connection refused", "failed to establish", "max retries",
             "connection aborted", "cannot connect", "actively refused",
             "unreachable", "getaddrinfo", "name or service not known",
             "timed out", "timeout", "connection reset")):
-        return f"Couldn't reach {who}'s model machine{where}. Is it on and reachable?"
+        if runs == "online":
+            return (f"Couldn't reach {who}'s provider. Check the internet "
+                    "connection, or try again in a minute.")
+        if runs == "ollama":
+            return (f"Couldn't reach {who}'s Ollama{where}. Check that the "
+                    "machine is on and Ollama is running.")
+        return f"Couldn't reach {who}'s model."
     if "rate limit" in low or " 429" in low or "too many requests" in low or "retry-after" in low:
         return f"{who}'s provider is rate-limiting — too many requests. Give it a minute."
     if any(k in low for k in (
             "unauthorized", " 401", "invalid api key", "no api key",
             "authentication", "incorrect api key", "no auth credentials")):
         return (f"{who}'s provider rejected the API key (missing or invalid). "
-                "Set it in Preferences, Connections.")
+                "Check it in File, Preferences, Connections, or for a "
+                "provider you added, under Manage providers in the model "
+                "browser.")
     if "context" in low and ("too large" in low or "maximum context" in low
             or "exceed" in low or "too long" in low):
         return (f"{who}'s request was too big for the model's context window. "
                 "Lower the context size or shorten the conversation.")
     if "out of memory" in low or "oom " in low or "insufficient memory" in low:
-        return (f"{who}'s machine ran out of memory loading the model. "
-                "Use a smaller model or a smaller context.")
+        if runs == "online":
+            return (f"{who}'s provider ran out of memory for this request. "
+                    "A smaller context may help.")
+        return (f"{who}'s machine{where} ran out of memory loading the "
+                "model. Use a smaller model or a smaller context.")
     if redact:
         return f"{who} hit a problem — the details are logged for the operator."
     short = s if len(s) <= 200 else s[:200] + "…"

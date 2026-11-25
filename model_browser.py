@@ -1126,14 +1126,15 @@ class ModelBrowserDialog(wx.Dialog):
             self._filtered = []
             self.model_list.Clear()
             self.count_label.SetLabel("Models: 0")
+            # This path is reached only when Ollama ANSWERED with an empty
+            # list (a connection failure shows its own message), so the
+            # old "is it running / OLLAMA_HOST" advice didn't apply
+            # (accuracy audit, 24 Nov 2026).
             self.detail.SetValue(
-                f"No Ollama models found at {host}.\n\n"
-                "If that's a remote machine: confirm Ollama is running there, "
-                "that it was started with OLLAMA_HOST=0.0.0.0 so it accepts "
-                "connections from the network, and that at least one model is "
-                "pulled on it (ollama pull <name>). The Machine dropdown above "
-                "picks which box to list; 'Manage machines…' adds/tests one, "
-                "or switch to 'This machine' for your local Ollama."
+                f"Ollama at {host} answered, but has no models installed.\n\n"
+                "Download one there with: ollama pull <name>. The Machine "
+                "dropdown above picks which machine to list; 'Manage "
+                "machines…' adds or tests one."
             )
             self.use_btn.Disable()
             return
@@ -1527,9 +1528,15 @@ class ModelBrowserDialog(wx.Dialog):
                 "check it on your Ollama account.",
             ]
             return "\n".join(lines)
+        # Which machine, from the Machine dropdown, not assumed local
+        # (accuracy audit, 24 Nov 2026).
+        _host = self._list_host() or _resolve_ollama_host()
+        _here = "localhost" in _host or "127.0.0.1" in _host
+        _machine = ("this computer" if _here
+                    else (self._ollama_host or _host))
         lines = [
             f"Model:        {mid}",
-            f"Provider:     Ollama (local)",
+            f"Provider:     Ollama, on {_machine}",
             f"Family:       {family}",
             f"Parameters:   {params}",
             f"Quantization: {quant}",
@@ -1538,8 +1545,10 @@ class ModelBrowserDialog(wx.Dialog):
             f"Max context:  {ctx_str}",
             f"Capabilities: {caps_str}",
             "",
-            "Local model — no pricing, no caching, no network. Content "
-            "stays on this machine.",
+            ("Runs on this computer: no pricing, no caching, and "
+             "conversations stay here." if _here else
+             f"Runs on {_machine}: no pricing or caching. Conversations "
+             f"travel over your network to that machine and stay there."),
         ]
         return "\n".join(lines)
 

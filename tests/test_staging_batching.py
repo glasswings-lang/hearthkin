@@ -202,6 +202,19 @@ check("...and it sits below the tool-result cap, so nothing downstream "
       < kp.DEFAULT_AGENT_CONFIG.get("tool_result_cap", 8000))
 
 
+# --- jumping ahead doesn't mark the skipped sections read -----------------
+# (accuracy audit, 24 Nov 2026: start=13 first marked 1-12 as read, and
+# archive_staging then filed them away unseen.)
+kp.staging_file_path(KIN, SCOPE).write_text(body, encoding="utf-8")
+kp.clear_staging_read_mark(KIN, SCOPE)
+read_staging(scope=SCOPE, start=13, agent_name=KIN)
+check("reading from section 13 first leaves 1-12 unread",
+      kp.staging_read_mark(KIN, SCOPE) == 0)
+read_staging(scope=SCOPE, start=1, agent_name=KIN)
+check("...and reading from the start still moves the mark",
+      kp.staging_read_mark(KIN, SCOPE) > 0)
+
+
 print()
 if _fails:
     print(f"{len(_fails)} FAILED: " + ", ".join(_fails))

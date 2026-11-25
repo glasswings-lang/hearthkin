@@ -42,6 +42,7 @@ def backup_one(kin_folder, dest_dir, stamp):
     out = dest_dir / f"{kin_folder.name}-{stamp}.zip"
     tmp = out.with_suffix(".zip.part")
     n = 0
+    missed = []
     with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as z:
         for root, dirs, files in os.walk(kin_folder):
             rel_root = Path(root).relative_to(kin_folder)
@@ -53,20 +54,25 @@ def backup_one(kin_folder, dest_dir, stamp):
                     z.write(p, arcname=str(Path(kin_folder.name) / rel_root / f))
                     n += 1
                 except OSError:
-                    pass
+                    # Named in the log, so the backup never reads as
+                    # complete when it isn't (accuracy audit, 24 Nov 2026).
+                    missed.append(str(rel_root / f))
     tmp.replace(out)
-    return out, n
+    return out, n, missed
 
 
 def prune(dest_dir, kin, keep):
+    """Remove the oldest zips past `keep`. Returns how many really went."""
     zips = sorted(dest_dir.glob(f"{kin}-*.zip"))
     gone = zips[:-keep] if keep > 0 else []
+    removed = 0
     for z in gone:
         try:
             z.unlink()
+            removed += 1
         except OSError:
             pass
-    return len(gone)
+    return removed
 
 
 def main(argv=None):
@@ -84,10 +90,14 @@ def main(argv=None):
     if kin_root.is_dir():
         for k in sorted(p for p in kin_root.iterdir() if p.is_dir()):
             try:
-                out, n = backup_one(k, dest_root / k.name, stamp)
+                out, n, missed = backup_one(k, dest_root / k.name, stamp)
                 pruned = prune(dest_root / k.name, k.name, args.keep)
-                lines.append(f"{stamp} {k.name}: {n} files -> {out.name}"
-                             + (f"; removed {pruned} oldest" if pruned else ""))
+                lines.append(
+                    f"{stamp} {k.name}: {n} files -> {out.name}"
+                    + (f"; {len(missed)} file(s) couldn't be read and are "
+                       f"NOT in this backup: {', '.join(missed[:10])}"
+                       if missed else "")
+                    + (f"; removed {pruned} oldest" if pruned else ""))
             except Exception as e:  # noqa: BLE001
                 lines.append(f"{stamp} {k.name}: FAILED {type(e).__name__}: {e}")
     with open(log, "a", encoding="utf-8") as fh:

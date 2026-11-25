@@ -34,19 +34,20 @@ def format_probe_result(model_name, rec):
         lines += [
             "Result: it made the tool call.",
             "",
-            "Asked to use a tool, it used one. Tools called: %s." % called,
-            "This model can do the tool work a kin needs -- reading files,",
-            "searching memory, tending staging.",
+            # One test call shows it CAN, not that it always will
+            # (accuracy audit, 24 Nov 2026).
+            "Asked once to use a tool, it used one. Tools called: %s." % called,
+            "So it can make tool calls, which a kin needs for reading files,",
+            "searching memory and tending staging.",
         ]
     elif ok is False:
         lines += [
             "Result: it did NOT make the tool call.",
             "",
-            "Asked outright to use a tool, it answered in words and called",
-            "nothing. This is not a formatting problem that a retry will fix.",
-            "It writes a description of using the tool, which reads as though",
-            "it worked -- so a kin on this model looks fine and quietly stops",
-            "doing anything.",
+            "Asked once, outright, to use a tool, it answered in words and",
+            "called nothing. A model that does this tends to write a",
+            "description of using a tool instead, which reads as though it",
+            "worked -- so a kin on it can look fine and quietly do nothing.",
         ]
         said = (rec.get("said") or "").strip()
         if said:
@@ -57,9 +58,11 @@ def format_probe_result(model_name, rec):
         lines += [
             "Result: could not tell.",
             "",
+            # The details below say why; no guessed cause (accuracy audit,
+            # 24 Nov 2026: it blamed Ollama for online models too).
             "The test did not complete, so this says nothing about the model",
-            "either way. Usually that means Ollama was unreachable or the",
-            "model is still loading. Worth trying again.",
+            "either way. The details below say what went wrong. Worth",
+            "trying again.",
         ]
         err = (rec.get("error") or "").strip()
         if err:

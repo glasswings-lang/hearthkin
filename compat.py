@@ -217,8 +217,8 @@ def _openrouter_profile(model_id):
         profile.strict_field_validation = True
         profile.strict_role_alternation = True
         profile.notes.append(
-            "Mistral has a hard context cap (rejects overflow with 400). "
-            "Anthropic / OpenAI silently absorb overflows; Mistral does not."
+            "Mistral rejects a send that is over its context limit, with "
+            "an error."
         )
 
     if family == "anthropic":
@@ -341,10 +341,13 @@ def _check_context_headroom(cfg, profile, notes):
         notes.append(CompatNote(
             SEVERITY_BLOCKER,
             "Context window above model's hard limit",
-            f"This kin's num_ctx is {num_ctx:,} but the target model only "
-            f"supports {profile.max_context:,}. Every message will be rejected "
-            f"with a context-overflow error.",
-            action_hint=f"Recommended: set num_ctx to {int(profile.max_context * 0.92):,} or lower.",
+            f"This kin's Context window is set to {num_ctx:,}, but the "
+            f"target model only supports {profile.max_context:,}. Once the "
+            f"conversation grows past {profile.max_context:,}, sends will be "
+            f"rejected.",
+            action_hint=(f"Recommended: set Context window to "
+                         f"{int(profile.max_context * 0.92):,} or lower, in "
+                         f"Kin settings, Model and generation tab."),
         ))
     elif num_ctx >= int(profile.max_context * 0.95):
         notes.append(CompatNote(
@@ -464,9 +467,9 @@ def _check_window_fits_a_conversation(cfg, profile, notes, kin_name=""):
         f"than a setting being wrong. Watch for it re-introducing itself, or "
         f"ignoring a file it just read.",
         action_hint=(
-            f"Recommended: set num_ctx to {suggested:,} or higher in "
-            f"Settings → Model && generation. Turning tools off for this kin "
-            f"also frees the reserve."
+            f"Recommended: set Context window to {suggested:,} or higher in "
+            f"Kin settings, Model and generation tab. Turning tools off for "
+            f"this kin also frees the reserve."
         ),
     ))
 
@@ -510,8 +513,8 @@ def _check_output_token_cap(cfg, profile, notes, kin_name=""):
             f"(write_file content, big web_search results) it can truncate "
             f"mid-argument and break the tool call.",
             action_hint=(
-                f"Consider setting num_predict to {profile.max_output_tokens:,} "
-                f"or lower in Settings → Model && generation."
+                f"Consider setting Reply cap to {profile.max_output_tokens:,} "
+                f"or lower in Kin settings, Model and generation tab."
             ),
         ))
 

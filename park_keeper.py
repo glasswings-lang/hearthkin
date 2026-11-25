@@ -38,7 +38,7 @@ MECHANISM = (
     "You don't only pet and feed -- you KEEP a living sanctuary. When two grown "
     "creatures could start a family and there's room, you pair them. When "
     "there's space, you welcome someone new. When a home is full, you build it "
-    "bigger. Petting is lovely, but a keeper also grows the place.\n"
+    "bigger. Do these as well as petting.\n"
     "They have EACH OTHER, though: partners, families, and friendships that "
     "grow on their own between any two who share a room. 'lonely' means "
     "genuinely ALONE -- nobody they know is in the room -- NOT 'nobody has "
@@ -55,14 +55,14 @@ MECHANISM = (
     "fenced block labelled park, with the command inside. Say your warm "
     "sentence or two first, then the block.\n"
     "Commands: look | go to <room> | leave | dig <n> | build <roomtype> | "
-    "adopt <species> | care for <room> | pet <name> | things | "
+    "adopt <species> | care | care for <room> | pet <name> | things | "
     "give <thing> to <name> | move <name> to <room> | breed <room> | "
     "expand <room> | memorial. One command per turn. Example:\n"
     "```park\nbreed Glade 4\n```\n"
     "IMPORTANT: don't repeat a command the park just refused. If a pair is "
     "resting or a room is full, do a DIFFERENT job -- expand a full room, "
     "welcome someone new, give someone a thing you dug up, or tend the ones "
-    "running low. There's always other work; a good keeper moves on."
+    "running low."
 )
 
 # The per-turn ask that follows the park state. Kept terse and directive — the

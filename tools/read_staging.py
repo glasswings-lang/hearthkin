@@ -107,7 +107,12 @@ def read_staging(scope: str = "", start: int = 1, agent_name: str = "") -> str:
                     f"{scope!r}. Pending scopes: "
                     f"{', '.join(sorted(files.keys()))}")
         body, shown_to, _total = _batch(agent_name, wanted, text, start)
-        if shown_to:
+        # Move the "read up to here" mark only when this batch carries on
+        # from it: a kin that jumps ahead (start=13 first) would otherwise
+        # mark 1-12 as read, and archive_staging would file away sections
+        # it never saw (accuracy audit, 24 Nov 2026).
+        if shown_to and int(start or 1) <= kin_persistence.staging_read_mark(
+                agent_name, wanted) + 1:
             kin_persistence.set_staging_read_mark(agent_name, wanted, shown_to)
         return body
 

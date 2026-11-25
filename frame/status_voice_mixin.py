@@ -508,7 +508,7 @@ class StatusVoiceMixin:
         if voice_enabled and not voice_id:
             self._announce_unavailable(
                 "voice",
-                "Voice unavailable: no voice picked for this kin (Settings → Voice).",
+                "Voice unavailable: no voice picked for this kin (Kin settings, Voice tab).",
             )
 
         # Route 2: free NVDA readout of the reply content itself — only
@@ -594,8 +594,46 @@ class StatusVoiceMixin:
         except Exception:
             pass
 
+    @staticmethod
+    def _ollama_machine_of(kin, memory=False):
+        """The Ollama address `kin` sends to, or None when its model is on an
+        online provider (or can't be read). `memory`: its memory-writing
+        model, which may differ from its chat model. Used so a wait is only
+        blamed on work that really shares the machine (24 Nov 2026)."""
+        try:
+            from kin_persistence import load_agent_config, resolve_kin_ollama_host
+            cfg = load_agent_config(kin) or {}
+            model = ((cfg.get("memory_model") or "").strip() if memory
+                     else "") or str(cfg.get("model", "") or "")
+            model = strip_model_annotation(model)
+            if not model or llm_backend.is_hosted_model(model):
+                return None
+            return (resolve_kin_ollama_host(cfg.get("ollama_host_name", ""))
+                    or llm_backend._resolve_ollama_host())
+        except Exception:
+            return None
+
     def _own_background_on_the_model(self, include_foreground=False,
-                                     skip_bot=None):
+                                     skip_bot=None, for_kin=None):
+        """With `for_kin` (24 Nov 2026, the accuracy audit): name only work
+        that runs on the SAME Ollama machine as that kin, and nothing at all
+        when that kin is on an online provider, since then nothing it does
+        waits on anything here. Without it, the old behaviour: anything.
+        Told otherwise, a kin on OpenRouter was "queued behind" another kin's
+        local memory write, which it never waits for."""
+        if for_kin:
+            mine = self._ollama_machine_of(for_kin)
+            if mine is None:
+                return ""
+
+            def same(kin, memory=False):
+                return self._ollama_machine_of(kin, memory) == mine
+        else:
+            def same(kin, memory=False):
+                return True
+        return self._busy_label(include_foreground, skip_bot, same)
+
+    def _busy_label(self, include_foreground, skip_bot, same):
         """Short phrase naming whatever is holding the model right now, or ""
         when nothing is.
 
@@ -637,12 +675,14 @@ class StatusVoiceMixin:
         harm than a status line that raises, and this runs on every repaint."""
         try:
             for kin in sorted(getattr(self, "_distilling", None) or {}):
-                return f"{kin} is saving notes to its memory"
+                if same(kin, memory=True):
+                    return f"{kin} is saving notes to its memory"
         except Exception:
             pass
         try:
             for kin, when in sorted(getattr(self, "_cron_workers", None) or set()):
-                return f"{kin} is answering a scheduled wake-up"
+                if same(kin):
+                    return f"{kin} is answering a scheduled wake-up"
         except Exception:
             pass
         try:
@@ -653,12 +693,14 @@ class StatusVoiceMixin:
             # which is exactly the class of bug this method exists to end.
             from frame_shared import cron_helpers
             for kin, when in sorted(cron_helpers.cron_running_kin()):
-                return f"{kin} is answering a scheduled wake-up"
+                if same(kin):
+                    return f"{kin} is answering a scheduled wake-up"
         except Exception:
             pass
         try:
             for kin in sorted(getattr(self, "_heartbeat_workers", None) or set()):
-                return f"{kin} is deciding whether to reach out"
+                if same(kin):
+                    return f"{kin} is deciding whether to reach out"
         except Exception:
             pass
         # A kin mid-reply to somebody else holds the model exactly as firmly
@@ -671,6 +713,8 @@ class StatusVoiceMixin:
                 for name, bot in sorted((getattr(self, "bots", None) or {}).items()):
                     if skip_bot is not None and name == skip_bot:
                         continue
+                    if not same(name):
+                        continue
                     try:
                         line = bot.active_turn_label()
                     except Exception:
@@ -680,13 +724,16 @@ class StatusVoiceMixin:
             except Exception:
                 pass
             try:
-                if getattr(self, "_room_active", False):
+                _order = getattr(self, "_room_round_order", None) or []
+                if getattr(self, "_room_active", False) and (
+                        not _order or any(same(k) for k in _order)):
                     room = getattr(self, "current_room", None) or "a room"
                     return f'the room "{room}" is part-way through a round'
             except Exception:
                 pass
             try:
-                if getattr(self, "_streaming", False) and self.current_agent:
+                if (getattr(self, "_streaming", False) and self.current_agent
+                        and same(self.current_agent)):
                     return (f"{self.current_agent} is part-way through a "
                             f"reply in the main window")
             except Exception:
@@ -710,18 +757,20 @@ class StatusVoiceMixin:
         # If the app's own background work has the model, say so and say what
         # it means. "Working…" with no cause is what turned a queued turn into
         # a worry about whether the message would be read at all.
-        holding = self._own_background_on_the_model()
+        holding = self._own_background_on_the_model(
+            for_kin=getattr(self, "current_agent", None))
         if holding:
             return (
-                f"Waiting on the model — {holding}. Your message is queued "
-                f"and will be answered when that finishes; nothing is lost. "
-                f"{elapsed}s elapsed."
+                f"No reply text yet — {holding}, on the same Ollama, so this "
+                f"reply may be waiting for it. {elapsed}s elapsed."
             )
         timeout_min = getattr(self, "_stream_watchdog_minutes", 5)
+        # Only what's known: nothing has arrived yet. Not "loading" or
+        # "reading your message": the same line shows while tools run or an
+        # approval box waits (accuracy audit, 24 Nov 2026).
         return (
-            f"Working… {elapsed}s — model loading or reading your "
-            f"message (no reply token yet). Cold starts and big prefills can "
-            f"take minutes; watchdog at {timeout_min} min."
+            f"Working… {elapsed}s, no reply text yet. If nothing arrives "
+            f"within {timeout_min} minutes, Hearthkin says so."
         )
 
     def _compose_default_status(self):
@@ -754,7 +803,7 @@ class StatusVoiceMixin:
                 line += f" · {who} recalled {len(used)} memories"
             return line
         if not self.current_agent:
-            return "No kin or room loaded — pick one from the Chat tab."
+            return "No kin or room loaded — pick one at the top of the window."
         cfg = self.agent_cfg or {}
         model = strip_model_annotation(str(cfg.get("model", "") or "")).strip()
         num_ctx = _num_ctx_of(cfg)
@@ -818,9 +867,11 @@ class StatusVoiceMixin:
         # advance is the difference between choosing to wait and wondering
         # whether the message was worth sending at all. Idle-line only, so it
         # is there to be read rather than announced at anyone.
-        holding = self._own_background_on_the_model()
+        holding = self._own_background_on_the_model(
+            for_kin=getattr(self, "current_agent", None))
         if holding:
-            line += f" · busy: {holding} (a reply now will queue behind it)"
+            line += (f" · busy: {holding}, on the same Ollama (a reply now "
+                     f"may wait for it)")
         return line
 
     # Tone per cue. Rising pitch tracks progress — request out (low), first

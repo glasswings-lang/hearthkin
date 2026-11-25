@@ -38,9 +38,10 @@ class BotIntegrationMixin:
                 # wx.CallAfter because the poll thread needs the answer NOW to
                 # decide whether to speak; it is only dict reads, and it
                 # returns "" on anything unexpected.
-                get_busy_label=lambda skip_bot=None: (
+                get_busy_label=lambda skip_bot=None, an=agent_name: (
                     self._own_background_on_the_model(
-                        include_foreground=True, skip_bot=skip_bot)),
+                        include_foreground=True, skip_bot=skip_bot,
+                        for_kin=an)),
                 # Voice messages -> words, with the same model and settings
                 # as dictation (12 Nov 2026; voice_notes.py).
                 transcribe_voice=self._transcribe_voice_note,
@@ -268,15 +269,17 @@ class BotIntegrationMixin:
                 # (the bot applies "auto" and "deny" itself). A missing
                 # setting must read as "ask", never as "auto".
                 request_webcam_approval=lambda label, uid, an=agent_name:
-                    self._request_webcam_approval(an, label, uid),
+                    self._request_webcam_approval(an, label, uid,
+                                                  surface="Discord"),
                 on_long_reply=lambda kin, surface, who, n: wx.CallAfter(
                     self._notify_long_remote_reply, kin, surface, who, n
                 ),
                 # Same busy check Telegram gets (12 Nov 2026): a message held
                 # up behind a memory write is told so, not left wondering.
-                get_busy_label=lambda skip_bot=None: (
+                get_busy_label=lambda skip_bot=None, an=agent_name: (
                     self._own_background_on_the_model(
-                        include_foreground=True, skip_bot=skip_bot)),
+                        include_foreground=True, skip_bot=skip_bot,
+                        for_kin=an)),
                 # Voice messages -> words, as on Telegram.
                 transcribe_voice=self._transcribe_voice_note,
             )

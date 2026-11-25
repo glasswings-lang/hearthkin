@@ -300,6 +300,24 @@ class FileMenuMixin:
                 # Either way produces a corrupt hybrid file (audit H1);
                 # assigning state before the write recreated the same
                 # hybrid on a write failure (audit L-B20).
+                # The copy the box above promised, always: the save's own
+                # copy only fires when a lot is dropped, so opening a
+                # snapshot close to the current one made none (accuracy
+                # audit, 24 Nov 2026). No copy, nothing replaced.
+                from kin_persistence import (keep_cleared_copy,
+                                             load_agent_conversation)
+                _now = list(load_agent_conversation(self.current_agent) or [])
+                if _now:
+                    try:
+                        keep_cleared_copy(self.current_agent,
+                                          "before-open", _now)
+                    except Exception:
+                        self._set_status(
+                            "Open cancelled: a copy of the current "
+                            "conversation couldn't be kept first, so "
+                            "nothing was replaced.")
+                        dlg.Destroy()
+                        return
                 save_agent_conversation(self.current_agent, cleaned)
                 self.conversation = cleaned
                 self.current_convo_file = path

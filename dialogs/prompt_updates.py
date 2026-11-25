@@ -46,8 +46,11 @@ class PromptUpdatesDialog(wx.Dialog):
                 "your old copy is backed up first), Stash it (drop the new "
                 "default into ~/.hearthkin/prompts/updates/ to read later, "
                 "changing nothing live), or just read it in the preview below. "
-                "This only affects the shared install-wide copies — any prompt "
-                "you've customised for a specific kin is left alone."
+                # Per-kin rows are listed too, and adopting one replaces
+                # that kin's copy (accuracy audit, 24 Nov 2026: this said
+                # they were left alone).
+                "A row that names a kin is that kin's own copy: adopting it "
+                "replaces that kin's copy (backed up first)."
             ),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP,
         )

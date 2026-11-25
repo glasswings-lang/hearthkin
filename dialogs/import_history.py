@@ -733,7 +733,10 @@ class ImportHistoryDialog(wx.Dialog):
                 else:
                     result = parse_history(paths[0], kin_name, **opts)
                 err = None
-            except ValueError as e:
+            except (ValueError, ImportFail) as e:
+                # ImportFail too: a Hearthkin conversation file raises it,
+                # and uncaught it left the window on "Parsing…" forever with
+                # its message never shown (accuracy audit, 24 Nov 2026).
                 result, err = None, ("parse", str(e))
             except OSError as e:
                 result, err = None, ("read", str(e))

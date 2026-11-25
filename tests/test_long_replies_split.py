@@ -124,8 +124,11 @@ ch = _Chan(refuse_at=1)
 asyncio.run(b._send_chunked(ch, words))
 check("Discord: a refused piece is TOLD, not silently dropped",
       any("couldn't be sent" in x for x in ch.sent))
-check("...and says the kin still has all of it",
-      any("still has the whole of it" in x for x in ch.sent))
+# 24 Nov 2026 (accuracy audit): this helper sends notices and errors too, so
+# "the kin still has the whole of it" wasn't true for most of what it sends.
+check("...and claims nothing about the kin's copy",
+      not any("still has the whole" in x for x in ch.sent)
+      and any("missing here" in x for x in ch.sent))
 
 if _fails:
     print(f"{len(_fails)} FAILED: " + "; ".join(_fails))

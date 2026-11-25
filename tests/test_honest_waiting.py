@@ -45,16 +45,25 @@ for raw in ("HTTPConnectionPool(host='100.x.x.x', port=11434): Read timed out. "
             "(read timeout=2400)",
             "ReadTimeout",
             "requests.exceptions.ReadTimeout: read timeout"):
-    msg = humanize_error(raw, kin="Bracken", host="http://mac:11434")
+    msg = humanize_error(raw, kin="Bracken", host="http://mac:11434",
+                         runs="ollama")
     ok = ("didn't start replying in time" in msg
-          and "Is it on and reachable?" not in msg)
+          and "Couldn't reach" not in msg)
     check(f"1 read timeout is not reported as unreachable ({raw[:26]!r})", ok)
 
-msg = humanize_error("Read timed out.", kin="Bracken")
-check("1 it says plainly that the machine itself is fine",
-      "machine itself is fine" in msg)
-check("1 ...and names what actually causes it",
-      "holding it" in msg or "loading" in msg)
+msg = humanize_error("Read timed out.", kin="Bracken", runs="ollama")
+check("1 on Ollama it names what can cause it, as an 'if'",
+      "if the machine is busy" in msg)
+check("1 ...and claims nothing as fact about the machine",
+      "machine itself is fine" not in msg and "usually" not in msg)
+
+# 24 Nov 2026: an online kin is never told about "the machine".
+on = humanize_error("Read timed out.", kin="Vesper", runs="online")
+check("1 online: a read timeout talks about the provider, not a machine",
+      "provider" in on and "machine" not in on)
+on = humanize_error("Connection refused", kin="Vesper", runs="online")
+check("1 online: unreachable talks about the provider and the internet",
+      "provider" in on and "machine" not in on)
 
 # Positive control: a genuinely unreachable machine must STILL say so, or this
 # fix has just moved the misdirection somewhere else.
@@ -63,13 +72,17 @@ for raw in ("[Errno 111] Connection refused",
             "getaddrinfo failed",
             "No route to host — network is unreachable",
             "connection timed out"):
-    m = humanize_error(raw, kin="Bracken")
+    m = humanize_error(raw, kin="Bracken", runs="ollama")
     check(f"1-control still unreachable for {raw[:24]!r}",
-          "Is it on and reachable?" in m)
+          "Couldn't reach Bracken's Ollama" in m and "machine is on" in m)
 
 # And the other branches didn't move.
-check("1-control a missing model still reads as a missing model",
-      "isn't loaded" in humanize_error("model 'x' not found", kin="Vesper"))
+check("1-control a missing model on Ollama reads as not downloaded",
+      "doesn't have that model" in humanize_error(
+          "model 'x' not found", kin="Vesper", runs="ollama"))
+check("1-control a missing model online reads as a wrong name",
+      "no model by that name" in humanize_error(
+          "model 'x' not found", kin="Vesper", runs="online"))
 check("1-control rate limits unchanged",
       "rate-limiting" in humanize_error("429 too many requests", kin="Vesper"))
 

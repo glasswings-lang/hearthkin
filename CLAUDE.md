@@ -22,6 +22,7 @@ The person who owns this repo and uses this app every day is **blind, autistic, 
 - **Verification is by running the app or the tests, not by reading code.** So a change isn't finished until there's a way to confirm it that doesn't involve reading a diff — a test, or a short "do this, expect that".
 - **Short, calm sentences.** One idea at a time. Don't stack three questions into one paragraph. If you must ask something, ask one thing.
 - **Notice what's actually being said.** "It keeps doing X" is a report from someone who lives in this app all day. It is almost always accurate, and usually more accurate than a theory about why it can't be happening.
+- **Every message must be true in the situation it's shown in.** Before any text the person sees (a notice, a reply, a status line, a help line), trace the code path: is each claim true *there*? Show it only where it applies; claim only what Hearthkin actually knows (never where a model runs, why a provider failed, that a save worked when it wasn't checked). If one part is unknowable, say "if", once, about that part. A heads-up that fires in the wrong situation is worse than none, but the fix is to gate it, not delete it. The owner, 24 Nov 2026: "context-aware messaging… for everything." Example: `frame/rooms_mixin._shared_ollama_note`, `tests/test_room_shared_ollama_note.py`.
 
 This file is written to be publishable (see below). This section is here at the owner's explicit request.
 

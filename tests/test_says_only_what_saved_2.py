@@ -108,6 +108,72 @@ check("/compact confirm whose marker can't be saved says so",
       b.sent and "Couldn't compact" in b.sent[-1])
 check("...and keeps the note waiting", b.__dict__["_pending_compact"].get(5) == "My note.")
 
+
+# Third batch (24 Nov 2026, the accuracy audit): private chats.
+def failing_save():
+    raise OSError("disk full")
+
+
+b = bot(False)
+b._cmd_clear(9, 9)
+check("private /clear with nothing there says so, and claims no copy",
+      b.sent and "nothing to clear" in b.sent[-1]
+      and "copy" not in b.sent[-1])
+
+b = bot(False)
+b._histories[tb._hkey(9)] = [{"role": "user", "content": "hi"},
+                             {"role": "assistant", "content": "hello"}]
+b._archive_telegram_history = lambda uid, h: Path("telegram-9-copy.jsonl")
+b._save_histories = failing_save
+b._cmd_clear(9, 9)
+check("private /clear whose save fails says it will come back after a restart",
+      b.sent and "couldn't be saved to disk" in b.sent[-1])
+check("...and no longer says the kin won't remember anything",
+      "won't remember anything" not in b.sent[-1])
+
+b = bot(False)
+rows = [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]
+b._histories[tb._hkey(9)] = list(rows)
+b._save_histories = failing_save
+ok = b._truncate_history_for(9, 0)
+check("a private /undo whose save fails reports it",
+      ok is False)
+check("...and puts the history back, so 'nothing changed' is true",
+      b._histories[tb._hkey(9)] == rows)
+
+# /help in a group says whether the kin talks there at all.
+b = bot(False)
+b.get_config = lambda: {"groups": {"-100": {}}}
+b._cmd_help(-100, is_private=False)
+check("group /help in an added group says to just write",
+      "just write in the group" in b.sent[-1] and "/front" in b.sent[-1])
+b._cmd_help(-200, is_private=False)
+check("group /help in a group it isn't added to says it won't answer",
+      "isn't set up to talk in this group" in b.sent[-1]
+      and "just write" not in b.sent[-1])
+
+# /tools lists what a real turn would have.
+b = bot(False)
+b.get_config = lambda: {}
+b._user_tool_bucket = lambda uid: "safe"
+b._user_is_me = lambda uid: True
+b._park_users = set()
+real_load = kp.load_kin_tools
+kp.load_kin_tools = lambda name: ["read_file"]
+try:
+    b._cmd_tools(9, 9)
+finally:
+    kp.load_kin_tools = real_load
+check("/tools for 'This is me' includes message_kin, as a real turn does",
+      "message_kin" in b.sent[-1])
+
+# The webcam window names the surface the request came from.
+_bi = (ROOT / "frame" / "bot_integration_mixin.py").read_text(encoding="utf-8")
+_wa = (ROOT / "dialogs" / "webcam_approval.py").read_text(encoding="utf-8")
+check("a Discord webcam request is shown as Discord, not Telegram",
+      'surface="Discord"' in _bi and "{surface} user {requester_id}" in _wa
+      and "Settings, Telegram, Users" not in _wa)
+
 import inspect  # noqa: E402
 check("Discord's history append can be told to raise",
       "raise_on_failure" in inspect.signature(kp.append_discord_turn).parameters)

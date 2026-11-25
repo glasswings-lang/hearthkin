@@ -119,8 +119,11 @@ def distill_progress_parts(*, stored, bookmark, total, trusted, walking,
             # Note this is a standing condition, not an imminent event: a
             # backlog many times num_ctx stays over threshold for a long
             # time, so this line persists rather than counting down.
-            parts.append(f"over the {at_pct}% threshold — fires on the "
-                         f"next turn")
+            # "a coming turn": backlog pacing can hold it for a while
+            # (accuracy audit, 24 Nov 2026).
+            parts.append(f"over the {at_pct}% threshold — fires on a "
+                         f"coming turn (it may wait while catching up a "
+                         f"backlog)")
         else:
             parts.append(f"auto-fires at {at_pct}%")
 
@@ -578,9 +581,10 @@ class EditKinDialog(wx.Dialog):
                 "staging area (one file per surface) for the kin to "
                 "review during tending; it does NOT auto-rewrite "
                 "memory.md. Each conversation surface (desktop chat, "
-                "individual Telegram DMs, Telegram groups) keeps its "
-                "own message count toward the threshold. Surfaces with "
-                "share-with-desktop on share a single \"desktop\" "
+                "individual Telegram DMs, Telegram groups, Discord "
+                "channels, remembered rooms) keeps its own message count "
+                "toward the threshold. Surfaces shared with the desktop "
+                "share a single \"desktop\" "
                 "counter; other surfaces each have an independent "
                 "counter. The percentage trigger is a separate, "
                 "independent trip that fires when the conversation a "
@@ -1055,11 +1059,10 @@ class EditKinDialog(wx.Dialog):
                 "commands — checking one lets this kin call that tool "
                 "during a reply when it decides the tool fits. You are "
                 "not running the tools yourself. Toggle saves immediately. "
-                "Note: enabling any tool switches this kin's chats to "
-                "non-streaming mode (the model has to pause for each "
-                "tool result, so replies arrive all at once rather than "
-                "sentence-by-sentence). Leave every box unchecked to "
-                "keep the streaming experience."
+                # Tool replies stream like any other (accuracy audit, 24 Nov
+                # 2026: this said they arrive all at once).
+                "Replies still appear as they're written, and pause while "
+                "a tool runs."
             ),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP,
         )
@@ -1078,23 +1081,27 @@ class EditKinDialog(wx.Dialog):
         # StaticBox + RadioButtons gets both: group context AND each
         # option spoken.
         self._trust_explainers = [
-            "Untrusted: every exec call needs your approval before "
-            "running. Default for new kin. Safe choice when you're "
-            "setting up a kin you don't know well yet.",
+            # What each level does on each surface (accuracy audit, 24 Nov
+            # 2026: Full said "denylist included" everywhere, and
+            # Untrusted said every call asks, but wake-ups refuse).
+            "Untrusted: every shell command needs your approval before "
+            "running. On wake-ups nobody is there to ask, so commands "
+            "simply don't run. Default for new kin. Safe choice when "
+            "you're setting up a kin you don't know well yet.",
             "Trusted: only obviously destructive shapes need approval "
             "(rm -rf /, force-push to main, Windows drive wipes — see "
             "the denylist in tools/_exec_denylist.py for the full list). "
             "Everything else runs without prompting.",
-            "Full: no approval gating at all. The kin can run any shell "
-            "command without prompting you, including ones on the "
-            "denylist. Root-access trust — only set this for a kin "
+            "Full: in the desktop chat, no approval at all, denylist "
+            "included. On Telegram, Discord and wake-ups the denylist is "
+            "still refused. Root-access trust — only set this for a kin "
             "you've watched on Trusted for a while and explicitly want "
             "to hand the keys to.",
         ]
         _current_trust = self.cfg.get("tool_trust", "untrusted")
 
         trust_box = wx.StaticBox(
-            host, label="Tool call gating (exec and webcam capture)",
+            host, label="Tool call gating (shell commands)",
         )
         trust_sizer = wx.StaticBoxSizer(trust_box, wx.VERTICAL)
 
@@ -1683,15 +1690,19 @@ class EditKinDialog(wx.Dialog):
         dc_help = wx.TextCtrl(host, value=(
             "Needs a bot token from the Discord Developer Portal, with the "
             "Message Content Intent turned ON, and the bot invited to your "
+            # Only what's true for every setup (accuracy audit, 24 Nov 2026:
+            # it guessed at hardware, and said nobody could reach the kin
+            # until added, which isn't so in a listed channel).
             "server via OAuth2. On busy servers keep this on \"Only when "
-            "mentioned\" — on local hardware a kin can't keep pace with a "
-            "fast channel, so let it speak when spoken to. Nobody can reach "
-            "the kin here until you add them above: that is on purpose, "
-            "because a bot sits in whatever servers it has been invited to. "
-            "Each person you add starts with no tools at all; you choose "
-            "what they can reach when you add them. A shell command or a "
-            "webcam capture always asks you on THIS desktop, never in the "
-            "server."),
+            "mentioned\", so the kin speaks when spoken to rather than to "
+            "every message. Nobody can message the kin directly until you "
+            "add them above, on purpose, because a bot sits in whatever "
+            "servers it has been invited to; but everyone in a channel you "
+            "list below can talk there, except people muted in it. Each "
+            "person you add starts with no tools at all; you choose what "
+            "they can reach when you add them. A shell command or a webcam "
+            "capture asks you on THIS desktop, never in the server, unless "
+            "that person's own settings say to run it without asking."),
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP
             | wx.TE_NO_VSCROLL,
         )
@@ -1739,8 +1750,8 @@ class EditKinDialog(wx.Dialog):
                 "Test now fires the selected entry immediately, bypassing "
                 "the schedule. When Hearthkin is running, wake-ups can "
                 "inject into the live conversation if the toggle below "
-                "is on; when closed, they run isolated and append to "
-                "the kin's conversation, journal, and Telegram."
+                "is on; when closed, they run on their own and send their "
+                "reply to the places chosen in that entry."
             ),
             style=wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_NO_VSCROLL | wx.TE_WORDWRAP,
         )
@@ -2272,6 +2283,20 @@ class EditKinDialog(wx.Dialog):
     def _refresh_machine_display(self):
         """Repaint the read-only 'Runs on' field from the kin's current
         ollama_host_name."""
+        # A kin on an online provider doesn't run on any Ollama machine;
+        # saying "This machine" for it was false (accuracy audit, 24 Nov
+        # 2026).
+        try:
+            from frame_shared import strip_model_annotation
+            _model = strip_model_annotation(
+                str((self.cfg or {}).get("model", "") or ""))
+            if _model and llm_backend.is_hosted_model(_model):
+                _prov = llm_backend.provider_for_model(_model) or "an online provider"
+                self.machine_display.SetValue(
+                    f"Not used: this kin's model runs at {_prov}")
+                return
+        except Exception:
+            pass
         self.machine_display.SetValue(
             self._machine_label_for((self.cfg or {}).get("ollama_host_name", "")))
 
@@ -2544,7 +2569,7 @@ class EditKinDialog(wx.Dialog):
 
         _add_row(
             "desktop",
-            "Desktop (and any Telegram surfaces with share-with-desktop on)",
+            "Desktop (and any Telegram or Discord chats shared with it)",
         )
 
         for uid in allow_from:
@@ -2584,7 +2609,14 @@ class EditKinDialog(wx.Dialog):
         for (kn, sk), n in counters.items():
             if kn != self.kin or sk in seen:
                 continue
-            labels.append(f"(orphan) {sk}: {int(n or 0)}")
+            # A Discord channel's own scope is real, not an orphan; the list
+            # above just doesn't enumerate Discord channels (accuracy audit,
+            # 24 Nov 2026: they all read "(orphan)").
+            if str(sk).startswith("discord:"):
+                labels.append(f"Discord channel {sk[len('discord:'):]}: "
+                              f"session counter {int(n or 0)}")
+            else:
+                labels.append(f"(orphan) {sk}: {int(n or 0)}")
             keys.append(sk)
 
         if every_n <= 0 and at_pct <= 0:
@@ -3485,8 +3517,9 @@ class EditKinDialog(wx.Dialog):
             return
         uid = self._tg_user_ids_in_order[idx]
         confirm = wx.MessageBox(
-            f"Remove Telegram user {uid}? They won't be able to chat with "
-            f"this kin anymore.",
+            f"Remove Telegram user {uid}? They won't be able to message this "
+            f"kin privately. In groups the kin is in, they can still talk "
+            f"unless muted there.",
             "Remove user", wx.YES_NO | wx.CANCEL | wx.NO_DEFAULT | wx.ICON_QUESTION,
         )
         if confirm != wx.YES:
@@ -3719,8 +3752,11 @@ class EditKinDialog(wx.Dialog):
                 f"No: the prior history stays in telegram_history.json "
                 f"as an orphan (the kin won't see it from desktop OR "
                 f"from group — the new merged path reads from "
-                f"conversation.jsonl). You can migrate later by "
-                f"toggling share off and back on."
+                # A group's sharing can't be switched back off from its
+                # window (telegram_group keeps it on), so the old "toggle
+                # it off and on" was impossible (accuracy audit, 24 Nov 2026).
+                f"conversation.jsonl). To migrate it later, remove the "
+                f"group and add it again."
             ),
             "Migrate prior group history?",
             wx.YES_NO | wx.CANCEL | wx.YES_DEFAULT | wx.ICON_QUESTION,
@@ -3811,14 +3847,12 @@ class EditKinDialog(wx.Dialog):
                 f"No: the prior history stays in telegram_history.json "
                 f"as an orphan (the kin won't see it). You can migrate "
                 f"later by toggling share off and back on.\n\n"
-                f"Note on ordering: these historical Telegram messages "
-                f"don't have timestamps stored — older builds didn't "
-                f"capture them. So they'll be appended at the end of "
-                f"the desktop conversation in their original Telegram "
-                f"order, not interleaved chronologically with desktop "
-                f"messages. Any new Telegram messages going forward "
-                f"will have timestamps so future migrations can sort "
-                f"properly."
+                # The migration appends in order and never sorts (accuracy
+                # audit, 24 Nov 2026: this blamed missing timestamps and
+                # promised future sorting).
+                f"Note on ordering: they'll be added at the end of the "
+                f"desktop conversation, in their Telegram order, not "
+                f"woven in by time with desktop messages."
             ),
             "Migrate prior Telegram history?",
             wx.YES_NO | wx.CANCEL | wx.YES_DEFAULT | wx.ICON_QUESTION,
@@ -4040,7 +4074,11 @@ class EditKinDialog(wx.Dialog):
         uid = self._dc_user_ids_in_order[idx]
         who = "anyone" if uid == "*" else uid
         if wx.MessageBox(
-                f"Stop {who} from talking to {self.kin} on Discord?\n\n"
+                # Removal stops direct messages; in a listed channel they can
+                # still talk (accuracy audit, 24 Nov 2026).
+                f"Stop {who} messaging {self.kin} directly on Discord? In "
+                f"channels the kin is in, they can still talk unless muted "
+                f"there.\n\n"
                 f"Their past messages in the channel are not touched.",
                 "Remove person", wx.YES_NO | wx.ICON_QUESTION) != wx.YES:
             return
@@ -4506,8 +4544,12 @@ class EditKinDialog(wx.Dialog):
             # Dependent display widgets stay enabled regardless of
             # effort (see notes above and by _on_think_effort_change).
             if supports is True:
+                # True only comes from the Ollama check, and Ollama takes a
+                # plain on/off: Low, Medium and High all send "on"
+                # (llm_backend; accuracy audit, 24 Nov 2026).
                 self.think_capability_hint.SetValue(
-                    "(this model has a reasoning channel — all tiers work)"
+                    "(this model can reason. On Ollama, Off turns it off, "
+                    "and Low, Medium and High all do the same thing: on)"
                 )
             elif supports == "remote":
                 self.think_capability_hint.SetValue(
@@ -5078,14 +5120,18 @@ class EditKinDialog(wx.Dialog):
             return
         result = payload
         if result.returncode == 0:
+            # Only what's certain (accuracy audit, 24 Nov 2026): a skipped
+            # "only when there are notes" run also exits 0, an own-history
+            # entry isn't saved into the chat, and replies go to the places
+            # the entry names, Discord included.
             wx.MessageBox(
-                f"The wake-up ran. The reply was appended to:\n"
-                f"  • {self.kin}'s conversation\n"
-                f"  • the journal at memory/journal/<today>.md\n"
-                f"  • Telegram (if configured)\n\n"
-                f"If Hearthkin was already open for this kin, the wake-up "
-                f"was routed through the running app instead.",
-                "Test wake-up — ran",
+                "The wake-up finished without an error. Where its reply "
+                "went depends on this entry's settings (its Send to list, "
+                "and whether it keeps its own history), and an entry set "
+                "to run only when there are notes to tend may have had "
+                "nothing to do. Check the conversation, or the kin's "
+                "journal for today.",
+                "Test wake-up — finished",
                 wx.OK | wx.ICON_INFORMATION,
                 parent,
             )

@@ -46,8 +46,9 @@ def _wording(surface):
             "To find someone's ID: turn on Developer Mode in Discord's "
             "settings (Advanced), then right-click them and choose Copy User "
             "ID. Entering * instead lets ANYONE in the servers this bot has "
-            "joined talk to the kin, and every setting below applies to all "
-            "of them."),
+            "joined talk to the kin, and the settings below apply to all of "
+            "them, except This is me, sharing with the desktop, and "
+            "searching your conversations, which * never gets."),
         "id_hint_name": ("How to find a user's Telegram ID" if tg else
                          "How to find a Discord user ID, and what the star "
                          "means"),
@@ -90,7 +91,9 @@ def _wording(surface):
         "exec_hint": (
             "Only matters if this person has Full tools. \"Use the kin's "
             "setting\" follows the box \"Run remote (Telegram/Discord) exec "
-            "without asking\" in Settings, Tools. \"Ask me first\" always "
+            "without asking\" in Tool behaviour settings, which only runs "
+            "commands without asking when the kin is also Trusted or Full. "
+            "\"Ask me first\" always "
             "asks you, never them: "
             + ("in the chat if \"This is me\" is ticked, otherwise in a "
                "window on this computer." if tg else

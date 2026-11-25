@@ -69,8 +69,11 @@ class VoiceTuningDialog(wx.Dialog):
                    "similarity_boost", pct)
         slider_row("St&yle (0-100):", "Voice style", 0, 100,
                    int(round(float(v.get("style", 0.0)) * 100)), "style", pct)
-        slider_row("Spee&d (70 = slow, 100 = natural, 130 = fast):", "Voice speed",
-                   70, 130, int(round(float(v.get("speed", 1.0)) * 100)), "speed", pct)
+        # 70-120: ElevenLabs takes speeds 0.7-1.2, as the config note says;
+        # 121-130 could be refused (accuracy audit, 24 Nov 2026).
+        slider_row("Spee&d (70 = slow, 100 = natural, 120 = fast):", "Voice speed",
+                   70, 120, min(120, int(round(float(v.get("speed", 1.0)) * 100))),
+                   "speed", pct)
 
         # Read-only TextCtrl: the next control is a button, which names
         # itself from its label, so as a StaticText this is announced to

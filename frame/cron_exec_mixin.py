@@ -149,10 +149,12 @@ class CronExecMixin:
             _per_user = (cfg.get(surface_key) or {}).get("user_exec_approval")
             if resolve_exec_approval(_per_user, user_id, cfg) == "auto":
                 return raw_exec(args)
+            # What's true on this path: this person's commands are set to
+            # ask (the "auto" case returned above). Not "always", which it
+            # isn't (accuracy audit, 24 Nov 2026).
             reason = (
-                f"Remote request from the {surface_key} surface. Exec calls "
-                "that arrive over a remote surface always need your approval "
-                "here, regardless of the kin's trust level."
+                f"Remote request from {surface_key.capitalize()}. This "
+                "person's commands are set to ask you first."
             )
             decision = self._request_exec_approval(agent_name, command, reason)
             # Fail CLOSED — see the note on the desktop wrapper above. This is
@@ -656,10 +658,12 @@ class CronExecMixin:
                     gesture_retry=hearthkin_cron.gesture_retry_enabled(entry))
         except Exception as e:
             cron_helpers.log_cron_error(kin, type(e).__name__, str(e))
+            journaled = False
             try:
                 cron_helpers.append_journal_error_marker(
                     kin, "(deferred)", prompt, f"{type(e).__name__}: {e}"
                 )
+                journaled = True
             except Exception:
                 pass
             # Synthesize a marker that _notify_cron_failure can
@@ -671,6 +675,7 @@ class CronExecMixin:
                 synthetic = f"{_CRON_USER_TEXT_MARKER} — fired at {time_label}]"
                 self._notify_cron_failure(
                     kin, synthetic, f"{type(e).__name__}: {e}",
+                    journal_written=journaled,
                 )
             except Exception:
                 pass
@@ -787,7 +792,8 @@ class CronExecMixin:
             pass
         return decision_holder["decision"]
 
-    def _request_webcam_approval(self, kin_name, requester_label, requester_id):
+    def _request_webcam_approval(self, kin_name, requester_label, requester_id,
+                                 surface="Telegram"):
         """Pop the webcam-approval dialog on the main thread and block
         the calling worker until the operator chooses. Returns "allow",
         "deny", or "unavailable" (no "remember" — webcam permission is
@@ -800,6 +806,7 @@ class CronExecMixin:
         return self._request_approval_dialog(
             lambda: WebcamApprovalDialog(
                 self, kin_name, requester_label, requester_id,
+                surface=surface,
             ),
             WebcamApprovalDialog.DECISION_DENY,
             unavailable_decision="unavailable",

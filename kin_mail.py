@@ -115,10 +115,17 @@ def per_day(kin):
         return 1
 
 
-def can_send(sender, to, now=None):
-    """(True, "") or (False, the reason in plain words)."""
+def can_send(sender, to, now=None, for_person=False):
+    """(True, "") or (False, the reason in plain words).
+
+    `for_person`: the reason worded for the person reading the chat, not
+    the kin (accuracy audit, 24 Nov 2026: the person was shown "you've
+    already written to…", which read as being about them)."""
     limit = per_day(sender)
     if limit <= 0:
+        if for_person:
+            return False, (f"{sender}'s messages to other kin are set to 0 a "
+                           f"day, in its heartbeat settings.")
         return False, ("your person hasn't set you up to write to other kin "
                        "(you may write 0 messages a day).")
     st = _load_state().get(_pair_key(sender, to)) or {}
@@ -127,11 +134,13 @@ def can_send(sender, to, now=None):
         sent = sum(1 for s in st.get("sent_by") or []
                    if s.casefold() == sender.casefold())
     if sent >= limit:
+        times = "once" if limit == 1 else f"{limit} times"
+        if for_person:
+            return False, (f"{sender} has already written to {to} {times} "
+                           f"today, its daily limit.")
         return False, (
-            f"you've already written to {to} "
-            + ("once" if limit == 1 else f"{limit} times")
-            + " today, which is as many as your person has set, so this can "
-              "wait until tomorrow.")
+            f"you've already written to {to} {times} today, which is as many "
+            "as your person has set, so this can wait until tomorrow.")
     return True, ""
 
 
@@ -324,9 +333,15 @@ def handle_reply(sender, reply_text, now=None, prompted=False, shown=None):
         who = resolve_kin(name, sender) or str(name).strip()
         bits.append(f"to {who}: " + ("sent; " if ok else "NOT sent; ") + said)
         if shown is not None:
-            shown.append(f"📨 {sender} wrote to {who}." if ok
-                         else f"📨 {sender} tried to write to {who}, but it "
-                              f"wasn't sent: {said}")
+            if ok:
+                shown.append(f"📨 {sender} wrote to {who}.")
+            else:
+                # The person's own wording of why, when it's the limit;
+                # otherwise the reason as given.
+                _limited, _why = can_send(sender, who, now, for_person=True)
+                shown.append(f"📨 {sender} tried to write to {who}, but it "
+                             f"wasn't sent: "
+                             + (_why if not _limited and _why else said))
     return (_prompt("kin_message_receipt", sender)
             .replace("{results}", " | ".join(bits)), sent)
 
