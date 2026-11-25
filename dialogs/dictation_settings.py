@@ -517,10 +517,32 @@ class DictationSettingsDialog(wx.Dialog):
         model or wait on a sleeping machine, and a frozen window during
         that would be the wrong answer to 'is this working'."""
         settings = self._collect()
+        # Ask before downloading anything (25 Nov 2026: a missing model used
+        # to be fetched without a word). Only a local model can need it.
+        allow_download = False
+        if stt.route_for(settings.get("model"), settings.get("host")) \
+                == stt.ROUTE_LOCAL:
+            name = settings.get("model") or stt.DEFAULT_MODEL
+            if not stt.model_on_disk(name):
+                size = stt.MODEL_SIZES.get(name, "")
+                if wx.MessageBox(
+                        f"The {name} speech model isn't on this computer. "
+                        f"Checking needs it, so it would be downloaded now"
+                        + (f" ({size})" if size else "")
+                        + ", into your user folder's .cache\\huggingface. "
+                        "Download it?",
+                        "Download the speech model?",
+                        wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION,
+                        self) != wx.YES:
+                    self.check_field.SetValue(
+                        "Not checked. Nothing was downloaded.")
+                    return
+                allow_download = True
         self.check_btn.Disable()
         self.check_field.SetValue(
-            "Checking. This may take a while the first time — it loads, and "
-            "if necessary downloads, the speech model.")
+            "Checking. Downloading the speech model first, which can take a "
+            "while." if allow_download else
+            "Checking. Loading the speech model can take a moment.")
 
         def worker():
             from frame_shared import llm_backend
@@ -529,6 +551,7 @@ class DictationSettingsDialog(wx.Dialog):
                     settings,
                     get_api_key=lambda: llm_backend.resolve_provider_key(
                         "elevenlabs"),
+                    allow_download=allow_download,
                 )
             except Exception as e:
                 ok, msg = False, f"Dictation check failed: {e}"

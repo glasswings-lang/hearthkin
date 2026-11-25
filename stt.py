@@ -117,6 +117,27 @@ class SttError(RuntimeError):
     shown to a person as-is: what failed, and what they could change."""
 
 
+class ModelNotDownloaded(SttError):
+    """The local speech model isn't on this computer, and nothing asked to
+    download it. Carries `name` and `size` so the caller can ask the person,
+    in context, and try again with allow_download=True (25 Nov 2026: the
+    person wants a dialog at the moment it's needed, not a silent download
+    and not a refusal)."""
+
+    def __init__(self, name, size=""):
+        self.name, self.size = name, size
+        # Worded for whoever reads it, which on Telegram or Discord is
+        # usually not the person running Hearthkin (25 Nov 2026). The
+        # desktop doesn't show this: it asks with its own box.
+        super().__init__(
+            f"the speech model ({name}"
+            + (f", {size}" if size else "")
+            + ") isn't downloaded on the computer running Hearthkin yet. "
+            "Nothing was downloaded. The kin's person can download it there, "
+            "by dictating on the desktop or with Check dictation in its "
+            "settings.")
+
+
 # ─── Where does this model live? ───────────────────────────────────
 
 def route_for(model="", host=""):
@@ -288,7 +309,25 @@ def downloaded_models():
     return found
 
 
-def load_model(name=None, device="auto", compute_type="auto"):
+def model_on_disk(name):
+    """True when this Whisper model is already on this computer (a folder
+    path, or in the Hugging Face cache). Checks locally only; never
+    downloads and never touches the network."""
+    import os
+    name = name or DEFAULT_MODEL
+    if os.path.isdir(name):
+        return True
+    _install_av_stub()
+    try:
+        from faster_whisper.utils import download_model
+        download_model(name, local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+
+def load_model(name=None, device="auto", compute_type="auto",
+               allow_download=False):
     """Return a loaded faster-whisper model, cached per
     (name, device, compute_type).
 
@@ -296,7 +335,14 @@ def load_model(name=None, device="auto", compute_type="auto"):
     failure. A GPU with no room left because a local language model is
     resident is the ordinary state of a machine that runs its own
     models — it is not a fault, and it should cost a slower
-    transcription rather than an error message."""
+    transcription rather than an error message.
+
+    Never downloads unless `allow_download` (25 Nov 2026): faster-whisper
+    fetches a missing model by itself, so the first dictation, or the
+    start-up warm-up, quietly pulled up to 3 GB. The person: "I hate this
+    silent shit." A missing model raises ModelNotDownloaded; the desktop
+    asks right then ("download it now?") and tries again with True, as does
+    Check dictation in the settings."""
     name = name or DEFAULT_MODEL
     key = (name, device, compute_type)
     with _models_lock:
@@ -316,6 +362,9 @@ def load_model(name=None, device="auto", compute_type="auto"):
             "Whisper server or ElevenLabs under Preferences → Dictation. "
             f"The import said: {e}"
         ) from e
+
+    if not allow_download and not model_on_disk(name):
+        raise ModelNotDownloaded(name, MODEL_SIZES.get(name, ""))
 
     if device == "auto":
         attempts = [("cuda", "float16"), ("cpu", "int8")]
@@ -522,7 +571,8 @@ def wav_from_pcm(pcm_bytes, samplerate=16000, channels=1, sampwidth=2):
 
 # ─── The dispatch ──────────────────────────────────────────────────
 
-def transcribe(wav_bytes, settings=None, get_api_key=None):
+def transcribe(wav_bytes, settings=None, get_api_key=None,
+               allow_download=False):
     """Transcribe WAV bytes with whichever transcription model the
     settings name, wherever it lives.
 
@@ -535,13 +585,15 @@ def transcribe(wav_bytes, settings=None, get_api_key=None):
     Passing the resolver rather than the key means a key edited in
     Preferences applies to the very next dictation."""
     if not wav_bytes:
+        # Can't tell why nothing arrived (accuracy audit, 24 Nov 2026).
         raise SttError(
-            "Empty recording — press Stop talking after speaking, not before."
+            "Nothing was recorded: no sound reached Hearthkin from the "
+            "microphone."
         )
     s = dict(settings or {})
     route = route_for(s.get("model"), s.get("host"))
     if route == ROUTE_LOCAL:
-        return _local_whisper(wav_bytes, s)
+        return _local_whisper(wav_bytes, s, allow_download=allow_download)
     if route == ROUTE_SERVER:
         return _remote_transcription(wav_bytes, s)
     return _elevenlabs(wav_bytes, s, get_api_key)
@@ -549,12 +601,13 @@ def transcribe(wav_bytes, settings=None, get_api_key=None):
 
 # ─── Route 1: the model on this computer ───────────────────────────
 
-def _local_whisper(wav_bytes, s):
+def _local_whisper(wav_bytes, s, allow_download=False):
     name = s.get("model") or DEFAULT_MODEL
     device = s.get("device") or "auto"
     compute = s.get("compute") or "auto"
     try:
-        return _run_local(wav_bytes, s, load_model(name, device, compute))
+        return _run_local(wav_bytes, s, load_model(
+            name, device, compute, allow_download=allow_download))
     except SttError:
         raise
     except Exception as e:
@@ -819,7 +872,7 @@ def _post_multipart(url, wav_bytes, fields, headers, timeout,
 
 # ─── Self-check, for the settings screen ───────────────────────────
 
-def self_check(settings=None, get_api_key=None):
+def self_check(settings=None, get_api_key=None, allow_download=False):
     """Prove the configured transcription model can actually do the job,
     and say so in words a person can act on. Returns (ok, message).
 
@@ -848,7 +901,8 @@ def self_check(settings=None, get_api_key=None):
         already_warm = loaded_as(name, device, compute) is not None
         t0 = time.time()
         try:
-            load_model(name, device, compute)
+            # allow_download only when the settings screen asked first.
+            load_model(name, device, compute, allow_download=allow_download)
         except SttError as e:
             return False, str(e)
         except Exception as e:

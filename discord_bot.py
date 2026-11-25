@@ -2539,8 +2539,8 @@ class DiscordBot:
             # Download, decoder or key failures land here too, not only
             # unclear audio (accuracy audit, 24 Nov 2026).
             await self._send_chunked(ch, (
-                f"I couldn't turn that voice message into words: {e}. "
-                f"Please type it."))
+                f"I couldn't turn that voice message into words: "
+                f"{str(e).rstrip('.')}. Please type it for now."))
             return None
         await self._send_chunked(ch, f"🎙 Heard: {heard}")
         return heard

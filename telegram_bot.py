@@ -2907,8 +2907,8 @@ class TelegramBot:
             # only unclear audio, so say what happened, not "make out"
             # (accuracy audit, 24 Nov 2026).
             self._send_chunked(chat_id, (
-                f"I couldn't turn that voice message into words: {e}. "
-                f"Please type it."))
+                f"I couldn't turn that voice message into words: "
+                f"{str(e).rstrip('.')}. Please type it for now."))
             return None
         self._send_chunked(chat_id, f"🎙 Heard: {heard}")
         return heard

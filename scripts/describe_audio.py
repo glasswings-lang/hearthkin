@@ -17,6 +17,37 @@ from transformers import (
 audio_path = sys.argv[1]
 start = float(sys.argv[2]) if len(sys.argv) > 2 else 0.0
 model_id = "Qwen/Qwen2-Audio-7B-Instruct"
+MODEL_SIZE = "about 16 GB"
+
+
+def _model_is_here():
+    """True when the model is already on this computer. Checks the Hugging
+    Face cache only; never touches the network."""
+    try:
+        from huggingface_hub import snapshot_download
+        snapshot_download(model_id, local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+
+# Never download silently (25 Nov 2026). Someone ran this once and 16 GB
+# landed on the maintainer's C: drive with nobody asking; they found it
+# months later while hunting for space. The person's words: "I hate this
+# silent shit." So: if the model isn't here, say how big it is and wait for
+# an explicit yes. With no one at the keyboard to answer, refuse.
+if not _model_is_here():
+    print(f"This needs the {model_id} model, which is not on this computer.\n"
+          f"Downloading it takes {MODEL_SIZE} of disk space, in the Hugging "
+          f"Face cache (your user folder, .cache\\huggingface).", flush=True)
+    if not sys.stdin or not sys.stdin.isatty():
+        print("Nobody is here to agree to that, so nothing was downloaded.",
+              flush=True)
+        sys.exit(1)
+    answer = input("Type yes to download it, anything else to stop: ")
+    if answer.strip().lower() != "yes":
+        print("Stopped. Nothing was downloaded.", flush=True)
+        sys.exit(1)
 
 print(f"[{time.strftime('%H:%M:%S')}] loading model (slow part)...", flush=True)
 t0 = time.time()

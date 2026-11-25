@@ -364,13 +364,17 @@ class StatusVoiceMixin:
         except Exception:
             pass
 
-    def _transcribe_worker(self):
+    def _transcribe_worker(self, retry_wav=None, allow_download=False):
         """Background: close the microphone, transcribe, put the words
         into the input box on the UI thread.
 
         Errors land in the Activity field and are spoken, rather than
         in a modal, so nothing blocks and nothing has to be dismissed
-        before the next attempt."""
+        before the next attempt. One exception (25 Nov 2026): when the
+        speech model isn't downloaded, a box asks, right then, whether to
+        download it (naming the size); on yes the SAME recording is
+        transcribed after the download (`retry_wav`, `allow_download`).
+        It used to download silently."""
         settings = self._dictation_cfg()
 
         # If the speech model has not been loaded in this process yet,
@@ -394,12 +398,23 @@ class StatusVoiceMixin:
 
         text = ""
         err = None
+        missing = None
         try:
-            text = self._voice_engine.stop_recording_and_transcribe(settings)
+            if retry_wav is not None:
+                text = self._voice_engine.transcribe_wav(
+                    retry_wav, settings, allow_download=allow_download)
+            else:
+                text = self._voice_engine.stop_recording_and_transcribe(
+                    settings)
+        except voice_module.VoiceModelMissing as e:
+            missing = e
         except Exception as e:
             err = str(e)
 
         def finish():
+            if missing is not None:
+                self._ask_to_download_speech_model(missing)
+                return
             try:
                 self.talk_btn.Enable()
             except Exception:
@@ -435,6 +450,32 @@ class StatusVoiceMixin:
             self._set_status(f"Heard: {text}", speak=True)
 
         wx.CallAfter(finish)
+
+    def _ask_to_download_speech_model(self, missing):
+        """UI thread: the speech model isn't here. Ask now, naming it and
+        its size; yes downloads it and transcribes what was just said."""
+        size = f" ({missing.size})" if missing.size else ""
+        r = wx.MessageBox(
+            f"Dictation needs the {missing.name} speech model{size}, and it "
+            f"isn't on this computer yet. Download it now? What you just "
+            f"said is kept and will be typed in once it's ready.",
+            "Download the speech model?",
+            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_QUESTION, self)
+        if r != wx.YES:
+            try:
+                self.talk_btn.Enable()
+            except Exception:
+                pass
+            self._set_status("Dictation stopped. Nothing was downloaded.",
+                             speak=True)
+            return
+        self._set_status(
+            f"Downloading the {missing.name} speech model{size}. What you "
+            f"said will be typed in when it's done.", speak=True)
+        threading.Thread(
+            target=self._transcribe_worker,
+            kwargs={"retry_wav": missing.wav_bytes, "allow_download": True},
+            daemon=True).start()
 
     def _maybe_speak_sentence(self, sentence):
         """Speak a piece of the kin's reply aloud. Called from the

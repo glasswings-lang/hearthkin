@@ -87,7 +87,7 @@ def test_dispatch_follows_the_route():
     print("\ndispatch")
     seen = []
     orig = (stt._local_whisper, stt._remote_transcription, stt._elevenlabs)
-    stt._local_whisper = lambda w, s: seen.append("local") or "local words"
+    stt._local_whisper = lambda w, s, **k: seen.append("local") or "local words"
     stt._remote_transcription = lambda w, s: seen.append("server") or "server words"
     stt._elevenlabs = lambda w, s, k: seen.append("scribe") or "scribe words"
     try:
@@ -125,7 +125,7 @@ def test_empty_recording_is_refused_before_any_route():
     print("\nempty recording")
     seen = []
     orig = (stt._local_whisper, stt._remote_transcription, stt._elevenlabs)
-    stt._local_whisper = lambda w, s: seen.append("local")
+    stt._local_whisper = lambda w, s, **k: seen.append("local")
     stt._remote_transcription = lambda w, s: seen.append("server")
     stt._elevenlabs = lambda w, s, k: seen.append("scribe")
     try:

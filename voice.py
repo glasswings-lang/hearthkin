@@ -77,6 +77,17 @@ class VoiceEngineError(RuntimeError):
     pass
 
 
+class VoiceModelMissing(VoiceEngineError):
+    """The local speech model isn't downloaded. Keeps the recording, so the
+    desktop can ask the person and, on yes, transcribe the same words after
+    downloading (transcribe_wav with allow_download=True). Nothing said is
+    lost to the question (25 Nov 2026)."""
+
+    def __init__(self, message, wav_bytes, name, size):
+        super().__init__(message)
+        self.wav_bytes, self.name, self.size = wav_bytes, name, size
+
+
 class VoiceEngine:
     """One per Hearthkin frame. Owns the audio playback worker, the
     mic capture state, and the cached voice catalog.
@@ -505,9 +516,18 @@ class VoiceEngine:
                 "Nothing was recorded: no sound reached Hearthkin from the "
                 "microphone."
             )
+        return self.transcribe_wav(wav_bytes, settings)
+
+    def transcribe_wav(self, wav_bytes, settings=None, allow_download=False):
+        """Transcribe recorded WAV bytes. A missing local model raises
+        VoiceModelMissing holding the recording, so the caller can ask and
+        come back here with allow_download=True."""
         try:
             return stt.transcribe(
-                wav_bytes, settings, get_api_key=self._get_api_key)
+                wav_bytes, settings, get_api_key=self._get_api_key,
+                allow_download=allow_download)
+        except stt.ModelNotDownloaded as e:
+            raise VoiceModelMissing(str(e), wav_bytes, e.name, e.size) from e
         except stt.SttError as e:
             # Re-raise in the type this module's callers already handle,
             # keeping the message — which is written to be shown to a

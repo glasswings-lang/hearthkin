@@ -52,6 +52,16 @@ docs/private/message-accuracy-audit-2026-11-24.md.
   transparent setting."
 - **Voice speed slider stops at 120.** ElevenLabs documents speeds 0.7 to
   1.2; faster could be refused.
+- **Nothing big downloads without your yes.** Dictation used to fetch its
+  speech model (up to 3 GB) by itself the first time it was used, or at
+  start-up. Now, when you dictate and the model isn't there, a box asks
+  right then, naming the model and its size; yes downloads it and types in
+  what you just said, no stops with nothing downloaded. The start-up
+  warm-up skips a missing model; a Telegram or Discord voice message says
+  the desktop will offer it; Check dictation in the settings asks too. The audio-describing
+  experiment script (16 GB model) asks too, and refuses with nobody at the
+  keyboard. *Why:* 16 GB was found on C: from a script someone ran once.
+  The person: "I hate this silent shit."
 - **Prompt wording made plain.** Ten built-in prompts lost hedges and
   pretty-but-empty lines ("the moment is yours", "a good keeper moves on").
   Versions were bumped, so any you've saved your own copy of will be offered
