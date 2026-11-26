@@ -68,12 +68,12 @@ def main():
     check("shortcut letters are all different", len(letters) == len(set(letters)))
 
     staging = getattr(dlg, "staging_read_field", None)
-    check("the staging read size is there (it used to be file-only)",
+    check("the staging sections-per-reply setting is there (it used to be file-only)",
           staging is not None and staging in stops
-          and str(staging.GetValue()) == "6000")
+          and str(staging.GetValue()) == "5")
     for field, key, val in ((cap, "remote_max_tool_calls", "20"),
                             (notice, "remote_tool_call_notice", "0"),
-                            (staging, "staging_read_max_chars", "4000")):
+                            (staging, "staging_sections_per_reply", "8")):
         if field is None:
             continue
         field.SetValue(val)

@@ -256,18 +256,22 @@ class ToolSettingsDialog(wx.Dialog):
              "this many tool calls, Hearthkin says so once, out loud, and "
              "tells you how to stop it. Default 10; 0 means never.")
 
-        # Was settable only by editing config.json until 12 Nov 2026.
+        # 26 Nov 2026: counted in sections per reply, replacing a size in
+        # characters, which never limited how many pieces a kin took.
         self.staging_read_field = row(
-            "&Staging notes: most the kin reads at once (characters):",
+            "&Staging notes: most sections the kin reads in one reply:",
             lambda: _IntField(
-                panel, value=cfg.get("staging_read_max_chars", 6000),
-                min_val=500, max_val=100000, size=(100, -1),
-                on_commit=lambda v: self._save_param("staging_read_max_chars", v)))
-        help("When the kin reads its staging notes to tend its memory, it "
-             "gets them in pieces this size, cut where a note ends, and is "
-             "told there's more. Keep it below the Tool result cap above, "
-             "or a piece gets cut off mid-sentence. Default 6000; the "
-             "smallest is 500.")
+                panel, value=cfg.get("staging_sections_per_reply", 5),
+                min_val=1, max_val=500, size=(100, -1),
+                on_commit=lambda v: self._save_param("staging_sections_per_reply", v)))
+        help("When the kin reads its staging notes to tend its memory, each "
+             "reply gets this many new sections, whole, and no more; one "
+             "section is usually one bookmark. Then it's told to stop, keep "
+             "what matters, and tell you what it found if you're there; the "
+             "next sections come in its next reply. Reading sections it has "
+             "already seen doesn't count. A scheduled wake-up is one reply "
+             "too, so this is also how much one wake-up tends. Default 5; "
+             "the smallest is 1.")
 
         # 25 Nov 2026: a kin read batch after batch before writing anything.
         self.staging_keep_check = wx.CheckBox(

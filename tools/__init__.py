@@ -38,6 +38,7 @@ from .read_file import read_file
 from .list_directory import list_directory
 from .write_file import write_file
 from .edit_file import edit_file
+from .move_file import move_file
 from .note import note
 from .fetch_url import fetch_url
 from .web_search import web_search
@@ -93,6 +94,7 @@ _REGISTRY = {
     "list_directory": list_directory,
     "write_file": write_file,
     "edit_file": edit_file,
+    "move_file": move_file,
     "note": note,
     "fetch_url": fetch_url,
     "web_search": web_search,

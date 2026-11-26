@@ -6,6 +6,24 @@ wants to know what's different, without reading code. Every change gets a
 line here the day it's made (CLAUDE.md says so). The technical record is
 [`CHANGELOG.md`](../CHANGELOG.md); the code history is git.
 
+## 26 November 2026 (Claude, with the maintainer)
+
+- **Staging notes: a limit per reply, in sections.** The one-piece-at-a-time
+  hold from yesterday had a gap: filing a piece away counted as a way
+  through, so a kin went "file away, read, file away, read" in one reply
+  without writing or talking. And the old size setting, in characters, only
+  decided how big each piece was, never how many. It's replaced by **Staging
+  notes: most sections the kin reads in one reply** (default 5; a section is
+  usually one bookmark). After that the kin is told to stop, keep what
+  matters, and tell its person what it found; the next sections come in its
+  next reply. Filing away can't reset it, and re-reading doesn't count.
+- **A move tool.** `move_file` moves or renames files and folders, so a
+  kin reorganising its logs doesn't need `exec`, which is a whole shell
+  and could read staging notes around the limits. It never overwrites,
+  won't move the files that hold a kin together or anything in staging,
+  and follows the same path rules and tier as `write_file`. Switch it on
+  per kin in the Tools tab.
+
 ## 25 November 2026, early morning (Claude, with the maintainer)
 
 - **Staging notes, one piece at a time.** A kin was reading batch after

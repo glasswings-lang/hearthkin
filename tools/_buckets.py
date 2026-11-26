@@ -11,7 +11,7 @@ the source of truth; this is the shape):
           context_status, recent_thinking, read_staging, analyze_sound,
           listen, look)
   write — read + tools that modify files or save state (write_file,
-          edit_file, note, use_webcam, archive_staging, tff)
+          edit_file, move_file, note, use_webcam, archive_staging, tff)
   full  — write + tools that can execute commands (exec, kill_process)
 
 The bucket decides whether a remote user can EVER call exec. What happens
@@ -81,6 +81,7 @@ _READ = frozenset({
 _WRITE = _READ | frozenset({
     "write_file",
     "edit_file",
+    "move_file",
     "note",
     "use_webcam",
     "archive_staging",
@@ -131,7 +132,7 @@ BUCKET_EXPLAINER = {
     "read": "Read-only tools: memory_search, read_file, list_directory, "
             "fetch_url, web_search, list_processes, context_status, "
             "recent_thinking, read_staging, analyze_sound, listen, look.",
-    "write": "Read tools + write_file, edit_file, note (can modify "
+    "write": "Read tools + write_file, edit_file, move_file, note (can modify "
              "kin files) + archive_staging + use_webcam (capture from "
              "host webcam) + tff (play the kin's own Time for Family park "
              "game). use_webcam is additionally gated by a per-user "

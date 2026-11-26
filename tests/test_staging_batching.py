@@ -71,7 +71,7 @@ kp.staging_file_path(KIN, SCOPE).parent.mkdir(parents=True, exist_ok=True)
 kp.staging_file_path(KIN, SCOPE).write_text(body, encoding="utf-8")
 
 cfg = kp.load_agent_config(KIN)
-cfg["staging_read_max_chars"] = 2000
+cfg["staging_sections_per_reply"] = 6
 kp.save_agent_config(KIN, cfg)
 
 
@@ -193,7 +193,8 @@ check("...and nothing moved", len(kp.split_staging_sections(still)[1])
 
 # --- the ordinary small case is unchanged ---------------------------------
 
-cfg["staging_read_max_chars"] = 500000
+cfg["staging_sections_per_reply"] = 500
+cfg["tool_result_cap"] = 0  # no cap, so the whole small file fits
 kp.save_agent_config(KIN, cfg)
 whole = read_staging(scope=SCOPE, agent_name=KIN)
 check("a file that fits is returned entire", "that is all of them" in whole)
@@ -209,7 +210,8 @@ check("...leaving no pending file", not kp.list_staging_files(KIN))
 big = "# Staging notes - desktop\n\n## 2026-08-18T00:00:00 - desktop\n\n"
 big += "x" * 40000 + "\n"
 kp.staging_file_path(KIN, "solo").write_text(big, encoding="utf-8")
-cfg["staging_read_max_chars"] = 2000
+cfg["staging_sections_per_reply"] = 1
+cfg["tool_result_cap"] = 8000
 kp.save_agent_config(KIN, cfg)
 got = read_staging(scope="solo", agent_name=KIN)
 check("a section bigger than the whole budget is still returned -- "
@@ -218,14 +220,69 @@ check("a section bigger than the whole budget is still returned -- "
 
 # --- the setting names its unit -------------------------------------------
 
-check("the budget setting exists",
-      "staging_read_max_chars" in kp.DEFAULT_AGENT_CONFIG)
-check("...and its name says what it counts",
-      "chars" in "staging_read_max_chars")
-check("...and it sits below the tool-result cap, so nothing downstream "
-      "cuts a batch we already sized",
-      kp.DEFAULT_AGENT_CONFIG["staging_read_max_chars"]
-      < kp.DEFAULT_AGENT_CONFIG.get("tool_result_cap", 8000))
+check("the setting counts sections per reply, 5 by default",
+      kp.DEFAULT_AGENT_CONFIG.get("staging_sections_per_reply") == 5)
+check("...and the old size in characters is gone",
+      "staging_read_max_chars" not in kp.DEFAULT_AGENT_CONFIG)
+
+
+# --- sections per reply (26 Nov 2026) ---------------------------------------
+# A kin went: archive, read, archive, read, archive, read, all in one reply.
+# Archiving reset the keep-between-batches hold, and a size in characters
+# never limited how many batches it took. The person: "you've got to slow
+# down... talk to me."
+from tools._read_ledger import ReadLedger  # noqa: E402
+
+kp.staging_file_path(KIN, SCOPE).write_text(body, encoding="utf-8")
+kp.clear_staging_read_mark(KIN, SCOPE)
+cfg = kp.load_agent_config(KIN)
+cfg["staging_sections_per_reply"] = 5
+cfg["staging_keep_between_batches"] = True
+kp.save_agent_config(KIN, cfg)
+
+reply = ReadLedger()
+r1 = read_staging(scope=SCOPE, agent_name=KIN, read_ledger=reply)
+check("one reply's first read gives that reply's 5 sections",
+      "note number 04" in r1 and "note number 05" not in r1)
+check("...and then says to stop, keep what matters, and talk",
+      "Stop reading here" in r1 and "tell them what you found" in r1
+      and "next reply" in r1)
+archive_staging(scope=SCOPE, agent_name=KIN)
+r2 = read_staging(scope=SCOPE, agent_name=KIN, read_ledger=reply)
+check("filing those away and asking again in the SAME reply gets nothing new",
+      "not in this reply" in r2 and "note number" not in r2)
+r3 = read_staging(agent_name=KIN, read_ledger=reply)
+check("...and asking with no scope doesn't get round it either",
+      "note number" not in r3)
+
+reply2 = ReadLedger()
+r4 = read_staging(scope=SCOPE, agent_name=KIN, read_ledger=reply2)
+check("the next reply gets the next 5", "note number 05" in r4
+      and "note number 09" in r4 and "note number 10" not in r4)
+
+reply3 = ReadLedger()
+read_staging(scope=SCOPE, agent_name=KIN, read_ledger=reply3)  # re-read 1-5
+_t.sleep(0.05)
+(kp.agent_dir(KIN) / "memory" / "walks.md").write_text("kept\n", encoding="utf-8")
+again = read_staging(scope=SCOPE, start=1, agent_name=KIN, read_ledger=reply3)
+check("re-reading sections already shown doesn't use up the reply",
+      "note number 05" in again and "not in this reply" not in again)
+more = read_staging(scope=SCOPE, start=6, agent_name=KIN, read_ledger=reply3)
+check("...so new sections still come after a re-read",
+      "note number 10" in more)
+
+cfg["staging_keep_between_batches"] = False
+kp.save_agent_config(KIN, cfg)
+kp.clear_staging_read_mark(KIN, SCOPE)
+kp.staging_file_path(KIN, SCOPE).write_text(body, encoding="utf-8")
+r5 = ReadLedger()
+first5 = read_staging(scope=SCOPE, agent_name=KIN, read_ledger=r5)
+check("with the keep-between hold off, the per-reply limit still holds",
+      "Stop reading here" in first5
+      and "not in this reply" in read_staging(scope=SCOPE, start=6,
+                                              agent_name=KIN, read_ledger=r5))
+cfg["staging_keep_between_batches"] = True
+kp.save_agent_config(KIN, cfg)
 
 
 # --- jumping ahead doesn't mark the skipped sections read -----------------

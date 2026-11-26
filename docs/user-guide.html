@@ -569,7 +569,7 @@ python hearthkin.pyw</code></pre>
 <p>The kin tends by:</p>
 
 <ol>
-  <li>Calling the <code>read_staging</code> tool. The notes come a piece at a time, about 6,000 characters each, cut where a note ends.</li>
+  <li>Calling the <code>read_staging</code> tool. The notes come a few sections at a time, whole (a section is usually one bookmark), and each reply gets five new sections at most by default.</li>
   <li>Reading that piece. Deciding what's worth keeping.</li>
   <li>For substance about a person or ongoing topic: writing into the matching <code>memory/&lt;topic&gt;.md</code> log (using <code>edit_file</code> or <code>write_file</code>).</li>
   <li>For brief index updates: editing <code>memory.md</code> directly.</li>
@@ -1333,6 +1333,9 @@ Willow would end up with 1200 turns in all.</code></pre>
   <dt><code>edit_file</code></dt>
   <dd>Replace a unique substring in a file. No read needed first, because the text has to match exactly, but if the kin read the file that turn and something else changed it since, the edit is refused until it reads again. An edit that makes a file shorter backs it up to <code>backups/files/</code> first.</dd>
 
+  <dt><code>move_file</code></dt>
+  <dd>Move or rename a file or a folder, so a kin can reorganise its own files (rename a log, put superseded logs in an archive folder) without being given <code>exec</code>. It never overwrites: if something is already at the destination, nothing moves. It won't move the soul, <code>memory.md</code>, <code>identity.md</code>, <code>now.md</code>, <code>practice.md</code>, the kin's settings, tool list or conversation, or anything in <code>staging/</code> (those notes have their own tools and limits). Same path rules and the same tier as <code>write_file</code>: on Telegram, Discord and wake-ups it stays inside the kin's folder unless you allowed more in Tool behaviour settings. Added 26 November 2026.</dd>
+
   <dt><code>note</code></dt>
   <dd>Append a timestamped note to a file in the kin folder.</dd>
 
@@ -1415,7 +1418,7 @@ Willow would end up with 1200 turns in all.</code></pre>
   <li><strong>Most tool calls in one reply over Telegram, Discord and wake-ups</strong> — default 15; 0 means no limit. For scheduled wake-ups, and for everyone on Telegram and Discord without their own number, you included: sharing the desktop conversation doesn't lift it, since where a conversation lives and how far a reply may run are separate things. It counts every call, one by one, so a model that asks for sixty at once still stops at the limit; the rest don't run and the kin answers with what it has. This is the safety net for a reply nobody is watching. The desktop isn't limited; for no limit on your own Telegram or Discord, put 0 in your own entry. To give one person more room or less, open them in the kin's Telegram or Discord list (Edit) and fill in <strong>Tool call limit in one reply for this person</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>): blank uses this setting, a number is theirs alone, 0 means no limit. A number set for <code>*</code> on Discord applies to anyone without their own.</li>
   <li><strong>Leave these tools out of scheduled wake-ups</strong> (<kbd>Alt</kbd>+<kbd>L</kbd>) — a list of the tools this kin has switched on, with a tick box for each. A ticked tool stays the kin's in chat, but its scheduled wake-ups don't get it. Useful when a wake-up spends its calls on something it doesn't need there, such as commands during nightly tending. Space ticks or unticks, and it saves at once.</li>
   <li><strong>Warn me aloud after this many calls in a remote reply</strong> — default 10; 0 means never. When a reply on Telegram or Discord, yours included, reaches this many tool calls, Hearthkin says so once, out loud, and says how to stop it: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd>.</li>
-  <li><strong>Staging notes: most the kin reads at once (characters)</strong> — default 6000, smallest 500. When the kin reads its staging notes to tend its memory, it gets them in pieces this size, cut where a note ends, and is told there's more. Keep it below <strong>Tool result cap</strong>, or a piece gets cut off mid-sentence.</li>
+  <li><strong>Staging notes: most sections the kin reads in one reply</strong> (<kbd>Alt</kbd>+<kbd>S</kbd>) — default 5, smallest 1. When the kin reads its staging notes to tend its memory, each reply gets this many new sections, whole, and no more; a section is usually one bookmark. Then it's told to stop, keep what matters, and tell you what it found if you're there; the next sections come in its next reply. Reading sections it has already seen doesn't count. A scheduled wake-up is one reply too, so this is also how much one wake-up tends. (Until 26 November 2026 this was a size in characters, which set how big each piece was but not how many pieces a kin took in one reply.)</li>
   <li><strong>Staging notes: hold the next piece until the kin has written from the last one</strong> (<kbd>Alt</kbd>+<kbd>N</kbd>) — on by default. After the kin reads a piece of its staging notes, Hearthkin won't give it the next piece until it has written something to its memory, a depth log or today's journal, or filed that piece away. So it tends one piece at a time instead of reading everything and squashing it into one summary. Reading the same piece again is always allowed. Off: it can ask for piece after piece straight away.</li>
 </ul>
 

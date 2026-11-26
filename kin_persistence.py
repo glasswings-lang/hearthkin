@@ -1319,18 +1319,13 @@ DEFAULT_AGENT_CONFIG = {
     # Files, lines, tokens? Characters are what this can count exactly,
     # without a tokenizer and without estimating, so characters is what it
     # says. About 1500 characters is 22 entries: a list a kin can read.
-    # How many CHARACTERS of pending staging notes one `read_staging`
-    # call may return. Whole sections only; the tool reports what it did
-    # not show and how to ask for the next batch.
-    #
-    # Deliberately BELOW tool_result_cap (8000 chars by default). If a
-    # tool result overruns that, the tool loop cuts it mid-sentence and
-    # the kin has no way to tell what it lost or how to ask again. Better
-    # to stop on a seam we chose than a byte count somebody else did.
-    #
-    # Characters, and the key says so, for the same reason as
-    # memory_log_index_max_chars: a bare number is not actionable.
-    "staging_read_max_chars": 6000,
+    # How many NEW staging sections (one is usually one bookmark) a kin may
+    # read in one reply (26 Nov 2026). Replaced staging_read_max_chars, a
+    # size in characters, which set how big each batch was but never how
+    # many batches: a kin took batch after batch in one reply. Whole
+    # sections only; read_staging also stays under tool_result_cap by
+    # itself so nothing downstream cuts a section in half.
+    "staging_sections_per_reply": 5,
     # The next batch of staging notes waits until the kin has kept something
     # from the last one (25 Nov 2026). A kin was reading batch after batch
     # before writing anything, then squashing the lot into one summary; the
