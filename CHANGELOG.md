@@ -6,6 +6,15 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Added
 
+- **A kin tends its staging notes a few at a time, and talks in between.** Each reply gets a set number of new sections of its notes, **Staging notes: most sections the kin reads in one reply** in Tool behaviour settings (default 5; a section is usually one bookmark). Then the kin is told to stop, keep what matters, and tell its person what it found; the next sections come in its next reply. A second box, on by default, holds the next batch until the kin has written something from the last one, or filed it away. Re-reading is always allowed. This replaces a size in characters, which never limited how many batches a kin took: one read batch after batch in one reply, filing each away unread, and squashed the lot into one summary.
+- **A move tool, `move_file`.** Moves or renames files and folders, so a kin reorganising its own logs doesn't need `exec`, which is a whole shell. It never overwrites, won't move the soul, memory.md, identity.md, now.md, practice.md, the kin's settings, tool list or conversation, or anything in staging, and has the same path rules and tier as `write_file`. Switch it on per kin in the Tools tab.
+- **Nothing big downloads without your yes.** Dictation used to fetch its speech model (up to 3 GB) by itself the first time it was used, or at start-up. Now a box asks right then, naming the model and its size; yes downloads it and types in what you'd just said, no downloads nothing. A Telegram or Discord voice message says the kin's person can download it on the computer running Hearthkin. Check dictation asks too, and so does the audio-describing script (16 GB), which refuses with nobody at the keyboard.
+- **File, Restore a kin's history lists every copy Hearthkin kept,** newest first, with the date, how many messages and what made the copy. Restoring no longer sends the restored part to the memory writer by itself; Redistill does that when you choose.
+- **Choose what rides along with every message.** Settings, Memory, What rides along with every message lists every text file in the kin's folder with its size in words and a running total. Tick a file and it's sent every time.
+- **A kin can compact for itself** (a switch in Memory settings, off by default). At a wake-up past its compaction mark, it keeps what matters with its tools, writes its note, and compacts; you're told in one line.
+- **A nightly backup script,** `scripts/backup_kin.py`, zips every kin's folder and keeps the newest 14. And a wake-up can be set to run only when there are memory notes waiting.
+- **A kin is told when its model changes,** and **when a tool result it wrote wasn't real** (it described what a tool returned when no tool ran).
+- **Hearthkin learns from real wake-ups which models call tools.** A model that never does is handed its memory as text and never pushed to call tools it can't; the Tools tab says which it is.
 - **A kin's own habits file, `practice.md`.** How it works, in its own words ("when something matters, I write a depth log then, without being asked"), riding along on every turn right after the base prompt, which still wins. A habit used to last only until the next compaction, and then the person taught it again.
 - **Writing as it happens is one call.** `note` with `file="journal"` writes today's journal, and the tool and the manual say to write when something matters, at the moment it happens.
 - **After a compaction, a kin starts from its own words.** It's shown its journal for yesterday and today as they stood then, and told its note is its best guide but not the whole story: anything serious is checked in the real conversation. The manual no longer says "trust the note".
@@ -44,6 +53,13 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Changed
 
+- **Every message is true in the situation it's shown in.** About 110 messages were checked against what the code really does and fixed by hand. No more guesses stated as facts (a room told the person Ollama was swapping models on a shared graphics card, for kin that weren't on the same computer). Heads-ups appear only where they apply: the room note about different models only when two or more kin use different models on the same Ollama machine. "A copy is kept" only when one was. Directions name real places ("Kin settings, Telegram tab, Add person"). Settings windows say what each setting does on each surface.
+- **Compaction notes are written in full sentences.** A note in shorthand taught the whole next stretch to talk in shorthand, since it's the first thing the kin reads afterwards. Saved copies are offered the update.
+- **Built-in prompts lost hedges and pretty-but-empty lines,** and the heartbeat only mentions curious.md, the inbox or writing to other kin when that kin can. Saved copies are offered each update in Tools, Prompt updates; nothing is replaced unless you adopt it.
+- **"0 = no limit" for tool results means it everywhere.** Discord and wake-ups turned 0 into 8,000. The default stays 8,000.
+- **The voice speed slider stops at 120,** the fastest ElevenLabs documents.
+- **Hosted Claude reuses the conversation from its cache** instead of paying for the whole history on every message.
+- **now.md keeps every earlier version,** dated, in the kin's now folder, and every copy Hearthkin makes of removed conversation has one shape and one place, in the kin's backups.
 - **A Discord channel tells the kin where it is,** as a Telegram group always has: "You are participating in a Discord channel called …", using the channel's display label. One shared line for both apps, added only for the place the message came from.
 - **Telegram and Discord keep the kin's reasoning with its reply,** as the desktop does, trimmed to the kin's reasoning limit. It's fed back next turn only if the kin is set to feed its reasoning back. They used to throw it away, so that setting did nothing there.
 - **The base instructions no longer make memory sound split.** They said the summarizer's notes were kept "one file per surface". They now say notes from all your conversations are waiting, and what the kin keeps goes into its one memory.
@@ -73,6 +89,8 @@ All notable changes to Hearthkin. Dates are when the tag landed on master; entri
 
 ### Fixed
 
+- **Stopping a Discord reply keeps the steps the kin had finished.** A kin busy running tools, or waiting for your approval, is no longer cut off as "no response". A failed wake-up really writes the journal line its message promises. Importing a Hearthkin conversation no longer hangs on "Parsing…".
+- **Telegram's /clear, /new, /reset, /undo and /regen say so when they couldn't save,** and clearing an empty chat says there was nothing to clear.
 - **In a Telegram group or Discord channel, only you or someone you've given write access can have a kin with no tools save memory with a block.** Before, anyone's turn could.
 - **The two park prompts for a keeper's wake-up (`park_mechanism`, `park_turn_instruction`) now do something.** They were on the Prompts tab but never loaded, so editing them changed nothing.
 - **The example filename kin are taught for saving memory is a plain one** (`memory/garden.md`), not a leftover stand-in name.
