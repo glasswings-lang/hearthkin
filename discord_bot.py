@@ -1179,7 +1179,7 @@ class DiscordBot:
     # kin reads the note and the last few messages. Nothing is deleted.
     COMPACT_KEEP = 6
 
-    async def _cmd_compact(self, message, arg, share):
+    async def _cmd_compact(self, message, arg, share, in_channel=False):
         from chat_helpers import compact_marker, compact_keep_count, compact_sent_words
         try:
             from kin_persistence import load_agent_config
@@ -1191,7 +1191,8 @@ class DiscordBot:
         pending = self.__dict__.setdefault("_pending_compact", {})
         word = (arg or "").strip().lower()
         who = self.agent_name
-        user = self._compact_user_name(message)
+        user = ("the people in this channel" if in_channel
+                else self._compact_user_name(message))
         if word == "confirm":
             note = pending.pop(ch.id, None)
             if not note:
@@ -1222,8 +1223,12 @@ class DiscordBot:
                         "conversation, so nothing changed. Your note is still "
                         "waiting; send /compact confirm to try again.")
                 return
-            from kin_persistence import save_now_note
-            save_now_note(who, note)
+            # now.md is where the kin is in its main conversation: only a
+            # compaction of that (a direct message shared with the desktop)
+            # writes it. Anyone else's note used to overwrite it (27 Nov 2026).
+            if share:
+                from kin_persistence import save_now_note
+                save_now_note(who, note)
             # Shared with the desktop: the desktop reads from this note too,
             # so say so, as /undo and /clear do (accuracy audit, 24 Nov 2026).
             await self._send_chunked(
@@ -1322,7 +1327,10 @@ class DiscordBot:
                 "/front: say who's fronting here (/front off clears it)\n"
                 "stop: end the reply being written, keeping what's written "
                 "so far\n\n"
-                "The others (/status, /regen, /undo, /clear, /compact) "
+                "/compact: the kin writes itself a note for this channel and "
+                "carries on from it (its person, or someone whose tool access "
+                "can write)\n\n"
+                "The others (/status, /regen, /undo, /clear) "
                 "work in a "
                 f"direct message with {self.agent_name}. Here, the "
                 "conversation belongs to everyone in the channel.")
@@ -1395,6 +1403,35 @@ class DiscordBot:
             import fronting
             await self._send_chunked(ch, fronting.reply_line(
                 arg, self.agent_name, f"discord:{ch.id}"))
+            return
+        if name == "compact" and not in_dm:
+            # A channel can be compacted (27 Nov 2026), as a Telegram group
+            # can: by the kin's person, or someone whose tool access can
+            # write. Its note stays with the channel.
+            from tools._person_settings import person_value
+            uid = getattr(message.author, "id", "")
+            bucket = person_value((self.get_config() or {}).get("discord") or {},
+                                  "discord", uid, "bucket")
+            if not (self._is_me(uid) or bucket in ("write", "full")):
+                await self._send_chunked(
+                    ch, f"Only {self.agent_name}'s person, or someone whose "
+                        f"tool access lets {self.agent_name} write, can "
+                        "compact this channel.")
+                return
+            if self._shares_desktop(uid, ch.id):
+                await self._send_chunked(
+                    ch, "This channel is kept in the desktop's conversation, "
+                        "and /compact can't compact that from a channel yet. "
+                        "Nothing was changed.")
+                return
+            with self._turn_lock:
+                busy = ch.id in self._active_turns
+            if busy:
+                await self._send_chunked(
+                    ch, f"{self.agent_name} is replying here right now. Send "
+                        "/compact again when it's finished.")
+                return
+            await self._cmd_compact(message, arg, False, in_channel=True)
             return
         if not in_dm:
             await self._send_chunked(

@@ -2,6 +2,17 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
+## v0.13.2 — 2026-11-27
+
+### Added
+
+- **/compact works in Telegram groups and Discord channels.** They used to answer "direct messages only" and were only ever cut by the history cap. Now you, or someone whose tool access lets the kin write, can send /compact there: the kin writes a note for that group or channel, you confirm, and from then on it carries on from the note and the last few messages. Nothing is deleted. A group or channel kept with the desktop's conversation can't be compacted from there yet, and says so.
+
+### Fixed
+
+- **Someone else's compaction no longer overwrites the kin's now.md.** now.md is where the kin is in its main conversation, but any /compact, a friend's in their own direct message included, replaced it with a note about a different conversation. Now only a compaction of the main conversation (yours, shared with the desktop) writes it.
+- **The history cap's help text says what it does,** on the Telegram and Discord tabs, in plain words.
+
 ## v0.13.1 — 2026-11-27
 
 ### Fixed

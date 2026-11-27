@@ -2962,6 +2962,9 @@ class TelegramBot:
                 chat_type=chat_type, chat_title=chat_title,
             )
             return
+        if cmd == "compact" and not is_private:
+            self._cmd_compact_group(user_id, chat_id, arg)
+            return
 
         if not is_private:
             # Every command past this point operates on per-user state
@@ -3354,7 +3357,10 @@ class TelegramBot:
                 "/whoami — show your Telegram user ID, this chat's ID, "
                 "and chat type (use this to find a group's chat_id)\n"
                 "/front — set who's fronting (only the account marked "
-                "\"This is me\")\n\n"
+                "\"This is me\")\n"
+                f"/compact — {self.agent_name} writes itself a note for this "
+                "group and carries on from it (its person, or someone whose "
+                "tool access can write)\n\n"
                 f"{talk} The full command list works in a direct message."
             )
             return
@@ -4519,8 +4525,13 @@ class TelegramBot:
                     f"conversation, so nothing changed. Your note is still "
                     f"waiting; send /compact confirm to try again.")
                 return
-            from kin_persistence import save_now_note
-            save_now_note(who, note)
+            # now.md is where the kin is in its main conversation. Only a
+            # compaction of that conversation (a direct message shared with
+            # the desktop) writes it; anyone else's note belongs to their own
+            # chat and used to overwrite it (27 Nov 2026).
+            if self._user_shares_desktop(user_id):
+                from kin_persistence import save_now_note
+                save_now_note(who, note)
             self._send_chunked(
                 chat_id,
                 f"Compacted. From now on {who} is sent {compact_sent_words(_keep)}. "
@@ -4566,9 +4577,105 @@ class TelegramBot:
             name = ""
         return (name or "").strip() or "the person you talk with"
 
-    def _compact_note(self, user_id, user):
+    # ── /compact in a group (27 Nov 2026) ───────────────────────────────
+    # The person: "I'd expect any AI program worth its salt to be able to
+    # send a quick /compact and get what we've been getting, conversation
+    # merged or not." Groups used to answer "direct messages only" and were
+    # only ever cut by the history cap. Same two steps as a direct message;
+    # only the kin's own person or someone whose tool access can write may
+    # do it (the rule for memory blocks in groups); the note stays with this
+    # group and never becomes now.md.
+    def _cmd_compact_group(self, user_id, chat_id, arg=""):
+        from chat_helpers import compact_marker, compact_keep_count, compact_sent_words
+        from kin_persistence import load_agent_config, load_app_prompt, now_iso
+        who = self.agent_name
+        if not (self._user_is_me(user_id)
+                or self._user_tool_bucket(user_id) in ("write", "full")):
+            self._send_chunked(
+                chat_id, f"Only {who}'s person, or someone whose tool access "
+                         f"lets {who} write, can compact this group.")
+            return
+        if self._group_shares_desktop(chat_id):
+            self._send_chunked(
+                chat_id, "This group is kept in the desktop's conversation, "
+                         "and /compact can't compact that from a group yet. "
+                         "Nothing was changed.")
+            return
+        try:
+            keep = compact_keep_count(load_agent_config(who))
+        except Exception:
+            keep = self.COMPACT_KEEP
+        pending = self.__dict__.setdefault("_pending_compact", {})
+        pkey = ("group", str(chat_id))
+        group_name = self._group_label(chat_id)
+        user = f"the people in {group_name}"
+        word = (arg or "").strip().lower()
+        if word == "confirm":
+            note = pending.pop(pkey, None)
+            if not note:
+                self._send_chunked(
+                    chat_id, f"There's no note waiting. Send /compact and "
+                             f"{who} will write one first.")
+                return
+            preface = load_app_prompt("compact_marker", who).replace("{user}", user)
+            marker = compact_marker(note, keep, ts=now_iso(), preface=preface, kin=who)
+            history_key = f"group:{chat_id}"
+            with self._histories_lock:
+                rows = self._histories.setdefault(history_key, [])
+                rows.append(marker)
+                saved = self._try_save_histories()
+                if not saved:
+                    rows.pop()
+            if not saved:
+                pending[pkey] = note
+                self._send_chunked(
+                    chat_id, "Couldn't compact: the note couldn't be saved, so "
+                             "nothing changed. The note is still waiting; send "
+                             "/compact confirm to try again.")
+                return
+            self._send_chunked(
+                chat_id, f"Compacted. From now on, in this group, {who} is sent "
+                         f"{compact_sent_words(keep)}. Nothing was deleted.")
+            return
+        if word not in ("", "again"):
+            self._send_chunked(
+                chat_id, "Send /compact to have the note written, then "
+                         "/compact confirm to compact with it.")
+            return
+        self._send_chunked(chat_id, f"Asking {who} to write its note for this "
+                                    "group. This can take a moment.")
+        try:
+            note, err = self._compact_note(None, user,
+                                           history=self._load_group_history(chat_id)), ""
+        except Exception as e:
+            note, err = "", str(e)
+        if not note:
+            pending.pop(pkey, None)
+            self._send_chunked(
+                chat_id, f"{who} didn't write a note"
+                + (f" ({err})" if err else "")
+                + ". Nothing was changed; you can try /compact again.")
+            return
+        pending[pkey] = note
+        self._send_chunked(
+            chat_id,
+            f"Here's the note {who} wrote for this group:\n\n{note}\n\n"
+            f"Send /compact confirm to compact with it, or /compact again for "
+            f"a new one. Anything else leaves it as it was. Nothing is deleted "
+            f"either way.")
+
+    def _group_label(self, chat_id):
+        try:
+            g = ((self.get_config() or {}).get("groups") or {}).get(str(chat_id)) or {}
+            name = (g.get("label") or g.get("name") or "").strip() if isinstance(g, dict) else ""
+        except Exception:
+            name = ""
+        return name or "this group"
+
+    def _compact_note(self, user_id, user, history=None):
         """Ask the kin for its note: soul and memory, this person's
-        conversation as it's sent now, and the request. No tools."""
+        conversation as it's sent now (or `history`, for a group), and the
+        request. No tools."""
         from kin_persistence import (build_system_prompt, load_agent_config,
                                      load_app_prompt, resolve_kin_ollama_host)
         from chat_helpers import extract_inline_thinking
@@ -4578,7 +4685,8 @@ class TelegramBot:
                                      enabled_tools=[],
                                      kin_name=self.agent_name)
         msgs = [{"role": "system", "content": system}]
-        for m in self._load_history_for(user_id):
+        rows = history if history is not None else self._load_history_for(user_id)
+        for m in rows:
             if (isinstance(m, dict) and m.get("role") in
                     ("user", "assistant", "system")
                     and not m.get("tool_calls") and m.get("content")):
@@ -6687,9 +6795,11 @@ class TelegramBot:
                 return []
         history_key = f"group:{chat_id}"
         with self._histories_lock:
-            return _drop_leading_orphan_tools(
-                list(self._histories.setdefault(history_key, []))
-            )
+            # A group can be compacted now (27 Nov 2026): send its note and
+            # what came after, as a direct message does.
+            from chat_helpers import view_after_compaction
+            return _drop_leading_orphan_tools(view_after_compaction(
+                list(self._histories.setdefault(history_key, []))))
 
     def _append_group_history(self, chat_id, new_turns):
         """Persist `new_turns` to the right place for this group.

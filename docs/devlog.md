@@ -8,6 +8,12 @@ line here the day it's made (CLAUDE.md says so). The technical record is
 
 ## 27 November 2026 (Claude, with the maintainer)
 
+- **/compact in groups and channels, and now.md kept to the main
+  conversation.** The person: "I'd expect any AI program worth its salt to
+  be able to send a quick /compact... conversation merged or not." Groups
+  and channels can now be compacted by the person or someone with write
+  access; the note stays with that chat. And a compaction in someone else's
+  chat no longer overwrites the kin's now.md. Released as 0.13.2.
 - **Hand-written transcripts import whole.** A blank line used to end a
   turn, and the paragraphs after it were thrown away as stray lines, so a
   transcript of multi-paragraph replies came in at about a tenth of its
