@@ -1659,9 +1659,12 @@ class EditKinDialog(wx.Dialog):
                                                          int(v)))
         dc_hist_row.Add(self.dc_history_cap_field)
         dc_hist_help = wx.TextCtrl(host, value=(
-            "How many messages each channel or direct message keeps when it "
-            "isn't kept with the desktop, before the oldest are trimmed. "
-            "0 means no cap. Default 100, as on Telegram."),
+            "For Discord channels and direct messages that aren't kept with "
+            "the desktop conversation: the most messages each one holds. When "
+            "one goes over, the oldest quarter is cut at once, so 100 runs "
+            "between about 75 and 100. The kin no longer sees what was cut "
+            "there; a copy is added to a file in its backups. 0 means no cap: it grows until the model can't hold more, "
+            "and every message costs more. Default 100, as on Telegram."),
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_WORDWRAP
             | wx.TE_NO_VSCROLL)
         dc_hist_help.SetMinSize((520, 40))

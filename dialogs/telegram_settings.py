@@ -151,10 +151,16 @@ class TelegramMessageSettingsDialog(wx.Dialog):
             on_commit=lambda v: self._save_telegram_param("history_cap", v))
         hist_row.Add(self.history_cap_field)
         sizer.Add(hist_row, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
-        help("How many messages each non-share Telegram user or group keeps "
-             "before the oldest get trimmed. 0 = unlimited (constrained only "
-             "by num_ctx). Default 100. Share-with-desktop users use the kin's "
-             "main conversation file and aren't affected.")
+        help("For Telegram chats that aren't kept with the desktop "
+             "conversation (groups, and other people's direct messages): the "
+             "most messages each one holds. When a chat goes over, the oldest "
+             "quarter is cut at once, so a chat set to 100 runs between about "
+             "75 and 100. The kin no longer sees what was cut in that chat; a "
+             "copy is added to a file in its backups. "
+             "0 means no cap: the chat grows until the model can't hold more, "
+             "and every message costs more. Default 100. Chats kept with the "
+             "desktop aren't cut here; they're compacted like the main "
+             "conversation.")
 
         cap_row = wx.BoxSizer(wx.HORIZONTAL)
         cap_row.Add(wx.StaticText(panel, label="&Reply length cap (tokens):"),
