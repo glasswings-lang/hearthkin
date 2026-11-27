@@ -2,6 +2,12 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
+## v0.13.3 — 2026-11-27
+
+### Fixed
+
+- **Closing to the system tray works again after you've chosen "wait".** If you chose Exit (Ctrl+Q, or the tray's Exit) while a kin was working and answered "wait", Hearthkin stayed open but still thought it was quitting, so every later close asked "still working?" instead of going to the tray. "Wait" now means Hearthkin carries on exactly as it was. A new test drives closing in sequence, the way a person uses it, not each piece alone.
+
 ## v0.13.2 — 2026-11-27
 
 ### Added

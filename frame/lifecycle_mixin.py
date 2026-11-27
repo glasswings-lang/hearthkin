@@ -332,6 +332,12 @@ class LifecycleMixin:
         # already stopped and the model call already abandoned, and "wait"
         # would be a lie.
         if not self._confirm_close_while_busy(event):
+            # "Wait" means Hearthkin carries on as it was, so it is no longer
+            # quitting. Exit (Ctrl+Q, the tray's Exit) set _quitting and
+            # nothing ever cleared it: after one "wait", every later close
+            # skipped the tray and asked "still working?" as if quitting
+            # (27 Nov 2026, found by the person; tests/test_close_sequences.py).
+            self._quitting = False
             return
 
         # Mark closing FIRST and wake any worker thread blocked on an

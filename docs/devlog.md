@@ -8,6 +8,13 @@ line here the day it's made (CLAUDE.md says so). The technical record is
 
 ## 27 November 2026 (Claude, with the maintainer)
 
+- **Close to tray broke after one "wait".** Exit set a quitting flag that
+  nothing cleared, so after answering "wait" once, closing kept asking
+  "still working?" instead of going to the tray. Every piece had passed its
+  own test; the fault was in the order of events. The person: "we need more
+  intelligent tests that don't just check features in isolation." The new
+  test (test_close_sequences) drives the real close code through sequences,
+  and fails on the old code. Released as 0.13.3.
 - **/compact in groups and channels, and now.md kept to the main
   conversation.** The person: "I'd expect any AI program worth its salt to
   be able to send a quick /compact... conversation merged or not." Groups
