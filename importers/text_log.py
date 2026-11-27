@@ -221,8 +221,9 @@ def _parse_telegram(text, kin_display_name):
 def _parse_hand_authored(text, kin_display_name):
     """Walks lines. Date headers set the baseline; `Name:` lines start
     messages; lines with `HH:MM [AM/PM] Name:` set an explicit message
-    timestamp anchor; blank lines end the current message; non-blank,
-    non-header, non-`Name:` lines continue the current message.
+    timestamp anchor; blank lines are paragraph breaks inside the current
+    message; other non-header, non-`Name:` lines continue the current
+    message, which ends at the next speaker or date header.
 
     Three timestamp sources, in priority order:
       1. Explicit per-message prefix (`5:00 PM SpeakerFifteen: ...`) — strongest
@@ -262,7 +263,14 @@ def _parse_hand_authored(text, kin_display_name):
             msg_index_since_anchor = 0
             continue
         if not stripped.strip():
-            flush()
+            # A blank line is a paragraph break inside the current turn; the
+            # turn ends at the next speaker or date header. It used to END the
+            # turn, and every paragraph after the first was then skipped as a
+            # "stray line": a hand-written transcript with multi-paragraph
+            # replies imported 843 of its 9,104 characters, silently (27 Nov
+            # 2026). _finalize strips the blank lines left at either end.
+            if current is not None:
+                current["lines"].append("")
             continue
         # Per-message timestamp prefix (strongest anchor) — try first.
         ts_match = _MSG_TIMESTAMP_PREFIX.match(stripped)

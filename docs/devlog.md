@@ -6,6 +6,14 @@ wants to know what's different, without reading code. Every change gets a
 line here the day it's made (CLAUDE.md says so). The technical record is
 [`CHANGELOG.md`](../CHANGELOG.md); the code history is git.
 
+## 27 November 2026 (Claude, with the maintainer)
+
+- **Hand-written transcripts import whole.** A blank line used to end a
+  turn, and the paragraphs after it were thrown away as stray lines, so a
+  transcript of multi-paragraph replies came in at about a tenth of its
+  words with no warning. Found by asking whether an old Gemma conversation
+  would import. A blank line is now a paragraph break inside the turn.
+
 ## 26 November 2026 (Claude, with the maintainer)
 
 - **Staging notes: a limit per reply, in sections.** The one-piece-at-a-time

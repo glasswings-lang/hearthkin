@@ -2,6 +2,12 @@
 
 All notable changes to Hearthkin. Dates are when the tag landed on master; entries describe user-visible changes plus the load-bearing implementation notes that future readers might need.
 
+## v0.13.1 — 2026-11-27
+
+### Fixed
+
+- **Importing a hand-written transcript keeps every paragraph.** In a "You: / Name:" transcript, a blank line ended the turn, and every paragraph after the first was skipped without a word: one file with multi-paragraph replies came in at 843 of its 9,104 characters. Now a blank line is a paragraph break, and a turn ends only at the next speaker or date header. If you imported a transcript like that before, importing it again brings in the rest.
+
 ## v0.13.0 — 2026-11-26
 
 ### Added
